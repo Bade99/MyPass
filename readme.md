@@ -1,0 +1,1 @@
+# MyPass - Offline Password Manager
