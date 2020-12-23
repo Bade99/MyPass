@@ -1,0 +1,130 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="targetver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="protect_login.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unCap_Helpers.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unCap_Platform.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unCap_edit_oneline.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="windows_msg_mapper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="windows_undoc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unCap_Reflection.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unCap_Global.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unCap_Serialization.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unCap_button.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LANGUAGE_MANAGER.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unCap_uncapnc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unCap_Renderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unCap_Math.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unCap_Vector.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="protect_show_passwords.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unCap_edit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unCap_scrollbar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="protect_Core.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="protect_sha256.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="protect_twofish.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="protect.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LANGUAGE_MANAGER.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="protect.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="small.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="protect.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\logo.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\Close16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\Max16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\Min16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\RightArrow16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\Earth16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\Circle16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+  </ItemGroup>
+</Project>
