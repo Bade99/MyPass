@@ -11,6 +11,8 @@ constexpr TCHAR protect_wndclass_show_passwords[] = TEXT("protect_wndclass_show_
 //TODO(fran): add * indicator when the file has modifications that need saving, eg MyPass - fran -> MyPass - fran*
 //TODO(fran): if when closing the wnd there's stuff left to be saved ask the user whether to save it or not
 //TODO(fran): would it be better to use a gridview instead of an edit control?
+//TODO(fran): EM_GETHANDLE gives you access to the memory for the text!
+//TODO(fran): append the username to the text when saving and check that it matches when loading
 
 struct ShowPasswordsSettings {
 
@@ -235,14 +237,15 @@ LRESULT CALLBACK ShowPasswordsProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		switch (LOWORD(wparam)) {
 		case SHOWPASSWORDS_MENU_SAVE:
 		{
-			int len_chars = GetWindowTextLength(state->controls.edit_passwords) + 1;
+			int user_len_chars = wcslen(state->current_user);
+			int len_chars = user_len_chars + GetWindowTextLength(state->controls.edit_passwords) + 1;
 			int len_bytes = next_multiple_of_16(len_chars * sizeof(cstr)); //we pad with extra garbage bytes to get blocks of 16 bytes for encryption
 			void* mem = malloc(len_bytes); defer{ free(mem); };
 			Assert(sizeof(cstr) > 1); //TODO(fran): what to do with ansi?
-			GetWindowText(state->controls.edit_passwords, (cstr*)mem, len_chars);
+			wcscpy_s((cstr*)mem, user_len_chars+1, state->current_user); //append username so we can check against it in later logins (another idea is to append the key structure that twofish stores ) //TODO(fran): this aint the most clever, there could be collisions, but it's at least a line of defense for now
+			GetWindowText(state->controls.edit_passwords, ((cstr*)mem)+ user_len_chars, len_chars - user_len_chars);
 			twofish_encrypt(mem, len_bytes, mem);
 			save_to_file_user(state->current_user, mem, len_bytes);
-			//TODO(fran): now there's one tiny huge problem, anybody can override that file, put wrong password, you enter into this wnd and save, done, passwords gone. One idea is to append the key structure that twofish stores together with the file, that way you decrypt and check those bytes against the password that you got. Another idea is to append the username either at the beginning or end or the stream so it can be matched when decrypting, if it matches with current_user then the file is opened and allowed for editing
 		} break;
 #define _generate_enum_cases_language(member,value_expr) case LANGUAGE::member:
 		_foreach_language(_generate_enum_cases_language)
@@ -275,12 +278,19 @@ LRESULT CALLBACK ShowPasswordsProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		memcpy(state->current_user, state->start->username.str, state->start->username.sz_chars * sizeof(*state->start->username.str));
 		//TODO(fran): free
 
-		auto file_read = load_file_user(state->current_user);
+		auto file_read = load_file_user(state->current_user); defer{ free_file_memory(file_read.mem); };//TODO(fran): zero
 		if (file_read.mem) {
 			Assert(file_read.sz % 16 == 0);
 			twofish_decrypt(file_read.mem, file_read.sz, file_read.mem);
-			SetWindowText(state->controls.edit_passwords, (cstr*)file_read.mem); //TODO(fran): what did I decide for the data's encoding?
-			free_file_memory(file_read.mem);
+			if (!wcsncmp(state->current_user, (wchar_t*)file_read.mem, min(state->start->username.sz_chars, file_read.sz / 2 /*byte to wchar*/))) { //Valid password, user inputted username matches stored username
+				SetWindowText(state->controls.edit_passwords, ((cstr*)file_read.mem)+ state->start->username.sz_chars); //TODO(fran): what did I decide for the data's encoding?
+				//TODO(fran): set keyboard focus to the edit control, SetFocus doesnt work here, maybe cause we arent visible yet?
+			}
+			else { //Invalid password
+				MessageBox(0, RCS(LANG_ERROR_PASSWORD), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);//IMPORTANT INFO: I have NO IDEA why but if you PostMessage first and then MessageBox the msg will get lost and the WM_NEXT never gets posted
+				PostMessage(0, WM_NEXT, 0, 0);
+			}
+
 		}
 		return 0;
 	} break;

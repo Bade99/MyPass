@@ -8,6 +8,8 @@
 #include "unCap_Helpers.h"
 #include "unCap_Reflection.h"
 
+//TODO(fran): show password button
+
 //NOTE: this took two days to fully implement, certainly a hard control but not as much as it's made to believe, obviously im just doing single line but extrapolating to multiline isnt much harder now a single line works "all right"
 
 constexpr TCHAR unCap_wndclass_edit_oneline[] = TEXT("unCap_wndclass_edit_oneline");

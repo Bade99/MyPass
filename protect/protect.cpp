@@ -78,14 +78,13 @@ str GetFontFaceName() {
     return TEXT("");
 }
 
-int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR cmd,int)
+int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 {
-    //TODO(fran): cmd will receive the file that we want to decrypt
-    if (!cmd && !PathFileExists(cmd)) {
-        MessageBox(0, _t("You must specify a valid file to decrypt through the command line parameter"), _t("Error - Invalid File"), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
-        return 0;
-    }
-    Assert(sizeof(*cmd) > 1);
+    //if (!cmd && !PathFileExists(cmd)) {
+    //    MessageBox(0, _t("You must specify a valid file to decrypt through the command line parameter"), _t("Error - Invalid File"), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
+    //    return 0;
+    //}
+    //Assert(sizeof(*cmd) > 1);
 
     urender::init(); defer{ urender::uninit(); };
 

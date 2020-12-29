@@ -74,17 +74,21 @@
     <LinkIncremental>true</LinkIncremental>
     <IntDir>x86\$(Configuration)\</IntDir>
     <OutDir>$(SolutionDir)x86\$(Configuration)\</OutDir>
+    <TargetName>MyPass</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <IntDir>x86\$(Configuration)\</IntDir>
     <OutDir>$(SolutionDir)x86\$(Configuration)\</OutDir>
+    <TargetName>MyPass</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
+    <TargetName>MyPass</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
+    <TargetName>MyPass</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
