@@ -13,6 +13,9 @@
 //#define EM_GET_MAX_VISIBLE_CHARS_PER_LINE (WM_USER+203) /*Retrieves a count for the max number of characters that can be displayed in one line at once in the current window. return=int*/
 #define WM_SAVE (edit_base_msg_addr+13) /*A control has asked to save its contents wParam=HWND ; lParam=unused*/
 
+//TODO(fran): ability to search, use EM_GETHANDLE to get the cstr* without copying and search, keep count of \n for the percentage to scroll
+
+
 struct EditProcState {
 	bool initialized;
 	HWND wnd;
@@ -152,4 +155,29 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 	default:return DefSubclassProc(hwnd, msg, wparam, lparam);
 	}
 	return 0;
+}
+
+//Rich Edit
+#include <Richedit.h>
+
+void RICHEDIT_set_bk_color(HWND wnd, COLORREF clr) {
+	SendMessage(wnd, EM_SETBKGNDCOLOR, 0, clr);
+}
+
+void RICHEDIT_set_txt_color(HWND wnd, COLORREF clr) { //TODO(fran): does not want to work, seems to me like you have to manually set the color each time you add text
+	CHARFORMAT cf;
+	cf.cbSize = sizeof(cf);
+	cf.dwMask = CFM_COLOR;
+	cf.crTextColor = clr;
+	cf.dwEffects = 0;
+	SendMessage(wnd, EM_SETCHARFORMAT, SCF_ALL, (LPARAM)&cf);
+}
+
+void RICHEDIT_set_txt_bk_color(HWND wnd, COLORREF clr) {
+	CHARFORMAT2 cf;
+	cf.cbSize = sizeof(cf);
+	cf.dwMask = CFM_BACKCOLOR;
+	cf.crBackColor = clr;
+	cf.dwEffects = 0;
+	SendMessage(wnd, EM_SETCHARFORMAT, SCF_ALL, (LPARAM)&cf);
 }

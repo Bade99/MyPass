@@ -4,6 +4,7 @@
 #include "unCap_Global.h"
 #include "unCap_edit.h"
 #include "LANGUAGE_MANAGER.h"
+#include <Richedit.h>
 
 constexpr TCHAR protect_wndclass_show_passwords[] = TEXT("protect_wndclass_show_passwords");
 
@@ -82,8 +83,10 @@ void SHOWPASSWORDS_resize_controls(ShowPasswordsState* state) {
 }
 
 void SHOWPASSWORDS_add_controls(ShowPasswordsState* state) {
+
+#if 0 //edit control
 	state->controls.edit_passwords = CreateWindowExW(NULL, L"Edit", NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | WS_VISIBLE//| WS_VSCROLL | WS_HSCROLL 
-		, 0,0,0,0
+		, 0, 0, 0, 0
 		, state->wnd
 		, NULL, NULL, NULL);
 
@@ -99,6 +102,21 @@ void SHOWPASSWORDS_add_controls(ShowPasswordsState* state) {
 	SendMessageW(state->controls.edit_passwords, EM_SETVSCROLL, (WPARAM)VScrollControl, 0);
 
 	//INFO: I dont yet paint edit controls so you gotta use WM_CTLCOLOREDIT
+#else //rich edit control
+	state->controls.edit_passwords = CreateWindowExW(NULL, get_richedit_classW(), NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | WS_VISIBLE | WS_TABSTOP//| WS_VSCROLL | WS_HSCROLL 
+		, 0,0,0,0
+		, state->wnd
+		, NULL, NULL, NULL);
+
+#define EDIT_PASSWORDS_MAX_TEXT_LENGTH (32767*2) //32767 is the default
+	SendMessageW(state->controls.edit_passwords, EM_EXLIMITTEXT,0, EDIT_PASSWORDS_MAX_TEXT_LENGTH); //msg completely different from edit control, good job microsoft
+
+	SetWindowSubclass(state->controls.edit_passwords, EditProc, 0, (DWORD_PTR)calloc(1, sizeof(EditProcState)));
+
+	RICHEDIT_set_bk_color(state->controls.edit_passwords, ColorFromBrush(unCap_colors.ControlBk));
+	//RICHEDIT_set_txt_color(state->controls.edit_passwords, ColorFromBrush(unCap_colors.ControlTxt)); //IMPORTANT: this needs to be called each time the text changes
+	RICHEDIT_set_txt_bk_color(state->controls.edit_passwords, ColorFromBrush(unCap_colors.ControlBk));
+#endif
 
 	for (auto ctl : state->controls.all)
 		SendMessage(ctl, WM_SETFONT, (WPARAM)unCap_fonts.General, TRUE);
@@ -284,6 +302,7 @@ LRESULT CALLBACK ShowPasswordsProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 			twofish_decrypt(file_read.mem, file_read.sz, file_read.mem);
 			if (!wcsncmp(state->current_user, (wchar_t*)file_read.mem, min(state->start->username.sz_chars, file_read.sz / 2 /*byte to wchar*/))) { //Valid password, user inputted username matches stored username
 				SetWindowText(state->controls.edit_passwords, ((cstr*)file_read.mem)+ state->start->username.sz_chars); //TODO(fran): what did I decide for the data's encoding?
+				RICHEDIT_set_txt_color(state->controls.edit_passwords, ColorFromBrush(unCap_colors.ControlTxt)); //TODO(fran): do this in a subclass
 				//TODO(fran): set keyboard focus to the edit control, SetFocus doesnt work here, maybe cause we arent visible yet?
 			}
 			else { //Invalid password

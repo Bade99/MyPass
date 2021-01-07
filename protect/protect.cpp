@@ -18,6 +18,30 @@
 #define WM_RESET (WM_USER+5001) //clear critical information
 #define WM_START (WM_USER+5002) //you are all set up, start whatever it is you do, this is always a SendMessage, you must use all the init data right there, it's not guaranteed to be there after this msg finishes
 
+//+ Fixing windows' bad design: //TODO(fran): move to richedit .h file
+LPCWSTR get_richedit_classW(int setclass = 0 /*for internal use, not end user*/) {
+    static int v = 1;
+    if (setclass) v = setclass;
+    switch (v) {
+    case 1: return L"RICHEDIT";     //v1.0
+    case 2:
+    case 3: return L"RichEdit20W"; //v3.0 or 2.0
+    case 4: return L"RICHEDIT50W";  //v4.1
+    default: return L"";
+    }
+
+}
+
+BOOL load_richedit() {//NOTE: use RICHEDIT_CLASS for the window's class name
+    int success = false;
+    if (!success) { success = (int)LoadLibrary(_t("Msftedit.dll")); if (success)success = 4; } //v4.1
+    if (!success) { success = (int)LoadLibrary(_t("Riched20.dll")); if (success)success = 2; } //v3.0 or 2.0
+    if (!success) { success = (int)LoadLibrary(_t("Riched32.dll")); if (success)success = 1; } //v1.0
+    get_richedit_classW(success);
+    return success;
+}
+//+
+
 #include "unCap_button.h"
 #include "unCap_edit_oneline.h"
 #include "unCap_uncapnc.h"
@@ -125,6 +149,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
     default_colors_if_not_set(&unCap_colors);
     defer{ for (HBRUSH& b : unCap_colors.brushes) if (b) { DeleteBrush(b); b = NULL; } };
 
+    
+    bool richedit = load_richedit(); runtime_assert(richedit, "Couldn't find any Rich Edit library");
     init_wndclass_unCap_uncapnc(hInstance);
     init_wndclass_unCap_button(hInstance);
     init_wndclass_unCap_edit_oneline(hInstance);
