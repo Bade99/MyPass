@@ -154,6 +154,7 @@
     <ClInclude Include="LANGUAGE_MANAGER.h" />
     <ClInclude Include="protect_Core.h" />
     <ClInclude Include="protect_login.h" />
+    <ClInclude Include="protect_search.h" />
     <ClInclude Include="protect_sha256.h" />
     <ClInclude Include="protect_show_passwords.h" />
     <ClInclude Include="protect_twofish.h" />

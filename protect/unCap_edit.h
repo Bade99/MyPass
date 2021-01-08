@@ -4,6 +4,7 @@
 #include "unCap_math.h"
 #include <CommCtrl.h>
 #include "unCap_scrollbar.h"
+#include "protect_search.h"
 
 #define edit_base_msg_addr (WM_USER+200)
 
@@ -12,6 +13,7 @@
 //#define EM_SETHSCROLL (WM_USER+202) /*Sets the horizontal scrollbar that is to be used. wParam=HWND of the scrollbar control*/
 //#define EM_GET_MAX_VISIBLE_CHARS_PER_LINE (WM_USER+203) /*Retrieves a count for the max number of characters that can be displayed in one line at once in the current window. return=int*/
 #define WM_SAVE (edit_base_msg_addr+13) /*A control has asked to save its contents wParam=HWND ; lParam=unused*/
+#define EM_SETSEARCHWND (edit_base_msg_addr+14) /*Sets the search wnd that is used, wParam=HWND of the search control ; lParam=unused*/
 
 //TODO(fran): ability to search, use EM_GETHANDLE to get the cstr* without copying and search, keep count of \n for the percentage to scroll
 
@@ -20,7 +22,9 @@ struct EditProcState {
 	bool initialized;
 	HWND wnd;
 	HWND parent;
+
 	HWND vscrollbar;// , hscrollbar;
+	HWND search;	//addon search window
 };
 //NOTE: EditProc controls require the creation of a EditProcState struct with calloc, and for it to be passed as the 4th param in SetWindowSubclass, the object will now be managed by the procedure and does not need the user to handle its memory
 //NOTE: no left-right scrolling, it is line wrap handled
@@ -105,8 +109,14 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 
 			return char_count;
 		} break;*/
-	case EM_SETVSCROLL: {
+	case EM_SETVSCROLL: 
+	{
 		state->vscrollbar = (HWND)wparam;
+	} break;
+	case EM_SETSEARCHWND:
+	{
+		state->search = (HWND)wparam;
+		return 0;
 	} break;
 		//case EM_SETHSCROLL: {
 		//	state->hscrollbar = (HWND)wparam;
@@ -133,6 +143,7 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 		//x & y remain fixed and only width & height change
 
 		if (state->vscrollbar)SendMessage(state->vscrollbar, U_SB_AUTORESIZE, 0, 0);
+		if (state->search)SendMessage(state->search, SRH_AUTORESIZE, 0, 0);
 
 		EDIT_update_scrollbar(state); //NOTE: actually here you just need to update nPage
 
@@ -181,3 +192,4 @@ void RICHEDIT_set_txt_bk_color(HWND wnd, COLORREF clr) {
 	cf.dwEffects = 0;
 	SendMessage(wnd, EM_SETCHARFORMAT, SCF_ALL, (LPARAM)&cf);
 }
+

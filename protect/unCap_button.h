@@ -6,6 +6,8 @@
 #include "unCap_Renderer.h"
 #include "windows_undoc.h"
 
+//TODO(fran): new class btn_text_or_img: if the text fits then draw it, otherwise render the img, great for cool resizing that allows for the same control to take different shapes but maintain all functionality
+
 //NOTE: this buttons can have text or an img, but not both at the same time
 //NOTE: it's important that the parent uses WS_CLIPCHILDREN to avoid horrible flickering
 //NOTE: this button follows the standard button tradition of getting the msg to send to the parent from the hMenu param of CreateWindow/Ex
@@ -74,6 +76,48 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 	ButtonProcState* state = UNCAPBTN_get_state(hwnd);
 	//Assert(state); //NOTE: cannot check thanks to the grandeur of windows' msgs before WM_NCCREATE
 	switch (msg) {
+	case BCM_GETIDEALSIZE:
+	{
+		SIZE* sz = (SIZE*)lparam;//NOTE: all sizes are relative to the entire button, not just the img or text
+		DWORD style = (DWORD)GetWindowLongPtr(state->wnd, GWL_STYLE);
+		if (sz->cx) { //calculate cy based on cx
+			if (style & BS_ICON || style & BS_BITMAP) {
+				sz->cy = sz->cx; //we always assume that imgs are square
+			}
+			else { //we got text
+				HFONT font = state->font;
+				HDC dc = GetDC(state->wnd); defer{ ReleaseDC(state->wnd,dc); };
+				if (font) (HFONT)SelectObject(dc, (HGDIOBJ)font);
+				TEXTMETRIC tm; GetTextMetrics(dc, &tm);
+				sz->cy = (int)((float)tm.tmHeight * 1.2f);
+			}
+		}
+		else { //calculate cx and cy
+			if (style & BS_ICON) {
+				MYICON_INFO iconnfo = MyGetIconInfo(state->icon);
+				sz->cx = iconnfo.nWidth;
+				sz->cy = iconnfo.nHeight;
+			}
+			else if (style & BS_BITMAP) {
+				BITMAP bitmap; GetObject(state->bmp, sizeof(bitmap), &bitmap);
+				sz->cx = bitmap.bmWidth;
+				sz->cy = bitmap.bmHeight;
+			}
+			else { //we got text
+				HDC dc = GetDC(state->wnd); defer{ ReleaseDC(state->wnd,dc); };
+				if (state->font) (HFONT)SelectObject(dc, (HGDIOBJ)state->font);
+				TEXTMETRIC tm; GetTextMetrics(dc, &tm);
+
+				TCHAR Text[40]; //TODO(fran): this could not be more stupid, I should have the text, at least with a str
+				int len = (int)SendMessage(state->wnd, WM_GETTEXT, ARRAYSIZE(Text), (LPARAM)Text);
+				
+				GetTextExtentPoint32(dc, Text, len, sz);
+				sz->cx = (int)((float)sz->cx * 1.2f);
+				sz->cy = (int)((float)sz->cy * 1.2f);
+			}
+		}
+		return TRUE;
+	} break;
 	case BM_GETIMAGE:
 	{
 		if (wparam == IMAGE_BITMAP) return (LRESULT)state->bmp;

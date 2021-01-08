@@ -1123,6 +1123,10 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
+	case WM_GETFONT:
+	{
+		return (LRESULT)state->font;
+	} break;
 	default:
 	{
 

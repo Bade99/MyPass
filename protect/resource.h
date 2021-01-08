@@ -35,6 +35,8 @@
 #define LANG_LOGIN_PASSWORD_EMPTY       147
 #define LANG_ERROR_PASSWORD             148
 #define LANG_ERROR                      149
+#define LANG_SEARCH_FINDPREV            150
+#define LANG_CONTROL_SEARCH_FINDNEXT    151
 #define IDC_STATIC                      -1
 
 // Next default values for new objects

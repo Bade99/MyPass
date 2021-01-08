@@ -5,6 +5,7 @@
 #include "unCap_edit.h"
 #include "LANGUAGE_MANAGER.h"
 #include <Richedit.h>
+#include "protect_search.h"
 
 constexpr TCHAR protect_wndclass_show_passwords[] = TEXT("protect_wndclass_show_passwords");
 
@@ -116,6 +117,16 @@ void SHOWPASSWORDS_add_controls(ShowPasswordsState* state) {
 	RICHEDIT_set_bk_color(state->controls.edit_passwords, ColorFromBrush(unCap_colors.ControlBk));
 	//RICHEDIT_set_txt_color(state->controls.edit_passwords, ColorFromBrush(unCap_colors.ControlTxt)); //IMPORTANT: this needs to be called each time the text changes
 	RICHEDIT_set_txt_bk_color(state->controls.edit_passwords, ColorFromBrush(unCap_colors.ControlBk));
+
+	SearchInit searchinit;
+	searchinit.parent_type = SEARCH_RICHEDIT;
+	searchinit.SearchFlag_flags = 0;
+	searchinit.SearchPlacement_flags = SearchPlacement::right;// SearchPlacement::bottom;
+	HWND SearchControl = CreateWindowExW(NULL, protect_wndclass_search, NULL, WS_CHILD | WS_VISIBLE,
+		0, 0, 0, 0, state->controls.edit_passwords, NULL, NULL, &searchinit);
+	//TODO(fran): sendmessage to edit control EM_SETSEARCHWND or smth like that so it knows of its existance and can, for example, hide it when the user presses escape key
+	SendMessageW(state->controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)SearchControl, 0);
+
 #endif
 
 	for (auto ctl : state->controls.all)

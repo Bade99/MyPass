@@ -151,6 +151,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 
     
     bool richedit = load_richedit(); runtime_assert(richedit, "Couldn't find any Rich Edit library");
+    init_wndclass_protect_search(hInstance);
     init_wndclass_unCap_uncapnc(hInstance);
     init_wndclass_unCap_button(hInstance);
     init_wndclass_unCap_edit_oneline(hInstance);
