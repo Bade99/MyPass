@@ -93,6 +93,7 @@ void EDITONELINE_set_state(HWND wnd, EditOnelineProcState* state) {//NOTE: only 
 }
 
 //NOTE: the caller takes care of deleting the brushes, we dont do it
+//TODO(fran): should have border as first param after repaint to be equal to set_brushes for BUTTON
 void EDITONELINE_set_brushes(HWND editoneline, BOOL repaint, HBRUSH txt, HBRUSH bk, HBRUSH border, HBRUSH txt_disabled, HBRUSH bk_disabled, HBRUSH border_disabled) {
 	EditOnelineProcState* state = EDITONELINE_get_state(editoneline);
 	if (txt)state->brushes.txt = txt;

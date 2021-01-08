@@ -70,10 +70,26 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 		char vk = (char)wparam;
 		bool ctrl_is_down = HIBYTE(GetKeyState(VK_CONTROL));
 		switch (vk) {
-		case _t('S'):
+		case _t('S')://Save
 		{
 			if (ctrl_is_down) {
 				PostMessage(state->parent, WM_SAVE, (WPARAM)state->wnd, 0);
+			}
+		} break;
+		case _t('F')://Find
+		{
+			//TODO(fran): what if this where pressed while the search wnd has focus? we need to intercept that window's msgs probably, maybe it automatically sends them to the parent, or we could make it do it
+			if (ctrl_is_down) {
+				if (state->search) {
+					if (IsWindowVisible(state->search)) {
+						ShowWindow(state->search, SW_HIDE);
+					}
+					else {
+						ShowWindow(state->search, SW_SHOW);
+						SetFocus(state->search);
+					}
+
+				}
 			}
 		} break;
 		}

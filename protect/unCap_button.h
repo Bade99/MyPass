@@ -314,6 +314,7 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		st->parent = creation_nfo->hwndParent;
 		st->wnd = hwnd;
 		st->msg_to_send = (UINT)(UINT_PTR)creation_nfo->hMenu;
+		if(creation_nfo->lpszName)SendMessage(hwnd, WM_SETTEXT, 0, (LPARAM)creation_nfo->lpszName);
 		return TRUE; //continue creation, this msg seems kind of more of a user setup place, strange considering there's also WM_CREATE
 	} break;
 	case WM_NCCALCSIZE: { //2nd msg received https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-nccalcsize
@@ -400,7 +401,10 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 			if (bitmap.bmBitsPixel == 1) {
 				//TODO(fran):unify rect calculation with icon
 				int max_sz = roundNdown(bitmap.bmWidth, (int)((float)min(RECTWIDTH(rc), RECTHEIGHT(rc)) * .8f)); //HACK: instead use png + gdi+ + color matrices
-				if (!max_sz)max_sz = bitmap.bmWidth; //More HACKs
+				if (!max_sz) {
+					if ((bitmap.bmWidth % 2) == 0) max_sz = bitmap.bmWidth / 2;
+					else max_sz = bitmap.bmWidth; //More HACKs
+				}
 
 				int bmp_height = max_sz;
 				int bmp_width = bmp_height;

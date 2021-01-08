@@ -121,10 +121,14 @@ void SHOWPASSWORDS_add_controls(ShowPasswordsState* state) {
 	SearchInit searchinit;
 	searchinit.parent_type = SEARCH_RICHEDIT;
 	searchinit.SearchFlag_flags = 0;
+#if 0
 	searchinit.SearchPlacement_flags = SearchPlacement::right;// SearchPlacement::bottom;
-	HWND SearchControl = CreateWindowExW(NULL, protect_wndclass_search, NULL, WS_CHILD | WS_VISIBLE,
+#else
+	searchinit.SearchPlacement_flags = SearchPlacement::bottom;
+#endif
+	HWND SearchControl = CreateWindowExW(NULL, protect_wndclass_search, NULL, WS_CHILD,
 		0, 0, 0, 0, state->controls.edit_passwords, NULL, NULL, &searchinit);
-	//TODO(fran): sendmessage to edit control EM_SETSEARCHWND or smth like that so it knows of its existance and can, for example, hide it when the user presses escape key
+	SEARCH_set_brushes(SearchControl, TRUE, unCap_colors.Search_Bk, unCap_colors.Search_Bk, unCap_colors.Search_Txt, unCap_colors.Search_BkPush, unCap_colors.Search_BkMouseOver, unCap_colors.Search_Edit_Bk, unCap_colors.Search_Edit_Txt);
 	SendMessageW(state->controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)SearchControl, 0);
 
 #endif

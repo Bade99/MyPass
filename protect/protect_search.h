@@ -11,12 +11,13 @@ constexpr TCHAR protect_wndclass_search[] = TEXT("unCap_wndclass_search");
 void init_wndclass_protect_search(HINSTANCE instance); //call this before creating an HWND of this class
 
 //TODO(fran): on WM_SETFONT I should update all my controls
+//TODO(fran): on showing the wnd we must setfocus to the edit control
 
 //Flags for CreateWindow
 #define SEARCH_EDIT (1<<1)		//Search an edit control
 #define SEARCH_RICHEDIT (1<<2)	//Search a rich edit control
 
-//Additional msgs that this wnd manages
+//New msgs that this wnd can handle
 #define search_base_msg_addr (WM_USER+300)
 #define SRH_AUTORESIZE (search_base_msg_addr+1)
 
@@ -66,6 +67,8 @@ struct SearchProcState { //NOTE: must be initialized to zero
 		};
 		HWND all[6];//REMEMBER TO UPDATE
 	}controls;
+
+	HBRUSH br_border, br_bk, br_fore, br_bkpush, br_bkmouseover, br_edit_bk, br_edit_txt;//TODO(fran): no real need to store all, only the childs need most of them
 };
 
 struct SearchInit{ //Sent as a pointer in the last parameter of CreateWindow
@@ -240,11 +243,12 @@ void SEARCH_resize_controls(SearchProcState* state) {
 		btn_close_w = btn_close_h;
 		btn_close_x = w - btn_close_w;
 		btn_close_y = btn_case_sensitive_y;
+		int btn_close_pad = 2; //get the close button away from the rest
 
 		//"find next" and "find prev" go left of "close", one on top of the other
 		btn_find_next_w = btn_case_sensitive_w;
 		btn_find_next_h = btn_case_sensitive_h;
-		btn_find_next_x = btn_close_x - btn_find_next_w;
+		btn_find_next_x = btn_close_x - btn_find_next_w - btn_close_pad;
 		btn_find_next_y = btn_case_sensitive_y;
 
 		btn_find_prev_w = btn_find_next_w;
@@ -314,33 +318,26 @@ void SEARCH_add_controls(SearchProcState* state) {
 	//INFO: instead of using control identifiers as the HMENU param im simply gonna filter them with the HWND, for example on WM_COMMAND
 	state->controls.btn_case_sensitive = CreateWindow(unCap_wndclass_button, L"Aa"/*works on any language, maybe*/, WS_VISIBLE | WS_CHILD | WS_TABSTOP
 		, 0, 0, 0, 0, state->wnd, NULL, NULL, NULL);
-	UNCAPBTN_set_brushes(state->controls.btn_case_sensitive, TRUE, unCap_colors.Img, unCap_colors.ControlBk, unCap_colors.ControlTxt, unCap_colors.ControlBkPush, unCap_colors.ControlBkMouseOver);
 
 	state->controls.btn_whole_word = CreateWindow(unCap_wndclass_button, L"' '"/*impossible to describe*/, WS_VISIBLE | WS_CHILD | WS_TABSTOP
 		, 0, 0, 0, 0, state->wnd, NULL, NULL, NULL);
-	UNCAPBTN_set_brushes(state->controls.btn_whole_word, TRUE, unCap_colors.Img, unCap_colors.ControlBk, unCap_colors.ControlTxt, unCap_colors.ControlBkPush, unCap_colors.ControlBkMouseOver);
-
+	
 	//TODO(fran): this should be the new button, rendering text when possible or an img otherwise
 	state->controls.btn_find_prev = CreateWindow(unCap_wndclass_button, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP
 		, 0, 0, 0, 0, state->wnd, NULL, NULL, NULL);
 	AWT(state->controls.btn_find_prev, LANG_SEARCH_FINDPREV);
-	UNCAPBTN_set_brushes(state->controls.btn_find_prev, TRUE, unCap_colors.Img, unCap_colors.ControlBk, unCap_colors.ControlTxt, unCap_colors.ControlBkPush, unCap_colors.ControlBkMouseOver);
 
 	//TODO(fran): this should be the new button, rendering text when possible or an img otherwise
 	state->controls.btn_find_next = CreateWindow(unCap_wndclass_button, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP
 		, 0, 0, 0, 0, state->wnd, NULL, NULL, NULL);
 	AWT(state->controls.btn_find_next, LANG_CONTROL_SEARCH_FINDNEXT);
-	UNCAPBTN_set_brushes(state->controls.btn_find_next, TRUE, unCap_colors.Img, unCap_colors.ControlBk, unCap_colors.ControlTxt, unCap_colors.ControlBkPush, unCap_colors.ControlBkMouseOver);
-
 	state->controls.btn_close = CreateWindow(unCap_wndclass_button, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_BITMAP
 		, 0, 0, 0, 0, state->wnd, NULL, NULL, NULL);
-	UNCAPBTN_set_brushes(state->controls.btn_close, TRUE, unCap_colors.Img, unCap_colors.ControlBk, unCap_colors.ControlTxt, unCap_colors.ControlBkPush, unCap_colors.ControlBkMouseOver);
 	HBITMAP bCross = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(UNCAP_BMP_CLOSE));//TODO(fran): I dont think the button takes care of freeing this
 	SendMessage(state->controls.btn_close, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bCross);
 
 	state->controls.edit_match = CreateWindow(unCap_wndclass_edit_oneline, _t(""), WS_VISIBLE | WS_CHILD | ES_LEFT | WS_TABSTOP
 		, 0, 0, 0, 0, state->wnd, NULL, NULL, NULL);
-	EDITONELINE_set_brushes(state->controls.edit_match, TRUE, unCap_colors.ControlTxt, unCap_colors.ControlBk, unCap_colors.Img, unCap_colors.ControlTxt_Disabled, unCap_colors.ControlBk_Disabled, unCap_colors.Img_Disabled);
 	//SendMessage(state->controls.edit_match, WM_SETDEFAULTTEXT, 0, (LPARAM)RCS(LANG_SEARCH_FIND));
 
 	for (auto ctl : state->controls.all)
@@ -348,6 +345,31 @@ void SEARCH_add_controls(SearchProcState* state) {
 
 	SEARCH_resize_wnd(state);
 }
+
+void SEARCH_set_brushes(HWND search, BOOL repaint, HBRUSH border_br, HBRUSH bk_br, HBRUSH fore_br, HBRUSH bkpush_br, HBRUSH bkmouseover_br, HBRUSH edit_bk_br, HBRUSH edit_txt_br) {
+	SearchProcState* state = SEARCH_get_state(search);
+	if (border_br)state->br_border = border_br;
+	if (bk_br)state->br_bk = bk_br;
+	if (fore_br)state->br_fore = fore_br;
+	if (bkpush_br)state->br_bkpush = bkpush_br;
+	if (bkmouseover_br)state->br_bkmouseover = bkmouseover_br;
+	if (edit_bk_br)state->br_edit_bk = edit_bk_br;
+	if (edit_txt_br)state->br_edit_txt = edit_txt_br;
+	if (repaint)InvalidateRect(state->wnd, NULL, TRUE);
+
+	UNCAPBTN_set_brushes(state->controls.btn_case_sensitive, TRUE, state->br_border, state->br_bk, state->br_fore, state->br_bkpush, state->br_bkmouseover);
+
+	UNCAPBTN_set_brushes(state->controls.btn_whole_word, TRUE, state->br_border, state->br_bk, state->br_fore, state->br_bkpush, state->br_bkmouseover);
+
+	UNCAPBTN_set_brushes(state->controls.btn_find_prev, TRUE, state->br_border, state->br_bk, state->br_fore, state->br_bkpush, state->br_bkmouseover);
+
+	UNCAPBTN_set_brushes(state->controls.btn_find_next, TRUE, state->br_border, state->br_bk, state->br_fore, state->br_bkpush, state->br_bkmouseover);
+
+	UNCAPBTN_set_brushes(state->controls.btn_close, TRUE, state->br_border, state->br_bk, state->br_fore, state->br_bkpush, state->br_bkmouseover);
+
+	EDITONELINE_set_brushes(state->controls.edit_match, TRUE, state->br_edit_txt, state->br_edit_bk, state->br_edit_bk, state->br_edit_txt, state->br_edit_bk, state->br_edit_bk);
+}
+
 
 static LRESULT CALLBACK SearchProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	SearchProcState* state = SEARCH_get_state(hwnd);
@@ -422,7 +444,7 @@ static LRESULT CALLBACK SearchProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		//TODO(fran): maybe I should use WS_CLIPCHILDREN
 		PAINTSTRUCT ps;
 		HDC dc = BeginPaint(hwnd, &ps);
-		HBRUSH bk = unCap_colors.ControlBk; //TODO(fran): parametric, user defined, as well as all of the childs
+		HBRUSH bk = state->br_bk;
 		FillRect(dc, &ps.rcPaint, bk);
 		EndPaint(hwnd, &ps);
 		return 0;
@@ -504,6 +526,19 @@ static LRESULT CALLBACK SearchProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 	case WM_LBUTTONDOWN:
 	{
 		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
+	case WM_IME_SETCONTEXT://sent the first time on SetFocus
+	{
+		return 0; //We dont want IME for the general wnd, the childs can decide
+	} break;
+	case WM_SETFOCUS:
+	{
+		SetFocus(state->controls.edit_match);
+		return 0;
+	} break;
+	case WM_KILLFOCUS:
+	{
+		return 0;
 	} break;
 	default:
 #ifdef _DEBUG
