@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <windows.h>
 #include "unCap_Platform.h"
 #include "unCap_Helpers.h"
@@ -39,10 +39,11 @@ struct SearchPlacement
 
 	//NOTE: top and bottom create a wnd that extends the whole width of the parent control; left and right will occupy 25% of the width or less; they can be combined eg bottom | left
 };
-struct SearchFlag {
+struct SearchFlag { //TODO(fran): you might like for this flags to be stored for the next execution, we need a simpler way to allow anyone to save stuff, not just the main wnds
 	static const int search_up		= 1 << 1;	//if set then search up, otherwise search down
 	static const int case_sensitive	= 1 << 2;	//
 	static const int whole_word		= 1 << 3;	//
+	static const int no_wrap		= 1 << 4;	//if you didnt find searching up look at what was down and viceversa, this flag is negated cause the usual is you want wrap
 	//TODO(fran): search in current selection
 };
 struct SearchRange {
@@ -60,15 +61,16 @@ struct SearchProcState { //NOTE: must be initialized to zero
 		struct {
 			HWND btn_case_sensitive;
 			HWND btn_whole_word;
+			HWND btn_wrap;
 			HWND edit_match;
 			HWND btn_find_next;
 			HWND btn_find_prev;
 			HWND btn_close;
 		};
-		HWND all[6];//REMEMBER TO UPDATE
+		HWND all[7];//REMEMBER TO UPDATE
 	}controls;
 
-	HBRUSH br_border, br_bk, br_fore, br_bkpush, br_bkmouseover, br_edit_bk, br_edit_txt;//TODO(fran): no real need to store all, only the childs need most of them
+	HBRUSH br_border, br_bk, br_fore, br_bkpush, br_bkmouseover, br_edit_bk, br_edit_txt, br_bkselected;//TODO(fran): no real need to store all, only the childs need most of them
 };
 
 struct SearchInit{ //Sent as a pointer in the last parameter of CreateWindow
@@ -77,24 +79,90 @@ struct SearchInit{ //Sent as a pointer in the last parameter of CreateWindow
 	u32 parent_type; // SEARCH_EDIT, SEARCH_RICHEDIT, ...
 };
 
-int SEARCH_search(SearchProcState* state, cstr* match, SearchRange range) { //returns zero-based index of the first char of the match or -1 if not found
-	int res;
-	switch (state->parent_type) {
-	case SEARCH_RICHEDIT: //TODO(fran): FR_DOWN was added in rich edit 2.0 !!!!!! thanks microsoft, we gotta special case that too
-	{
-		int search_flags = (state->search_flags & SearchFlag::search_up ? 0 : FR_DOWN) | (state->search_flags & SearchFlag::whole_word ? 0 : FR_WHOLEWORD);
-		FINDTEXT find;
-		find.chrg.cpMin = range.min;
-		find.chrg.cpMax = range.max+1;
-		find.lpstrText = match;
-		res = SendMessage(state->parent, _EM_FINDTEXT, search_flags,(LPARAM)&find);
-	} break;
-	case SEARCH_EDIT:
-	{
-		Assert(0);
-	} break;
-	default: Assert(0); break;
+struct SEARCH_search_result {
+	int p;
+	int sz_char;
+};
+//TODO(fran): extra param, search from sel_start or sel_end, when the user presses the enter key or the find button they want to start from sel_end, while they are writing they want to start from sel_start
+//INFO: from_sel_start: taking by reference point a search downwards if true the search happens from the start of the current selection, otherwise from the end, the same desired behaviour will happen for searching up where from_sel_start true will mean to search from the end, yes confusing, just take into account how it works for searching downwards and it will automatically work perfectly for searching up
+SEARCH_search_result SEARCH_search(SearchProcState* state, bool search_in_current_selection) { //returns zero-based index of the first char of the match or -1 if not found
+	//TODO(fran): searching should roll over, say we get to the end of the file and dont find anything then we go from the start, and only then can we say to the user that we didnt find anything
+	SEARCH_search_result res;
+
+	int match_len = SendMessageW(state->controls.edit_match, WM_GETTEXTLENGTH, 0, 0) + 1;//lenght in characters, includes null terminator
+	res.sz_char = match_len-1;
+	if (match_len > 1) {
+		WCHAR* match = (WCHAR*)malloc(match_len * sizeof(*match)); defer{ free(match); };
+		SendMessage(state->controls.edit_match, WM_GETTEXT, match_len, (LPARAM)match);
+
+		switch (state->parent_type) {
+		case SEARCH_RICHEDIT: //TODO(fran): FR_DOWN was added in rich edit 2.0 !!!!!! thanks microsoft, we gotta special case that too
+		{
+			/*int search_flags = (state->search_flags & SearchFlag::search_up ? 0 : FR_DOWN) | (state->search_flags & SearchFlag::whole_word ? 0 : FR_WHOLEWORD);
+			FINDTEXT find;
+			find.chrg.cpMin = range.min;
+			find.chrg.cpMax = range.max + 1;
+			find.lpstrText = match;
+			res = SendMessage(state->parent, _EM_FINDTEXT, search_flags, (LPARAM)&find);*/
+			Assert(0);
+		} break;
+		case SEARCH_EDIT:
+		{
+			HLOCAL loc = (HLOCAL)SendMessage(state->parent, EM_GETHANDLE, 0, 0);
+			WCHAR* str = (WCHAR*)LocalLock(loc); defer{ LocalUnlock(loc); }; //INFO: with commctrl version 6 the text is always stored as WCHAR
+			int str_len = SendMessage(state->parent, WM_GETTEXTLENGTH, 0, 0)+1;//in characters, includes null terminator
+			DWORD sel_start, sel_end;
+			SendMessage(state->parent, EM_GETSEL, (WPARAM)&sel_start, (LPARAM)&sel_end); //TODO(fran): if a selection was made on reverse, eg the user selected and moved the mouse to the left, then does this return the values flipped? we'd need to unflip them
+			DWORD sel;
+			//INFO: we dont actually want to use sel_end cause it can cause the effect of the search scrolling each time the user adds one character, say for example we look for "far" which appears twice in the text, when the user types the "t" we will scroll to the first occurrence, then when they type the "a" we will scroll to the second! terrible
+
+			SearchRange range;
+			DWORD search_flags= LINGUISTIC_IGNOREDIACRITIC;
+			if (!(state->search_flags & SearchFlag::case_sensitive))
+				search_flags |= LINGUISTIC_IGNORECASE; //TODO(fran): study the flags, there are some more complex things that I may want to add
+			if (state->search_flags & SearchFlag::search_up) {//search from the beginning of the selection to the first char
+				sel = (search_in_current_selection) ? min(sel_end+2, str_len/*-1 ?*/) : sel_start;
+				//INFO IMPORTANT: searching up is tricky, each time we search we establish a selection and the next time we search up from it, problem with this is that the user is actually looking for something that will potentially be on the right of that selection ("downwards"), therefore we need to extend the selection +1 to the right to avoid the continually scrolling problem, also +1 is probably not enough since you could have those additive codepoints that take more than one wchar
+				range.min = 0;
+				range.max = sel;// should subtract 1
+				search_flags |= FIND_FROMEND ;
+				//TODO(fran): we im going up should I set the start of the string to the end or does FindNLSStringEx do that ?
+			}
+			else {//search from the end of the selection to the last char
+				sel = (search_in_current_selection) ? sel_start : sel_end;
+				range.min = sel;
+				range.max = str_len-1;
+				search_flags |= FIND_FROMSTART;
+			}
+			int __found_len;
+			res.p = FindNLSStringEx(LOCALE_NAME_USER_DEFAULT, search_flags, str + range.min, distance(range.min, range.max),match, match_len-1,&__found_len, NULL, NULL,0);//returns -1 if not found, otherwise zero-based idx
+
+			if (res.p != -1) res.p += range.min; //since we offset the string when searching now we gotta reintegrate that offset
+
+			//StrStrIW(str, match);//TODO(fran): look at https://www.codeproject.com/Articles/383185/SSE-accelerated-case-insensitive-substring-search which says to be much faster than this
+			//wcsstr(, )//Case sensitive comparison, exact match
+
+			//TODO(fran): I think this should be a flag too, wordwrap or smth like that
+			if (res.p == -1 && !(state->search_flags & SearchFlag::no_wrap)) {//we didnt find anything in our range, lets test the leftover range but keeping our direction
+				if (state->search_flags & SearchFlag::search_up) {
+					range.min = sel;
+					range.max = str_len - 1;
+				}
+				else {
+					range.min = 0;
+					range.max = sel;// should subtract 1
+				}
+				res.p = FindNLSStringEx(LOCALE_NAME_USER_DEFAULT, search_flags, str + range.min, distance(range.min, range.max), match, match_len - 1, &__found_len, NULL, NULL, 0);
+
+				if (res.p != -1) res.p += range.min;
+			}
+
+
+		} break;
+		default: Assert(0); break;
+		}
 	}
+	else res.p = -1;
 	return res;
 }
 void SEARCH_make_selection(SearchProcState* state, int p /*zero-based*/, int char_count) {
@@ -108,19 +176,56 @@ void SEARCH_make_selection(SearchProcState* state, int p /*zero-based*/, int cha
 	} break;
 	case SEARCH_EDIT:
 	{
-		Assert(0);
+		SendMessage(state->parent, EM_SETSEL, p, p + char_count);
 	} break;
 	default: Assert(0); break;
 	}
 }
 void SEARCH_scroll_to_selection(SearchProcState* state) {//Scrolls the text to the current selection
+	//TODO(fran): this scrolls to the specific line, therefore the selection can end up on the first or last visible lines, we would prefer the selection gets a little more centered to the middle of the control
 	switch (state->parent_type) {
 	case SEARCH_RICHEDIT:
-	case SEARCH_EDIT:
 	{
 		SendMessage(state->parent, EM_SCROLLCARET, 0, 0);
 	} break;
+	case SEARCH_EDIT:
+	{
+		SendMessage(state->parent, EM_SCROLLCARET, 0, 0);
+
+		//The current selection should be on a visible line, now we move that line a little closer to the center if it is too close to the top or bottom
+		int first_visible_line = SendMessage(state->parent, EM_GETFIRSTVISIBLELINE, 0, 0);
+		//EM_GETLASTVISIBLELINE
+		RECT r; SendMessage(state->parent, EM_GETRECT, 0, (LPARAM)&r);//TODO(fran): make sure this is actually useful when the rect is modified instead of just using getclientrect
+		DWORD c = SendMessage(state->parent, EM_CHARFROMPOS, 0, MAKELONG(0,RECTHEIGHT(r)-1));
+		int last_visible_line = HIWORD(c);
+		int max_visible_lines = distance(first_visible_line,last_visible_line);
+		int current_line = SendMessage(state->parent, EM_LINEFROMCHAR, -1 /*get the line of the current selection*/, 0);
+		int dist_to_first_line = distance(current_line, first_visible_line);
+		int dist_to_last_line = distance(current_line, last_visible_line);
+		if (max_visible_lines > 3 ) {
+			if (dist_to_first_line < 3) {//we are too close to the top, we need to go down
+				int line_scroll = min(2, dist_to_last_line);
+				line_scroll = -line_scroll; //strangely enough to scroll down you use negative numbers, and positive for up
+				SendMessage(state->parent, EM_LINESCROLL, 0, line_scroll);
+			}
+			else if (dist_to_last_line < 3) {//we are too close to the bottom, we need to go up
+				int line_scroll = min(2, dist_to_first_line);
+				SendMessage(state->parent, EM_LINESCROLL, 0, line_scroll);
+			}
+		}
+
+
+
+	} break;
 	default: Assert(0); break;
+	}
+}
+
+void SEARCH_search_and_scroll(SearchProcState* state, bool search_in_current_selection) {
+	auto search_res = SEARCH_search(state, search_in_current_selection);
+	if (search_res.p != -1) { //TODO(fran): I like visual studio's way to tell the user if they couldnt match, they put a red border around the edit wnd, very simple to implement just change the border brush
+		SEARCH_make_selection(state, search_res.p, search_res.sz_char);
+		SEARCH_scroll_to_selection(state);
 	}
 }
 
@@ -138,8 +243,7 @@ void SEARCH_set_state(HWND search, SearchProcState* state) {
 void SEARCH_resize_wnd(SearchProcState* state) {
 	Assert(state->placement_flags);
 
-	RECT r;
-	GetClientRect(state->parent, &r);
+	RECT r; GetWindowRect(state->parent, &r); //INFO: you cant use getclientrect with text editors since they seem to change their client rect when you scroll them and would cause the position of this control to start scrolling too
 	int w = RECTWIDTH(r);
 	int h = RECTHEIGHT(r);
 	int font_h;
@@ -148,7 +252,7 @@ void SEARCH_resize_wnd(SearchProcState* state) {
 		HDC dc = GetDC(state->wnd); defer{ ReleaseDC(state->wnd,dc); };
 		HFONT oldfont = (HFONT)SelectObject(dc, (HGDIOBJ)font); defer{ SelectObject(dc, (HGDIOBJ)oldfont); };
 		TEXTMETRIC tm; GetTextMetrics(dc, &tm);
-		font_h = (int)((float)tm.tmHeight * 1.2f);
+		font_h = (int)((float)tm.tmHeight * 1.2f); //TODO(fran): what we'd actually need is for the edit control to tell us the caret size, and make our height a little bigger
 	}
 	int search_x;
 	int search_y;
@@ -166,22 +270,22 @@ void SEARCH_resize_wnd(SearchProcState* state) {
 		//big wnd
 		search_h = font_h;
 		search_w = w;
-		search_x = r.left;
+		search_x = 0;
 	}
 
 	if (state->placement_flags & SearchPlacement::left) {
-		search_x = r.left;
-		search_y = r.top;
+		search_x = 0;
+		search_y = 0;
 	}
 	if (state->placement_flags & SearchPlacement::right) {
-		search_x = r.right - search_w;
-		search_y = r.top;
+		search_x = w - search_w;
+		search_y = 0;
 	}
 	if (state->placement_flags & SearchPlacement::top) {
-		search_y = r.top;
+		search_y = 0;
 	}
 	if (state->placement_flags & SearchPlacement::bottom) {
-		search_y = r.bottom - search_h;
+		search_y = h - search_h;
 	}
 
 	MoveWindow(state->wnd, search_x, search_y, search_w, search_h, TRUE);
@@ -203,6 +307,11 @@ void SEARCH_resize_controls(SearchProcState* state) {
 	int btn_whole_word_y;
 	int btn_whole_word_w;
 	int btn_whole_word_h;
+
+	int btn_wrap_x;
+	int btn_wrap_y;
+	int btn_wrap_w;
+	int btn_wrap_h;
 
 	int btn_close_h;
 	int btn_close_w;
@@ -227,7 +336,9 @@ void SEARCH_resize_controls(SearchProcState* state) {
 	if (state->placement_flags & SearchPlacement::left || state->placement_flags & SearchPlacement::right) { //control is in small state
 		int h_half = h / 2;
 
-		//"case sensitive" and "whole word" go on the left, one on top of the other
+		//TODO(fran): this UI isnt great, we should do like visual studio and have to levels, on top the edit control and on the bottom all the flag button and find
+
+		//"case sensitive", "whole word", "wrap" go on the left, one on top of the other
 		btn_case_sensitive_x = 0;
 		btn_case_sensitive_y = 0;
 		btn_case_sensitive_w = h_half;
@@ -238,17 +349,21 @@ void SEARCH_resize_controls(SearchProcState* state) {
 		btn_whole_word_w = btn_case_sensitive_w;
 		btn_whole_word_h = btn_case_sensitive_h;
 
+		btn_wrap_x = 0;
+		btn_wrap_y = 0;
+		btn_wrap_w = 10;
+		btn_wrap_h = 10;
+
 		//"close" goes top right
 		btn_close_h = btn_case_sensitive_h / 2;
 		btn_close_w = btn_close_h;
 		btn_close_x = w - btn_close_w;
 		btn_close_y = btn_case_sensitive_y;
-		int btn_close_pad = 2; //get the close button away from the rest
 
 		//"find next" and "find prev" go left of "close", one on top of the other
 		btn_find_next_w = btn_case_sensitive_w;
 		btn_find_next_h = btn_case_sensitive_h;
-		btn_find_next_x = btn_close_x - btn_find_next_w - btn_close_pad;
+		btn_find_next_x = btn_close_x - btn_find_next_w - w_pad;
 		btn_find_next_y = btn_case_sensitive_y;
 
 		btn_find_prev_w = btn_find_next_w;
@@ -273,10 +388,15 @@ void SEARCH_resize_controls(SearchProcState* state) {
 		btn_case_sensitive_h = h_sub_pad;
 		btn_case_sensitive_w = btn_case_sensitive_h;
 		//then "whole word"
-		btn_whole_word_x = btn_case_sensitive_x + btn_case_sensitive_w;
+		btn_whole_word_x = btn_case_sensitive_x + btn_case_sensitive_w + w_pad;
 		btn_whole_word_y = btn_case_sensitive_y;
 		btn_whole_word_w = btn_case_sensitive_w;
 		btn_whole_word_h = btn_whole_word_w;
+
+		btn_wrap_x = btn_whole_word_x + btn_whole_word_w + w_pad;
+		btn_wrap_y = btn_case_sensitive_y;
+		btn_wrap_w = btn_case_sensitive_w;
+		btn_wrap_h = btn_wrap_w;
 
 		//"close" goes last on the right
 		btn_close_h = btn_case_sensitive_h / 2;
@@ -288,24 +408,25 @@ void SEARCH_resize_controls(SearchProcState* state) {
 		btn_find_prev_h = btn_case_sensitive_h;
 		SIZE _btn_find_prev_sz{ 0 }; Button_GetIdealSize(state->controls.btn_find_prev, &_btn_find_prev_sz);
 		btn_find_prev_w = _btn_find_prev_sz.cx;
-		btn_find_prev_x = btn_close_x - btn_find_prev_w;
+		btn_find_prev_x = btn_close_x - btn_find_prev_w - w_pad;
 		btn_find_prev_y = btn_case_sensitive_y;
 
 		//"find next" goes left of "find prev"
 		btn_find_next_h = btn_find_prev_h;
 		SIZE _btn_find_next_sz{ 0 }; Button_GetIdealSize(state->controls.btn_find_next, &_btn_find_next_sz);
 		btn_find_next_w = _btn_find_next_sz.cx;
-		btn_find_next_x = btn_find_prev_x - btn_find_next_w;
+		btn_find_next_x = btn_find_prev_x - btn_find_next_w - w_pad;
 		btn_find_next_y = btn_case_sensitive_y;
 
 		//"match" occupies the rest of the space in the middle
-		edit_match_x = btn_whole_word_x + btn_whole_word_w;
+		edit_match_x = btn_wrap_x + btn_wrap_w + w_pad;
 		edit_match_y = btn_case_sensitive_y;
-		edit_match_w = btn_find_next_x - edit_match_x;
+		edit_match_w = btn_find_next_x - edit_match_x - w_pad;
 		edit_match_h = btn_case_sensitive_h;
 	}
 	MoveWindow(state->controls.btn_case_sensitive, btn_case_sensitive_x, btn_case_sensitive_y, btn_case_sensitive_w, btn_case_sensitive_h, TRUE);
 	MoveWindow(state->controls.btn_whole_word, btn_whole_word_x, btn_whole_word_y, btn_whole_word_w, btn_whole_word_h, TRUE);
+	MoveWindow(state->controls.btn_wrap, btn_wrap_x, btn_wrap_y, btn_wrap_w, btn_wrap_h, TRUE);
 	MoveWindow(state->controls.btn_close, btn_close_x, btn_close_y, btn_close_w, btn_close_h, TRUE);
 	MoveWindow(state->controls.btn_find_prev, btn_find_prev_x, btn_find_prev_y, btn_find_prev_w, btn_find_prev_h, TRUE);
 	MoveWindow(state->controls.btn_find_next, btn_find_next_x, btn_find_next_y, btn_find_next_w, btn_find_next_h, TRUE);
@@ -320,6 +441,9 @@ void SEARCH_add_controls(SearchProcState* state) {
 		, 0, 0, 0, 0, state->wnd, NULL, NULL, NULL);
 
 	state->controls.btn_whole_word = CreateWindow(unCap_wndclass_button, L"' '"/*impossible to describe*/, WS_VISIBLE | WS_CHILD | WS_TABSTOP
+		, 0, 0, 0, 0, state->wnd, NULL, NULL, NULL);
+
+	state->controls.btn_wrap = CreateWindow(unCap_wndclass_button, L"↺", WS_VISIBLE | WS_CHILD | WS_TABSTOP
 		, 0, 0, 0, 0, state->wnd, NULL, NULL, NULL);
 	
 	//TODO(fran): this should be the new button, rendering text when possible or an img otherwise
@@ -346,7 +470,7 @@ void SEARCH_add_controls(SearchProcState* state) {
 	SEARCH_resize_wnd(state);
 }
 
-void SEARCH_set_brushes(HWND search, BOOL repaint, HBRUSH border_br, HBRUSH bk_br, HBRUSH fore_br, HBRUSH bkpush_br, HBRUSH bkmouseover_br, HBRUSH edit_bk_br, HBRUSH edit_txt_br) {
+void SEARCH_set_brushes(HWND search, BOOL repaint, HBRUSH border_br, HBRUSH bk_br, HBRUSH fore_br, HBRUSH bkpush_br, HBRUSH bkmouseover_br, HBRUSH edit_bk_br, HBRUSH edit_txt_br, HBRUSH bkselected_br) {
 	SearchProcState* state = SEARCH_get_state(search);
 	if (border_br)state->br_border = border_br;
 	if (bk_br)state->br_bk = bk_br;
@@ -355,11 +479,18 @@ void SEARCH_set_brushes(HWND search, BOOL repaint, HBRUSH border_br, HBRUSH bk_b
 	if (bkmouseover_br)state->br_bkmouseover = bkmouseover_br;
 	if (edit_bk_br)state->br_edit_bk = edit_bk_br;
 	if (edit_txt_br)state->br_edit_txt = edit_txt_br;
+	if (bkselected_br)state->br_bkselected = bkselected_br;
 	if (repaint)InvalidateRect(state->wnd, NULL, TRUE);
 
-	UNCAPBTN_set_brushes(state->controls.btn_case_sensitive, TRUE, state->br_border, state->br_bk, state->br_fore, state->br_bkpush, state->br_bkmouseover);
+	HBRUSH bk;
+	bk = (state->search_flags & SearchFlag::case_sensitive) ? state->br_bkselected : state->br_bk;
+	UNCAPBTN_set_brushes(state->controls.btn_case_sensitive, TRUE, state->br_border, bk, state->br_fore, state->br_bkpush, state->br_bkmouseover);
 
-	UNCAPBTN_set_brushes(state->controls.btn_whole_word, TRUE, state->br_border, state->br_bk, state->br_fore, state->br_bkpush, state->br_bkmouseover);
+	bk = (state->search_flags & SearchFlag::whole_word) ? state->br_bkselected : state->br_bk;
+	UNCAPBTN_set_brushes(state->controls.btn_whole_word, TRUE, state->br_border, bk, state->br_fore, state->br_bkpush, state->br_bkmouseover);
+
+	bk = !(state->search_flags & SearchFlag::no_wrap) ? state->br_bkselected : state->br_bk;
+	UNCAPBTN_set_brushes(state->controls.btn_wrap, TRUE, state->br_border, bk, state->br_fore, state->br_bkpush, state->br_bkmouseover);
 
 	UNCAPBTN_set_brushes(state->controls.btn_find_prev, TRUE, state->br_border, state->br_bk, state->br_fore, state->br_bkpush, state->br_bkmouseover);
 
@@ -538,6 +669,69 @@ static LRESULT CALLBACK SearchProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 	} break;
 	case WM_KILLFOCUS:
 	{
+		return 0;
+	} break;
+	case WM_COMMAND://Notifs from our childs
+	{
+		HWND child = (HWND)lparam;
+		if (child) {//a control has sent a notification
+			if (child == state->controls.edit_match) {
+				WORD notif = HIWORD(wparam);
+				switch (notif) {
+				case EN_CHANGE:
+				{
+					int char_len = SendMessage(state->controls.edit_match, WM_GETTEXTLENGTH, 0, 0);//doesnt include null terminator
+					if (!char_len) {
+						DWORD sel_start;
+						SendMessage(state->parent, EM_GETSEL, (WPARAM)&sel_start, 0); //TODO(fran): this should be type dependent, but really everybody should have this same one
+						SendMessage(state->parent, EM_SETSEL, sel_start, sel_start); //TODO(fran): this should be type dependent, but really everybody should have this same one
+						
+					}
+					SEARCH_search_and_scroll(state,true);
+				} break;
+				case EN_ENTER:
+				{
+					SEARCH_search_and_scroll(state,false);
+				} break;
+				case EN_ESCAPE:
+				{
+					ShowWindow(state->wnd, SW_HIDE);
+				} break;
+				}
+			}
+			else if(child == state->controls.btn_case_sensitive){
+				state->search_flags ^= SearchFlag::case_sensitive; //flip the flag
+				
+				HBRUSH bk = (state->search_flags & SearchFlag::case_sensitive) ? state->br_bkselected : state->br_bk;
+				UNCAPBTN_set_brushes(state->controls.btn_case_sensitive, TRUE, 0, bk, 0, 0, 0);
+			}
+			else if (child == state->controls.btn_whole_word) {
+				state->search_flags ^= SearchFlag::whole_word; //flip the flag
+
+				HBRUSH bk = (state->search_flags & SearchFlag::whole_word) ? state->br_bkselected : state->br_bk;
+				UNCAPBTN_set_brushes(state->controls.btn_whole_word, TRUE, 0, bk, 0, 0, 0);
+			}
+			else if (child == state->controls.btn_wrap) {
+				state->search_flags ^= SearchFlag::no_wrap; //flip the flag
+
+				HBRUSH bk = !(state->search_flags & SearchFlag::no_wrap) ? state->br_bkselected : state->br_bk;
+				UNCAPBTN_set_brushes(state->controls.btn_wrap, TRUE, 0, bk, 0, 0, 0);
+			}
+			else if (child == state->controls.btn_find_next) {
+				state->search_flags &= ~SearchFlag::search_up; //clear the flag
+
+				SEARCH_search_and_scroll(state, false);
+			}
+			else if (child == state->controls.btn_find_prev) {
+				state->search_flags |= SearchFlag::search_up; //set the flag
+
+				SEARCH_search_and_scroll(state, false);
+			}
+			else if (child == state->controls.btn_close) {
+				ShowWindow(state->wnd, SW_HIDE);
+			}
+			else Assert(0);
+		}
 		return 0;
 	} break;
 	default:

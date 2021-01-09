@@ -81,14 +81,26 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 			//TODO(fran): what if this where pressed while the search wnd has focus? we need to intercept that window's msgs probably, maybe it automatically sends them to the parent, or we could make it do it
 			if (ctrl_is_down) {
 				if (state->search) {
-					if (IsWindowVisible(state->search)) {
-						ShowWindow(state->search, SW_HIDE);
-					}
-					else {
+					if (!IsWindowVisible(state->search)) {
 						ShowWindow(state->search, SW_SHOW);
-						SetFocus(state->search);
 					}
+					SetFocus(state->search);
 
+				}
+			}
+		} break;
+		}
+		return DefSubclassProc(hwnd, msg, wparam, lparam);
+	} break;
+	case WM_CHAR:
+	{
+		TCHAR c = (TCHAR)wparam;
+		switch (c) {
+		case VK_ESCAPE:
+		{
+			if (state->search) {
+				if (IsWindowVisible(state->search)) {
+					ShowWindow(state->search, SW_HIDE);
 				}
 			}
 		} break;
@@ -176,9 +188,25 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 		//TODO(fran): add more
 	{
 		LRESULT res = DefSubclassProc(hwnd, msg, wparam, lparam);
+		//if (state->vscrollbar)SendMessage(state->vscrollbar, U_SB_AUTORESIZE, 0, 0);
+		//if (state->search)SendMessage(state->search, SRH_AUTORESIZE, 0, 0);
 		EDIT_update_scrollbar(state);
 		return res;
 	} break;
+#if 0
+	case EM_SETSCROLLPOS:
+	case EM_LINESCROLL:
+	case EM_SCROLL:
+	case EM_SCROLLCARET:
+	case WM_VSCROLL:
+	case WM_HSCROLL:
+	{//Attempt to fix scrolling issue in rich edit control, not good enough
+		LRESULT res = DefSubclassProc(hwnd, msg, wparam, lparam);
+		if (state->vscrollbar)SendMessage(state->vscrollbar, U_SB_AUTORESIZE, 0, 0);
+		if (state->search)SendMessage(state->search, SRH_AUTORESIZE, 0, 0);
+		return res;
+	}
+#endif
 	default:return DefSubclassProc(hwnd, msg, wparam, lparam);
 	}
 	return 0;

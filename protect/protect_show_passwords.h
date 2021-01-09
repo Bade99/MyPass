@@ -85,8 +85,9 @@ void SHOWPASSWORDS_resize_controls(ShowPasswordsState* state) {
 
 void SHOWPASSWORDS_add_controls(ShowPasswordsState* state) {
 
-#if 0 //edit control
-	state->controls.edit_passwords = CreateWindowExW(NULL, L"Edit", NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | WS_VISIBLE//| WS_VSCROLL | WS_HSCROLL 
+#if 1 //edit control
+	//TODO(fran): EM_SETENDOFLINE allows you to change between EC_ENDOFLINE_CRLF EC_ENDOFLINE_CR EC_ENDOFLINE_LF
+	state->controls.edit_passwords = CreateWindowExW(NULL, L"Edit", NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | WS_VISIBLE | ES_NOHIDESEL /*to show selection even when you dont have the focus*/ //| WS_VSCROLL | WS_HSCROLL 
 		, 0, 0, 0, 0
 		, state->wnd
 		, NULL, NULL, NULL);
@@ -103,8 +104,22 @@ void SHOWPASSWORDS_add_controls(ShowPasswordsState* state) {
 	SendMessageW(state->controls.edit_passwords, EM_SETVSCROLL, (WPARAM)VScrollControl, 0);
 
 	//INFO: I dont yet paint edit controls so you gotta use WM_CTLCOLOREDIT
+
+	SearchInit searchinit;
+	searchinit.parent_type = SEARCH_EDIT;
+	searchinit.SearchFlag_flags = 0;
+#if 0
+	searchinit.SearchPlacement_flags = SearchPlacement::right;// SearchPlacement::bottom;
+#else
+	searchinit.SearchPlacement_flags = SearchPlacement::bottom;
+#endif
+	HWND SearchControl = CreateWindowExW(NULL, protect_wndclass_search, NULL, WS_CHILD,
+		0, 0, 0, 0, state->controls.edit_passwords, NULL, NULL, &searchinit);
+	SEARCH_set_brushes(SearchControl, TRUE, unCap_colors.Search_Bk, unCap_colors.Search_Bk, unCap_colors.Search_Txt, unCap_colors.Search_BkPush, unCap_colors.Search_BkMouseOver, unCap_colors.Search_Edit_Bk, unCap_colors.Search_Edit_Txt,unCap_colors.Search_BkSelected);
+	SendMessageW(state->controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)SearchControl, 0);
+
 #else //rich edit control
-	state->controls.edit_passwords = CreateWindowExW(NULL, get_richedit_classW(), NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | WS_VISIBLE | WS_TABSTOP//| WS_VSCROLL | WS_HSCROLL 
+	state->controls.edit_passwords = CreateWindowExW(NULL, get_richedit_classW(), NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | WS_VISIBLE | WS_TABSTOP | ES_NOHIDESEL //| WS_VSCROLL | WS_HSCROLL 
 		, 0,0,0,0
 		, state->wnd
 		, NULL, NULL, NULL);
@@ -118,6 +133,11 @@ void SHOWPASSWORDS_add_controls(ShowPasswordsState* state) {
 	//RICHEDIT_set_txt_color(state->controls.edit_passwords, ColorFromBrush(unCap_colors.ControlTxt)); //IMPORTANT: this needs to be called each time the text changes
 	RICHEDIT_set_txt_bk_color(state->controls.edit_passwords, ColorFromBrush(unCap_colors.ControlBk));
 
+	HWND VScrollControl = CreateWindowExW(NULL, unCap_wndclass_scrollbar, NULL, WS_CHILD | WS_VISIBLE,
+		0, 0, 0, 0, state->controls.edit_passwords, NULL, NULL, NULL);
+	SendMessage(VScrollControl, U_SB_SET_PLACEMENT, (WPARAM)ScrollBarPlacement::right, 0);
+	SendMessageW(state->controls.edit_passwords, EM_SETVSCROLL, (WPARAM)VScrollControl, 0);
+
 	SearchInit searchinit;
 	searchinit.parent_type = SEARCH_RICHEDIT;
 	searchinit.SearchFlag_flags = 0;
@@ -130,7 +150,8 @@ void SHOWPASSWORDS_add_controls(ShowPasswordsState* state) {
 		0, 0, 0, 0, state->controls.edit_passwords, NULL, NULL, &searchinit);
 	SEARCH_set_brushes(SearchControl, TRUE, unCap_colors.Search_Bk, unCap_colors.Search_Bk, unCap_colors.Search_Txt, unCap_colors.Search_BkPush, unCap_colors.Search_BkMouseOver, unCap_colors.Search_Edit_Bk, unCap_colors.Search_Edit_Txt);
 	SendMessageW(state->controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)SearchControl, 0);
-
+	//TODO(fran): for some reason IME doesnt get correctly set up in the search wnd
+	//TODO(fran): enumchildwindows of your parent to make sure you dont overlap with one another
 #endif
 
 	for (auto ctl : state->controls.all)

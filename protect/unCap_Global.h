@@ -30,6 +30,7 @@ union UNCAP_COLORS {//TODO(fran): HBRUSH Border
 		op(HBRUSH,Search_Txt,CreateSolidBrush(RGB(238, 238, 232))) \
 		op(HBRUSH,Search_Edit_Bk,CreateSolidBrush(RGB(60, 61, 65))) \
 		op(HBRUSH,Search_Edit_Txt,CreateSolidBrush(RGB(248, 248, 242))) \
+		op(HBRUSH,Search_BkSelected,CreateSolidBrush(RGB(60, 61, 55))) \
 
 		foreach_color(_generate_member_no_default_init);
 

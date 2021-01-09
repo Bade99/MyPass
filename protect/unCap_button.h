@@ -351,6 +351,8 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 	} break;
 	case WM_PAINT:
 	{
+		//IMPORTANT TODO(fran): fix rendering bugs, sometimes part of the borders dont get drawn, I think I found the bug, border br doesnt adapt like bk, we have push, mouseover, etc, the border is just one so it's probably creating inconsistency problems
+
 		PAINTSTRUCT ps; //TODO(fran): we arent using the rectangle from the ps, I think we should for performance
 		HDC dc = BeginPaint(state->wnd, &ps);
 
@@ -419,13 +421,12 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 				(HFONT)SelectObject(dc, (HGDIOBJ)font);
 			}
 			SetTextColor(dc, ColorFromBrush(state->br_fore));
-			WCHAR Text[40];
+			TCHAR Text[40];
 			int len = (int)SendMessage(state->wnd, WM_GETTEXT, ARRAYSIZE(Text), (LPARAM)Text);
 
-			TEXTMETRIC tm;
-			GetTextMetrics(dc, &tm);
 			// Calculate vertical position for the item string so that it will be vertically centered
-			int yPos = (rc.bottom + rc.top - tm.tmHeight) / 2;
+			SIZE txt_sz; GetTextExtentPoint32(dc, Text, len, &txt_sz);
+			int yPos = (rc.bottom + rc.top - txt_sz.cy) / 2;
 
 			SetTextAlign(dc, TA_CENTER);
 			int xPos = (rc.right - rc.left) / 2;

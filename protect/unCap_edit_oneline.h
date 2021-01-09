@@ -20,12 +20,16 @@ constexpr TCHAR unCap_wndclass_edit_oneline[] = TEXT("unCap_wndclass_edit_onelin
 
 //Notification msgs, sent to the parent through WM_COMMAND with LOWORD(wparam)=control identifier ; HIWORD(wparam)=msg code ; lparam=HWND of the control
 //IMPORTANT: this are sent _only_ if you have set an identifier for the control (hMenu on CreateWindow)
-#define EN_ENTER 0x0105 /*User has pressed the enter key*/
+#define _editoneline_notif_base_msg 0x0104
+#define EN_ENTER (_editoneline_notif_base_msg+1) /*User has pressed the enter key*/
+#define EN_ESCAPE (_editoneline_notif_base_msg+2) /*User has pressed the escape key*/
 
 
 #define EDITONELINE_default_tooltip_duration 3000 /*ms*/
 #define EDITONELINE_tooltip_timer_id 0xf1
 
+//---------Differences with a default oneline edit control
+//·EN_CHANGE is sent when there is a modification to the text, of any type, and it's sent immediately, not after rendering
 
 static LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
@@ -34,6 +38,7 @@ constexpr cstr password_char = sizeof(password_char) > 1 ? _t('●') : _t('*');
 struct char_sel { int x, y; };//xth character of the yth row, goes left to right and top to bottom
 struct EditOnelineProcState {
 	HWND wnd;
+	HWND parent;
 	u32 identifier;
 	struct editonelinebrushes {
 		HBRUSH txt, bk, border;//NOTE: for now we use the border color for the caret
@@ -194,7 +199,8 @@ bool operator!=(POINT p1, POINT p2) {
 }
 
 //NOTE: pasting from the clipboard establishes a couple of invariants: lines end with \r\n, there's a null terminator, we gotta parse it carefully cause who knows whats inside
-void EDITONELINE_paste_from_clipboard(EditOnelineProcState* state, const cstr* txt) {
+bool EDITONELINE_paste_from_clipboard(EditOnelineProcState* state, const cstr* txt) { //returns true if it could paste something
+	bool res = false;
 	size_t char_sz = cstr_len(txt);//does not include null terminator
 	if ((size_t)state->char_max_sz >= state->char_text.length() + char_sz) {
 
@@ -217,7 +223,9 @@ void EDITONELINE_paste_from_clipboard(EditOnelineProcState* state, const cstr* t
 		}
 		state->caret.pos = EDITONELINE_calc_caret_p(state);
 		SetCaretPos(state->caret.pos);
+		res = true;
 	}
+	return res;
 }
 
 void EDITONELINE_set_composition_pos(EditOnelineProcState* state)//TODO(fran): this must set the other stuff too
@@ -333,6 +341,10 @@ void EDITONELINE_show_tip(HWND editoneline, const cstr* msg, int duration_ms, u3
 	SetTimer(state->wnd, EDITONELINE_tooltip_timer_id, duration_ms, NULL);
 }
 
+void EDITONELINE_notify_parent(EditOnelineProcState* state, WORD notif_code) {
+	PostMessage(state->parent, WM_COMMAND, MAKELONG(state->identifier, notif_code), (LPARAM)state->wnd);
+}
+
 //TODO(fran): some day paint/handle my own IME window
 LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	printf(msgToString(msg)); printf("\n");
@@ -358,6 +370,7 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 		Assert(st);
 		EDITONELINE_set_state(hwnd, st);
 		st->wnd = hwnd;
+		st->parent = creation_nfo->hwndParent;
 		st->identifier = (u32)(UINT_PTR)creation_nfo->hMenu;
 		st->char_max_sz = 32767;//default established by windows
 		*st->default_text = 0;
@@ -725,6 +738,9 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 	} break;
 	case WM_KEYDOWN://When the user presses a non-system key this is the 1st msg we receive
 	{
+		//Notifications:
+		bool en_change = false;
+
 		//TODO(fran): here we process things like VK_HOME VK_NEXT VK_LEFT VK_RIGHT VK_DELETE
 		//NOTE: there are some keys that dont get sent to WM_CHAR, we gotta handle them here, also there are others that get sent to both, TODO(fran): it'd be nice to have all the key things in only one place
 		//NOTE: for things like _shortcuts_ you wanna handle them here cause on WM_CHAR things like Ctrl+V get translated to something else
@@ -781,6 +797,7 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 					state->caret.pos = EDITONELINE_calc_caret_p(state);
 					SetCaretPos(state->caret.pos);
 				}
+				en_change = true;
 			}
 		} break;
 		case _t('v'):
@@ -792,10 +809,14 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 		} break;
 		}
 		InvalidateRect(state->wnd, NULL, TRUE);//TODO(fran): dont invalidate everything, NOTE: also on each wm_paint the cursor will stop so we should add here a bool repaint; to avoid calling InvalidateRect when it isnt needed
+		if (en_change) EDITONELINE_notify_parent(state, EN_CHANGE); //There was a change in the text
 		return 0;
 	}break;
 	case WM_PASTE:
 	{
+		//Notifications:
+		bool en_change = false;
+
 		//TODO(fran): pasting onto the selected region
 		//TODO(fran): if no unicode is available we could get the ansi and convert it, if it is available. //NOTE: docs say the format is converted automatically to the one you ask for
 #ifdef UNICODE
@@ -812,15 +833,20 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 					if (clipboardtxt)
 					{
 						defer{ GlobalUnlock(clipboard); };
-						EDITONELINE_paste_from_clipboard(state, clipboardtxt);
+						bool paste_res = EDITONELINE_paste_from_clipboard(state, clipboardtxt);
+						en_change = paste_res;
 					}
 
 				}
 			}
 		}
+		if (en_change) EDITONELINE_notify_parent(state, EN_CHANGE); //There was a change in the text
 	} break;
 	case WM_CHAR://When the user presses a non-system key this is the 2nd msg we receive
 	{//NOTE: a WM_KEYDOWN msg was translated by TranslateMessage() into WM_CHAR
+		//Notifications:
+		bool en_change = false;
+
 		TCHAR c = (TCHAR)wparam;
 		bool ctrl_is_down = HIBYTE(GetKeyState(VK_CONTROL));
 		//lparam = flags
@@ -848,6 +874,7 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 				if (oldcaretp != state->caret.pos) {
 					SetCaretPos(state->caret.pos);
 				}
+				en_change = true;
 			}
 		}break;
 		case VK_TAB://Tab
@@ -862,12 +889,13 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 		{
 			//NOTE: I wonder, it doesnt seem to send us \r\n so is that something that is manually done by the control?
 			//We dont handle "enter" for now
-			if(state->identifier)
+			//if(state->identifier) //TODO(fran): should I only send notifs if I have an identifier? what do the defaults do?
 				PostMessage(GetParent(state->wnd), WM_COMMAND, MAKELONG(state->identifier, EN_ENTER), (LPARAM)state->wnd);
 		}break;
 		case VK_ESCAPE://Escape
 		{
 			//TODO(fran): should we do something?
+			PostMessage(GetParent(state->wnd), WM_COMMAND, MAKELONG(state->identifier, EN_ESCAPE), (LPARAM)state->wnd);
 		}break;
 		case 0x0A://Linefeed, aka \n
 		{
@@ -910,11 +938,13 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 				SetCaretPos(state->caret.pos);
 
 				wprintf(L"%s\n", state->char_text.c_str());
+				en_change = true;
 			}
 
 		}break;
 		}
 		InvalidateRect(state->wnd, NULL, TRUE);//TODO(fran): dont invalidate everything
+		if (en_change) EDITONELINE_notify_parent(state, EN_CHANGE); //There was a change in the text
 		return 0;
 	} break;
 		case WM_TIMER:
@@ -959,6 +989,9 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 	} break;
 	case WM_SETTEXT:
 	{
+		//Notifications:
+		bool en_change = false;
+
 		BOOL res = FALSE;
 		cstr* buf = (cstr*)lparam;//null terminated
 		if (buf) {
@@ -983,6 +1016,8 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 				InvalidateRect(state->wnd, NULL, TRUE);
 			}
 		}
+		en_change = res;
+		if (en_change) EDITONELINE_notify_parent(state, EN_CHANGE); //There was a change in the text
 		return res;
 	}break;
 	case WM_SYSKEYDOWN://1st msg received after the user presses F10 or Alt+some key
