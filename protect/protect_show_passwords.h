@@ -165,6 +165,7 @@ void SHOWPASSWORDS_add_controls(ShowPasswordsState* state) {
 #define SHOWPASSWORDS_MENU_SEPARATOR1	(showpasswords_menu_base_addr+2)
 #define SHOWPASSWORDS_MENU_UNDO			(showpasswords_menu_base_addr+3)
 #define SHOWPASSWORDS_MENU_REDO			(showpasswords_menu_base_addr+4)
+#define SHOWPASSWORDS_MENU_FIND			(showpasswords_menu_base_addr+5)
 
 void SHOWPASSWORDS_add_menus(ShowPasswordsState* state) { //TODO(fran): this should be a toolbar (maybe), toolbars are kinda stupid, just useful till you learn shortcuts https://docs.microsoft.com/en-us/windows/win32/controls/create-toolbars
 	//NOTE: each menu gets its parent HMENU stored in the itemData part of the struct
@@ -211,6 +212,9 @@ void SHOWPASSWORDS_add_menus(ShowPasswordsState* state) { //TODO(fran): this sho
 
 	AppendMenuW(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_REDO, (LPCWSTR)menu_edit);
 	AMT(menu_edit, SHOWPASSWORDS_MENU_REDO, LANG_MENU_EDIT_REDO);
+
+	AppendMenuW(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_FIND, (LPCWSTR)menu_edit);
+	AMT(menu_edit, SHOWPASSWORDS_MENU_FIND, LANG_MENU_EDIT_FIND);
 
 	UNCAPNC_set_menu(state->nc_parent, state->menu);
 }
@@ -312,11 +316,16 @@ LRESULT CALLBACK ShowPasswordsProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		} break;
 		case SHOWPASSWORDS_MENU_UNDO:
 		{
-
+			SendMessage(state->controls.edit_passwords, EM_UNDO, 0, 0); //TODO(fran): undo is terrible in edit controls, we gotta manage that in the subclass //NOTE: WM_UNDO seems to do the same
 		} break;
 		case SHOWPASSWORDS_MENU_REDO:
 		{
 
+		} break;
+		case SHOWPASSWORDS_MENU_FIND:
+		{
+			SendMessage(state->controls.edit_passwords, EM_SHOWSEARCHWND, TRUE, 0);
+			return 0;
 		} break;
 		default: return DefWindowProc(hwnd, msg, wparam, lparam);
 		}

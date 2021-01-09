@@ -102,13 +102,15 @@ void EDITONELINE_set_state(HWND wnd, EditOnelineProcState* state) {//NOTE: only 
 //TODO(fran): should have border as first param after repaint to be equal to set_brushes for BUTTON
 void EDITONELINE_set_brushes(HWND editoneline, BOOL repaint, HBRUSH txt, HBRUSH bk, HBRUSH border, HBRUSH txt_disabled, HBRUSH bk_disabled, HBRUSH border_disabled) {
 	EditOnelineProcState* state = EDITONELINE_get_state(editoneline);
-	if (txt)state->brushes.txt = txt;
-	if (bk)state->brushes.bk = bk;
-	if (border)state->brushes.border = border;
-	if (txt_disabled)state->brushes.txt_dis = txt_disabled;
-	if (bk_disabled)state->brushes.bk_dis = bk_disabled;
-	if (border_disabled)state->brushes.border_dis = border_disabled;
-	if (repaint)InvalidateRect(state->wnd, NULL, TRUE);
+	if (state) {
+		if (txt)state->brushes.txt = txt;
+		if (bk)state->brushes.bk = bk;
+		if (border)state->brushes.border = border;
+		if (txt_disabled)state->brushes.txt_dis = txt_disabled;
+		if (bk_disabled)state->brushes.bk_dis = bk_disabled;
+		if (border_disabled)state->brushes.border_dis = border_disabled;
+		if (repaint)InvalidateRect(state->wnd, NULL, TRUE);
+	}
 }
 
 SIZE EDITONELINE_calc_caret_dim(EditOnelineProcState* state) {

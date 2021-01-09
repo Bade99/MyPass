@@ -6,17 +6,17 @@
 #include "unCap_scrollbar.h"
 #include "protect_search.h"
 
-#define edit_base_msg_addr (WM_USER+200)
+//TODO(fran): the final goal is UNDO and REDO, after that an edit control will have most of the things richedit has except for the ease of formatting
 
+//New msgs that this wnd can handle:
+#define edit_base_msg_addr (WM_USER+200)
 #define EM_GET_MAX_VISIBLE_LINES (edit_base_msg_addr+1) /*Retrieves a count for the max number of lines that can be displayed at once in the current window. return=int*/
 #define EM_SETVSCROLL (edit_base_msg_addr+2) /*Sets the vertical scrollbar that is to be used. wParam=HWND of the scrollbar control*/
 //#define EM_SETHSCROLL (WM_USER+202) /*Sets the horizontal scrollbar that is to be used. wParam=HWND of the scrollbar control*/
 //#define EM_GET_MAX_VISIBLE_CHARS_PER_LINE (WM_USER+203) /*Retrieves a count for the max number of characters that can be displayed in one line at once in the current window. return=int*/
 #define WM_SAVE (edit_base_msg_addr+13) /*A control has asked to save its contents wParam=HWND ; lParam=unused*/
 #define EM_SETSEARCHWND (edit_base_msg_addr+14) /*Sets the search wnd that is used, wParam=HWND of the search control ; lParam=unused*/
-
-//TODO(fran): ability to search, use EM_GETHANDLE to get the cstr* without copying and search, keep count of \n for the percentage to scroll
-
+#define EM_SHOWSEARCHWND (edit_base_msg_addr+15) /*wparam=BOOL if TRUE show if FALSE hide*/
 
 struct EditProcState {
 	bool initialized;
@@ -207,6 +207,12 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 		return res;
 	}
 #endif
+	case EM_SHOWSEARCHWND:
+	{
+		BOOL show = wparam;
+		if (state->search)ShowWindow(state->search, show ? SW_SHOW : SW_HIDE);
+		return 0;
+	} break;
 	default:return DefSubclassProc(hwnd, msg, wparam, lparam);
 	}
 	return 0;

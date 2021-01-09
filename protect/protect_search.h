@@ -12,6 +12,7 @@ void init_wndclass_protect_search(HINSTANCE instance); //call this before creati
 
 //TODO(fran): on WM_SETFONT I should update all my controls
 //TODO(fran): on showing the wnd we must setfocus to the edit control
+//TODO(fran): fix IME, for some reason it doesnt want to show correctly for this edit control, maybe cause it's a child of a child an somehow it has problems with that? the IME wnd defaults to the top left of the screen and with the ugly default UI
 
 //Flags for CreateWindow
 #define SEARCH_EDIT (1<<1)		//Search an edit control
@@ -141,7 +142,8 @@ SEARCH_search_result SEARCH_search(SearchProcState* state, bool search_in_curren
 			//StrStrIW(str, match);//TODO(fran): look at https://www.codeproject.com/Articles/383185/SSE-accelerated-case-insensitive-substring-search which says to be much faster than this
 			//wcsstr(, )//Case sensitive comparison, exact match
 
-			//TODO(fran): I think this should be a flag too, wordwrap or smth like that
+			//TODO(fran): we could implement whole_word by ourselves, simply check what's next to and behind the found text
+
 			if (res.p == -1 && !(state->search_flags & SearchFlag::no_wrap)) {//we didnt find anything in our range, lets test the leftover range but keeping our direction
 				if (state->search_flags & SearchFlag::search_up) {
 					range.min = sel;
@@ -439,6 +441,7 @@ void SEARCH_add_controls(SearchProcState* state) {
 	//TODO(fran): which controls to show should be specific to the type of editor available, that's where we need a resizer so we dont have to manually position all this guys and we can replace them, add, remove, easily
 
 	//INFO: instead of using control identifiers as the HMENU param im simply gonna filter them with the HWND, for example on WM_COMMAND
+#if 1
 	state->controls.btn_case_sensitive = CreateWindow(unCap_wndclass_button, L"Aa"/*works on any language, maybe*/, WS_VISIBLE | WS_CHILD | WS_TABSTOP
 		, 0, 0, 0, 0, state->wnd, NULL, NULL, NULL);
 
@@ -456,7 +459,8 @@ void SEARCH_add_controls(SearchProcState* state) {
 	//TODO(fran): this should be the new button, rendering text when possible or an img otherwise
 	state->controls.btn_find_next = CreateWindow(unCap_wndclass_button, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP
 		, 0, 0, 0, 0, state->wnd, NULL, NULL, NULL);
-	AWT(state->controls.btn_find_next, LANG_CONTROL_SEARCH_FINDNEXT);
+	AWT(state->controls.btn_find_next, LANG_SEARCH_FINDNEXT);
+
 	state->controls.btn_close = CreateWindow(unCap_wndclass_button, NULL, WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_BITMAP
 		, 0, 0, 0, 0, state->wnd, NULL, NULL, NULL);
 	HBITMAP bCross = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(UNCAP_BMP_CLOSE));//TODO(fran): I dont think the button takes care of freeing this
@@ -465,6 +469,7 @@ void SEARCH_add_controls(SearchProcState* state) {
 	state->controls.edit_match = CreateWindow(unCap_wndclass_edit_oneline, _t(""), WS_VISIBLE | WS_CHILD | ES_LEFT | WS_TABSTOP
 		, 0, 0, 0, 0, state->wnd, NULL, NULL, NULL);
 	//SendMessage(state->controls.edit_match, WM_SETDEFAULTTEXT, 0, (LPARAM)RCS(LANG_SEARCH_FIND));
+#endif
 
 	for (auto ctl : state->controls.all)
 		SendMessage(ctl, WM_SETFONT, (WPARAM)unCap_fonts.General, TRUE);

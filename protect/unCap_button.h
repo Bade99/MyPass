@@ -63,12 +63,14 @@ ButtonProcState* UNCAPBTN_get_state(HWND hwnd) {
 //NOTE: any NULL HBRUSH remains unchanged
 void UNCAPBTN_set_brushes(HWND uncap_btn, BOOL repaint, HBRUSH border_br, HBRUSH bk_br, HBRUSH fore_br, HBRUSH bkpush_br, HBRUSH bkmouseover_br) {
 	ButtonProcState* state = UNCAPBTN_get_state(uncap_btn);
-	if (border_br)state->br_border = border_br;
-	if (bk_br)state->br_bk = bk_br;
-	if (fore_br)state->br_fore = fore_br;
-	if (bkpush_br)state->br_bkpush = bkpush_br;
-	if (bkmouseover_br)state->br_bkmouseover = bkmouseover_br;
-	if (repaint)InvalidateRect(state->wnd, NULL, TRUE);
+	if (state) {
+		if (border_br)state->br_border = border_br;
+		if (bk_br)state->br_bk = bk_br;
+		if (fore_br)state->br_fore = fore_br;
+		if (bkpush_br)state->br_bkpush = bkpush_br;
+		if (bkmouseover_br)state->br_bkmouseover = bkmouseover_br;
+		if (repaint)InvalidateRect(state->wnd, NULL, TRUE);
+	}
 }
 
 static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {

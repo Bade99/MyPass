@@ -114,7 +114,7 @@ void LOGIN_add_controls(LoginProcState* state) {
 	EDITONELINE_set_brushes(state->controls.edit_username, TRUE, unCap_colors.ControlTxt, unCap_colors.ControlBk, unCap_colors.Img, unCap_colors.ControlTxt_Disabled, unCap_colors.ControlBk_Disabled, unCap_colors.Img_Disabled);
 
 	SendMessage(state->controls.edit_username, WM_SETDEFAULTTEXT, 0, (LPARAM)RCS(LANG_LOGIN_USERNAME));
-	cstr invalid_username_chars[] = _t("<>:\"/\\|?*"); //TODO(fran): there's more to it than this, there are some special restrictions that we should implement outside the control, probably when the user presses login https://gist.github.com/doctaphred/d01d05291546186941e1b7ddc02034d3
+	cstr invalid_username_chars[] = _t("<>:\"/\\|?*"); //INFO: there's more to it than this, there are some special restrictions that we implemented outside the control when the user presses login https://gist.github.com/doctaphred/d01d05291546186941e1b7ddc02034d3
 	SendMessage(state->controls.edit_username, EM_SETINVALIDCHARS, 0, (LPARAM)invalid_username_chars);
 
 
