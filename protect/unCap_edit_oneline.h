@@ -36,6 +36,7 @@ static LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPAR
 constexpr cstr password_char = sizeof(password_char) > 1 ? _t('●') : _t('*');
 
 struct char_sel { int x, y; };//xth character of the yth row, goes left to right and top to bottom
+struct txt_sel { char_sel min, max; }; //TODO(fran): implement selections
 struct EditOnelineProcState {
 	HWND wnd;
 	HWND parent;
@@ -46,7 +47,7 @@ struct EditOnelineProcState {
 	}brushes;
 	u32 char_max_sz;//doesnt include terminating null, also we wont have terminating null
 	HFONT font;
-	char_sel char_cur_sel;//this is in "character" coordinates, first char will be 0, second 1 and so on
+	char_sel char_cur_sel;//this is in "character" coordinates, zero-based
 	struct caretnfo {
 		HBITMAP bmp;
 		SIZE dim;
@@ -833,7 +834,7 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 					if (clipboardtxt)
 					{
 						defer{ GlobalUnlock(clipboard); };
-						bool paste_res = EDITONELINE_paste_from_clipboard(state, clipboardtxt);
+						bool paste_res = EDITONELINE_paste_from_clipboard(state, clipboardtxt); //TODO(fran): this should be separated into two fns, a general paste fn and first a sanitizer for anything strange that may be in the clipboard txt
 						en_change = paste_res;
 					}
 

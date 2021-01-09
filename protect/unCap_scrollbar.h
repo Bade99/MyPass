@@ -51,32 +51,48 @@ void U_SB_set_stats(HWND hwnd, UINT rangemax, UINT pagesz, UINT pos) {
 	SendMessage(hwnd, U_SB_SET_POS, pos, 0);
 }
 
-static void SCROLL_resize(ScrollProcState* state, int scrollbar_thickness) {
+static void SCROLL_resize_wnd(ScrollProcState* state, int scrollbar_thickness) {
 	RECT r; GetWindowRect(state->parent, &r); //TODO(fran): im using GetWindowRect, but later it may be better to use GetClientRect
 	int spacing = 2;// A few pixels of spacing so the control doesnt feel so suck to the corners
+
+	int scroll_x, scroll_y, scroll_w, scroll_h;
+
 	switch (state->place) {
 		//vertical
 	case ScrollBarPlacement::left:
 	{
-		MoveWindow(state->wnd, spacing, spacing, scrollbar_thickness, RECTHEIGHT(r) - spacing, TRUE);
+		scroll_x = spacing;
+		scroll_y = spacing;
+		scroll_w = scrollbar_thickness;
+		scroll_h = RECTHEIGHT(r) - spacing;
 	}break;
 	case ScrollBarPlacement::right:
 	{
-		MoveWindow(state->wnd, RECTWIDTH(r) - scrollbar_thickness - spacing, spacing, scrollbar_thickness, RECTHEIGHT(r) - spacing, TRUE);
+		scroll_x = RECTWIDTH(r) - scrollbar_thickness - spacing;
+		scroll_y = spacing;
+		scroll_w = scrollbar_thickness;
+		scroll_h = RECTHEIGHT(r) - spacing;
 	}break;
 	//horizontal
 	case ScrollBarPlacement::top:
 	{
-		MoveWindow(state->wnd, spacing, spacing, RECTWIDTH(r) - spacing, scrollbar_thickness, TRUE);
-
+		scroll_x = spacing;
+		scroll_y = spacing;
+		scroll_w = RECTWIDTH(r) - spacing;
+		scroll_h = scrollbar_thickness;
 	}break;
 	case ScrollBarPlacement::bottom:
 	{
-		MoveWindow(state->wnd, spacing, RECTHEIGHT(r) - scrollbar_thickness - spacing, RECTWIDTH(r) - spacing, scrollbar_thickness, TRUE);
-
+		scroll_x = spacing;
+		scroll_y = RECTHEIGHT(r) - scrollbar_thickness - spacing;
+		scroll_w = RECTWIDTH(r) - spacing;
+		scroll_h = scrollbar_thickness;
 	}break;
 	}
-	//state->fullBkRepaint = true;
+	RECT non_clipped_rc = rectWH(scroll_x, scroll_y, scroll_w, scroll_h);
+	RECT clipped_rc = clip_fit_childs(state->parent, state->wnd, non_clipped_rc);
+
+	MoveWindow(state->wnd, clipped_rc.left, clipped_rc.top, RECTWIDTH(clipped_rc), RECTHEIGHT(clipped_rc), TRUE);
 }
 
 static bool is_vertical(ScrollBarPlacement place) {
@@ -492,7 +508,7 @@ static LRESULT CALLBACK ScrollProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 	} break;
 	case U_SB_AUTORESIZE:
 	{
-		SCROLL_resize(state, scrollbar_thickness);
+		SCROLL_resize_wnd(state, scrollbar_thickness);
 	} break;
 	case WM_DESTROY:
 	{

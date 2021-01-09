@@ -112,9 +112,8 @@ SEARCH_search_result SEARCH_search(SearchProcState* state, bool search_in_curren
 			WCHAR* str = (WCHAR*)LocalLock(loc); defer{ LocalUnlock(loc); }; //INFO: with commctrl version 6 the text is always stored as WCHAR
 			int str_len = SendMessage(state->parent, WM_GETTEXTLENGTH, 0, 0)+1;//in characters, includes null terminator
 			DWORD sel_start, sel_end;
-			SendMessage(state->parent, EM_GETSEL, (WPARAM)&sel_start, (LPARAM)&sel_end); //TODO(fran): if a selection was made on reverse, eg the user selected and moved the mouse to the left, then does this return the values flipped? we'd need to unflip them
+			SendMessage(state->parent, EM_GETSEL, (WPARAM)&sel_start, (LPARAM)&sel_end);//INFO: even if the selection was made backwards, say the user clicked and dragged to the left, this msg always returns the right facing selection with the lower number on sel_start //TODO(fran): what happens in smth like arabic?
 			DWORD sel;
-			//INFO: we dont actually want to use sel_end cause it can cause the effect of the search scrolling each time the user adds one character, say for example we look for "far" which appears twice in the text, when the user types the "t" we will scroll to the first occurrence, then when they type the "a" we will scroll to the second! terrible
 
 			SearchRange range;
 			DWORD search_flags= LINGUISTIC_IGNOREDIACRITIC;
@@ -288,7 +287,10 @@ void SEARCH_resize_wnd(SearchProcState* state) {
 		search_y = h - search_h;
 	}
 
-	MoveWindow(state->wnd, search_x, search_y, search_w, search_h, TRUE);
+	RECT non_clipped_rc = rectWH(search_x, search_y, search_w, search_h);
+	RECT clipped_rc = clip_fit_childs(state->parent, state->wnd, non_clipped_rc);
+
+	MoveWindow(state->wnd, clipped_rc.left, clipped_rc.top, RECTWIDTH(clipped_rc), RECTHEIGHT(clipped_rc), TRUE);
 }
 
 void SEARCH_resize_controls(SearchProcState* state) {

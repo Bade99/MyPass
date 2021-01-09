@@ -243,6 +243,56 @@ static bool sameRc(RECT r1, RECT r2) {
 	return res;
 }
 
+static RECT max_area(RECT* rcs, int len) { //Finds the rectangle with the biggest area in an array of RECTs, if two rcs have the same area it chooses the one first on the array //NOTE: if len is 0 it will crash
+	int idx = 0;
+	int max_area = 0;
+	if (rcs) {
+		for (int i = 0; i < len; i++) {
+			RECT* test = rcs + i;
+			int area = RECTWIDTH((*test)) * RECTHEIGHT((*test));
+			if (area > max_area) { max_area = area; idx = i; }
+		}
+	}
+	return *(rcs + idx); //TODO(fran): might be better to simply return the pointer
+}
+
+//Clips your rect "r" so it doesnt overlap the already present child windows of that parent
+//"child" should be your wnd so we can filter it out
+//NOTE: since we are talking about childs, the coordinates of "r" should be relative to the client area of the parent
+static RECT clip_fit_childs(HWND parent, HWND child, RECT r) {
+	RECT res;
+	struct clip_fit_childs_test { HWND parent; HWND child; HRGN rgn; };
+	clip_fit_childs_test t; t.parent = parent;  t.child = child; t.rgn = CreateRectRgn(r.left, r.top, r.right, r.bottom); defer{ DeleteObject(t.rgn); };
+
+	EnumChildWindows(
+		parent,
+		[](HWND other_child, LPARAM lparam) {
+			clip_fit_childs_test* test = (clip_fit_childs_test*)lparam;
+			if (other_child != test->child && GetParent(other_child)==test->parent /*avoid enumerating childs of childs*/) {//TODO(fran): we should also filter non visible wnds I think, if everybody starts using this it could work well, maybe not
+				RECT subtract_rc;
+				GetClientRect(other_child, &subtract_rc);
+				MapWindowPoints(other_child, test->parent, (LPPOINT)&subtract_rc, 2);
+
+				HRGN subtract_rgn = CreateRectRgn(subtract_rc.left, subtract_rc.top, subtract_rc.right, subtract_rc.bottom); defer{ DeleteObject(subtract_rgn); };
+				CombineRgn(test->rgn, test->rgn, subtract_rgn, RGN_DIFF);
+			}
+			return TRUE;
+		},
+		(LPARAM)&t);
+
+	int rgn_len = GetRegionData(t.rgn, 0, 0);
+	//INFO:RGNDATA always stores it's region polygon in RECTs
+	RGNDATA* rgn_data = (RGNDATA*)malloc(rgn_len); defer{ free(rgn_data); };
+	rgn_data->rdh.dwSize = sizeof(rgn_data->rdh); //TODO(fran): not sure I need to set anything in the header
+	GetRegionData(t.rgn, rgn_len, rgn_data);
+	//TODO(fran): check what happens when the region is empty, is there only one RECT with all zeroes or is it a null pointer and we crash
+	if (rgn_data->rdh.nCount) res = max_area((RECT*)rgn_data->Buffer, rgn_data->rdh.nCount);
+	else res = { 0,0,0,0 };
+
+	return res;
+}
+
+
 //HBRUSH related
 
 static COLORREF ColorFromBrush(HBRUSH br) {
