@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <windows.h>
 #include "unCap_Helpers.h"
 #include "unCap_Global.h"
@@ -60,6 +60,7 @@ struct ShowPasswordsState {
 	ShowPasswordsStart* start;
 
 	wchar_t* current_user;
+	bool passwords_saved;
 };
 
 void SHOWPASSWORDS_set_state(HWND wnd, ShowPasswordsState* state) {
@@ -69,6 +70,16 @@ void SHOWPASSWORDS_set_state(HWND wnd, ShowPasswordsState* state) {
 ShowPasswordsState* SHOWPASSWORDS_get_state(HWND wnd) {
 	ShowPasswordsState* state = (ShowPasswordsState*)GetWindowLongPtr(wnd, 0);//INFO: windows recomends to use GWL_USERDATA https://docs.microsoft.com/en-us/windows/win32/learnwin32/managing-application-state-
 	return state;
+}
+
+void SHOWPASSWORDS_set_passwords_saved(ShowPasswordsState* state, bool new_val) {
+	state->passwords_saved = new_val;
+	str txt;
+	if (state->current_user) {
+		txt = state->current_user;
+		if (!new_val) txt += sizeof(*txt.c_str()) > 1 ? _t(" ●") : _t(" *");
+	}
+	SetText_txt_app(state->nc_parent, txt.c_str(), app_name);
 }
 
 void SHOWPASSWORDS_resize_controls(ShowPasswordsState* state) {
@@ -252,6 +263,19 @@ static read_entire_file_res load_file_user(std::wstring username /*functions as 
 	return res;
 }
 
+void SHOWPASSWORDS_save_passwords(ShowPasswordsState* state) {
+	int user_len_chars = (int)wcslen(state->current_user);
+	int len_chars = user_len_chars + GetWindowTextLength(state->controls.edit_passwords) + 1;
+	int len_bytes = next_multiple_of_16(len_chars * sizeof(cstr)); //we pad with extra garbage bytes to get blocks of 16 bytes for encryption
+	void* mem = malloc(len_bytes); defer{ free(mem); };
+	Assert(sizeof(cstr) > 1); //TODO(fran): what to do with ansi?
+	wcscpy_s((cstr*)mem, user_len_chars + 1, state->current_user); //append username so we can check against it in later logins (another idea is to append the key structure that twofish stores ) //TODO(fran): this aint the most clever, there could be collisions, but it's at least a line of defense for now
+	GetWindowText(state->controls.edit_passwords, ((cstr*)mem) + user_len_chars, len_chars - user_len_chars);
+	twofish_encrypt(mem, len_bytes, mem);
+	save_to_file_user(state->current_user, mem, len_bytes);
+	SHOWPASSWORDS_set_passwords_saved(state, true);
+}
+
 LRESULT CALLBACK ShowPasswordsProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	ShowPasswordsState* state = SHOWPASSWORDS_get_state(hwnd);
 	switch (msg) {
@@ -268,6 +292,7 @@ LRESULT CALLBACK ShowPasswordsProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 
 		st->settings = ((ShowPasswordsData*)creation_nfo->lpCreateParams)->settings;
 		st->start = ((ShowPasswordsData*)creation_nfo->lpCreateParams)->start;
+		SHOWPASSWORDS_set_passwords_saved(st, true);
 		SHOWPASSWORDS_set_state(hwnd, st);
 		return TRUE; //continue creation
 	} break;
@@ -287,48 +312,57 @@ LRESULT CALLBACK ShowPasswordsProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 	{
 		HWND ctl = (HWND)wparam;
 		if (ctl == state->controls.edit_passwords) {
-			SendMessage(state->wnd, WM_COMMAND, MAKELONG(SHOWPASSWORDS_MENU_SAVE,0),0);//TODO(fran): aint this stupid? why not call the function directly? im in it
+			SHOWPASSWORDS_save_passwords(state);
+			return 0;
 		}
 	} break;
 	case WM_COMMAND:
 	{
-		switch (LOWORD(wparam)) {
-		case SHOWPASSWORDS_MENU_SAVE:
-		{
-			int user_len_chars = wcslen(state->current_user);
-			int len_chars = user_len_chars + GetWindowTextLength(state->controls.edit_passwords) + 1;
-			int len_bytes = next_multiple_of_16(len_chars * sizeof(cstr)); //we pad with extra garbage bytes to get blocks of 16 bytes for encryption
-			void* mem = malloc(len_bytes); defer{ free(mem); };
-			Assert(sizeof(cstr) > 1); //TODO(fran): what to do with ansi?
-			wcscpy_s((cstr*)mem, user_len_chars+1, state->current_user); //append username so we can check against it in later logins (another idea is to append the key structure that twofish stores ) //TODO(fran): this aint the most clever, there could be collisions, but it's at least a line of defense for now
-			GetWindowText(state->controls.edit_passwords, ((cstr*)mem)+ user_len_chars, len_chars - user_len_chars);
-			twofish_encrypt(mem, len_bytes, mem);
-			save_to_file_user(state->current_user, mem, len_bytes);
-		} break;
-#define _generate_enum_cases_language(member,value_expr) case LANGUAGE::member:
-		_foreach_language(_generate_enum_cases_language)
-		{
-			LANGUAGE_MANAGER::Instance().ChangeLanguage((LANGUAGE)LOWORD(wparam));
-			HMENU old_menu = GetMenu(state->nc_parent);
-			SHOWPASSWORDS_add_menus(state);
-			DestroyMenu(old_menu);
-			return 0;
-		} break;
-		case SHOWPASSWORDS_MENU_UNDO:
-		{
-			SendMessage(state->controls.edit_passwords, EM_UNDO, 0, 0); //TODO(fran): undo is terrible in edit controls, we gotta manage that in the subclass //NOTE: WM_UNDO seems to do the same
-		} break;
-		case SHOWPASSWORDS_MENU_REDO:
-		{
-
-		} break;
-		case SHOWPASSWORDS_MENU_FIND:
-		{
-			SendMessage(state->controls.edit_passwords, EM_SHOWSEARCHWND, TRUE, 0);
-			return 0;
-		} break;
-		default: return DefWindowProc(hwnd, msg, wparam, lparam);
+		HWND child = (HWND)lparam;
+		if (child) {//Notif from our childs
+			if (child == state->controls.edit_passwords) {
+				switch (HIWORD(wparam)) { //Notif code
+				case EN_CHANGE:
+				{
+					SHOWPASSWORDS_set_passwords_saved(state, false);
+					return 0;
+				}
+				}
+			}
 		}
+		else {
+			switch (LOWORD(wparam)) {//Menu notifications
+			case SHOWPASSWORDS_MENU_SAVE:
+			{
+				SHOWPASSWORDS_save_passwords(state);
+				return 0;
+			} break;
+#define _generate_enum_cases_language(member,value_expr) case LANGUAGE::member:
+			_foreach_language(_generate_enum_cases_language)
+			{
+				LANGUAGE_MANAGER::Instance().ChangeLanguage((LANGUAGE)LOWORD(wparam));
+				HMENU old_menu = GetMenu(state->nc_parent);
+				SHOWPASSWORDS_add_menus(state);
+				DestroyMenu(old_menu);
+				return 0;
+			} break;
+			case SHOWPASSWORDS_MENU_UNDO:
+			{
+				SendMessage(state->controls.edit_passwords, EM_UNDO, 0, 0); //TODO(fran): undo is terrible in edit controls, we gotta manage that in the subclass //NOTE: WM_UNDO seems to do the same
+			} break;
+			case SHOWPASSWORDS_MENU_REDO:
+			{
+
+			} break;
+			case SHOWPASSWORDS_MENU_FIND:
+			{
+				SendMessage(state->controls.edit_passwords, EM_SHOWSEARCHWND, TRUE, 0);
+				return 0;
+			} break;
+			default: return DefWindowProc(hwnd, msg, wparam, lparam);
+			}
+		}
+		return 0;
 	} break;
 	case WM_START:
 	{
@@ -342,20 +376,23 @@ LRESULT CALLBACK ShowPasswordsProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		//TODO(fran): free
 
 		auto file_read = load_file_user(state->current_user); defer{ free_file_memory(file_read.mem); };//TODO(fran): zero
+		bool set_passwords_saved = true;
 		if (file_read.mem) {
 			Assert(file_read.sz % 16 == 0);
 			twofish_decrypt(file_read.mem, file_read.sz, file_read.mem);
 			if (!wcsncmp(state->current_user, (wchar_t*)file_read.mem, min(state->start->username.sz_chars, file_read.sz / 2 /*byte to wchar*/))) { //Valid password, user inputted username matches stored username
-				SetWindowText(state->controls.edit_passwords, ((cstr*)file_read.mem)+ state->start->username.sz_chars); //TODO(fran): what did I decide for the data's encoding?
+				SetWindowText(state->controls.edit_passwords, ((cstr*)file_read.mem) + state->start->username.sz_chars); //TODO(fran): what did I decide for the data's encoding?
 				RICHEDIT_set_txt_color(state->controls.edit_passwords, ColorFromBrush(unCap_colors.ControlTxt)); //TODO(fran): do this in a subclass
 				//TODO(fran): set keyboard focus to the edit control, SetFocus doesnt work here, maybe cause we arent visible yet?
+
 			}
 			else { //Invalid password
 				MessageBox(0, RCS(LANG_ERROR_PASSWORD), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);//IMPORTANT INFO: I have NO IDEA why but if you PostMessage first and then MessageBox the msg will get lost and the WM_NEXT never gets posted
 				PostMessage(0, WM_NEXT, 0, 0);
 			}
-
 		}
+		else set_passwords_saved = false;
+		SHOWPASSWORDS_set_passwords_saved(state, set_passwords_saved);
 		return 0;
 	} break;
 	case WM_RESET:
@@ -366,6 +403,29 @@ LRESULT CALLBACK ShowPasswordsProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		}
 		SetWindowText(state->controls.edit_passwords, _t(""));//TODO(fran): yet again, we need to zero the mem also
 		return 0;
+	} break;
+	case WM_CLOSE: //Sent by our parent asking whether we want to handle it
+	{
+		bool client_handled = false;
+		if (!state->passwords_saved) {
+			int ret = MessageBox(state->wnd, RCS(LANG_UNSAVEDCHANGES_TXT), RCS(LANG_UNSAVEDCHANGES_TITLE), MB_YESNOCANCEL | MB_ICONWARNING | MB_SETFOREGROUND | MB_APPLMODAL);
+			switch (ret) {
+			case IDCANCEL:
+			{
+				client_handled = true;
+			} break;
+			case IDYES:
+			{
+				SHOWPASSWORDS_save_passwords(state);
+			} break;
+			case IDNO:
+			{
+				//Do nothing and let the nc handle the msg
+			} break;
+			default:client_handled = true; break;
+			}
+		}
+		return client_handled;
 	} break;
 	case WM_NCDESTROY:
 	{

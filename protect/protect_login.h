@@ -229,10 +229,10 @@ LRESULT CALLBACK LoginProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			if (username_len > 1 && password_len > 1) { //Check: there has to be something written
 				cstr* username_buf = (cstr*)malloc(username_len * sizeof(*username_buf));
 				cstr* password_buf = (cstr*)malloc(password_len * sizeof(*password_buf));
-				GetWindowText(state->controls.edit_username, username_buf, username_len);
-				GetWindowText(state->controls.edit_password, password_buf, password_len);
-				int username_sz = (username_len - 1) * sizeof(*username_buf); //we dont care about the null terminator
-				int password_sz = (password_len - 1) * sizeof(*password_buf); //we dont care about the null terminator
+				GetWindowText(state->controls.edit_username, username_buf, (int)username_len);
+				GetWindowText(state->controls.edit_password, password_buf, (int)password_len);
+				int username_sz = (int)(username_len - 1) * sizeof(*username_buf); //we dont care about the null terminator
+				int password_sz = (int)(password_len - 1) * sizeof(*password_buf); //we dont care about the null terminator
 
 				//Perform the last checks on the username https://gist.github.com/doctaphred/d01d05291546186941e1b7ddc02034d3
 				bool check_failed = false;
@@ -417,6 +417,10 @@ LRESULT CALLBACK LoginProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		}
 		SetWindowText(state->controls.edit_password, _t(""));
 		SetWindowText(state->controls.edit_username, _t(""));
+	} break;
+	case WM_CLOSE:
+	{
+		return 0;
 	} break;
 	default:
 #ifdef _DEBUG

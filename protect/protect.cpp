@@ -34,28 +34,13 @@ LPCWSTR get_richedit_classW(int setclass = 0 /*for internal use, not end user*/)
 
 BOOL load_richedit() {//NOTE: use RICHEDIT_CLASS for the window's class name
     int success = false;
-    if (!success) { success = (int)LoadLibrary(_t("Msftedit.dll")); if (success)success = 4; } //v4.1
-    if (!success) { success = (int)LoadLibrary(_t("Riched20.dll")); if (success)success = 2; } //v3.0 or 2.0
-    if (!success) { success = (int)LoadLibrary(_t("Riched32.dll")); if (success)success = 1; } //v1.0
+    if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Msftedit.dll")); if (success)success = 4; } //v4.1
+    if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Riched20.dll")); if (success)success = 2; } //v3.0 or 2.0
+    if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Riched32.dll")); if (success)success = 1; } //v1.0
     get_richedit_classW(success);
     return success;
 }
 //+
-
-#include "unCap_button.h"
-#include "unCap_edit_oneline.h"
-#include "unCap_uncapnc.h"
-#include "protect_login.h"
-#include "unCap_scrollbar.h"
-#include "protect_show_passwords.h"
-
-//----------------------LINKER----------------------:
-#pragma comment(lib, "comctl32.lib" ) //common controls lib
-#pragma comment(lib,"shlwapi.lib") //strcpynw
-#pragma comment(lib,"UxTheme.lib") // setwindowtheme
-#pragma comment(lib,"Imm32.lib") // IME related stuff
-
-#pragma comment(linker,"/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"") //for multiline edit control
 
 //----------------------GLOBALS----------------------:
 i32 n_tabs = 0;//Needed for serialization
@@ -71,6 +56,21 @@ constexpr cstr app_name[] = _t("MyPass");
 #else
 //#define _SHOWCONSOLE
 #endif
+
+#include "unCap_button.h"
+#include "unCap_edit_oneline.h"
+#include "unCap_uncapnc.h"
+#include "protect_login.h"
+#include "unCap_scrollbar.h"
+#include "protect_show_passwords.h"
+
+//----------------------LINKER----------------------:
+#pragma comment(lib, "comctl32.lib" ) //common controls lib
+#pragma comment(lib,"shlwapi.lib") //strcpynw
+#pragma comment(lib,"UxTheme.lib") // setwindowtheme
+#pragma comment(lib,"Imm32.lib") // IME related stuff
+
+#pragma comment(linker,"/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"") //for multiline edit control
 
 str GetFontFaceName() {
     //Font guidelines: https://docs.microsoft.com/en-us/windows/win32/uxguide/vis-fonts

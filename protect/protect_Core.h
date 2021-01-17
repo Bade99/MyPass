@@ -72,7 +72,7 @@ void twofish_setkey(u32 in_key[], u32 len_bytes /*16, 24 or 32 bytes*/) {
 void twofish_encrypt(void* input, size_t len_bytes /*must be a multiple of 16 bytes*/, void* output) {
 	Assert(len_bytes % 16 == 0);
 
-	for (int i = 0, t = len_bytes / 16; i < t; i++) {
+	for (size_t i = 0, t = len_bytes / 16; i < t; i++) {
 		encrypt(&((u32*)input)[i*4], &((u32*)output)[i * 4]);
 	}
 }
@@ -81,7 +81,7 @@ void twofish_encrypt(void* input, size_t len_bytes /*must be a multiple of 16 by
 void twofish_decrypt(void* input, size_t len_bytes /*must be a multiple of 16 bytes*/, void* output) {
 	Assert(len_bytes % 16 == 0);
 
-	for (int i = 0, t = len_bytes / 16; i < t; i++) {
+	for (size_t i = 0, t = len_bytes / 16; i < t; i++) {
 		decrypt(&((u32*)input)[i * 4], &((u32*)output)[i * 4]);
 	}
 }

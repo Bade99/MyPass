@@ -36,9 +36,10 @@
 #define LANG_ERROR_PASSWORD             148
 #define LANG_ERROR                      149
 #define LANG_SEARCH_FINDPREV            150
-#define LANG_CONTROL_SEARCH_FINDNEXT    151
 #define LANG_SEARCH_FINDNEXT            151
 #define LANG_MENU_EDIT_FIND             152
+#define LANG_UNSAVEDCHANGES_TITLE       153
+#define LANG_UNSAVEDCHANGES_TXT         154
 #define IDC_STATIC                      -1
 
 // Next default values for new objects

@@ -367,3 +367,25 @@ static BOOL SetMenuItemString(HMENU hmenu, UINT item, BOOL fByPositon, const TCH
 	BOOL res = SetMenuItemInfoW(hmenu, item, fByPositon, &menu_setter);
 	return res;
 }
+
+//HWND related
+
+static void SetText_txt_app(HWND wnd, const TCHAR* new_txt, const TCHAR* new_appname, bool txt_first = true) {
+	if (new_txt == NULL || *new_txt == NULL) {
+		SetWindowText(wnd, new_appname);
+	}
+	if (new_appname == NULL || *new_appname == NULL) {
+		SetWindowText(wnd, new_txt);
+	}
+	else {
+		if (!txt_first) {
+			const TCHAR* tmp = new_txt;
+			new_txt = new_appname;
+			new_appname = tmp;
+		}
+		str title_window = new_txt;
+		title_window += L" - ";
+		title_window += new_appname;
+		SetWindowTextW(wnd, title_window.c_str());
+	}
+}

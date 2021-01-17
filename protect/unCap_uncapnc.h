@@ -20,6 +20,9 @@
 // - To be able to paint the menus ourselves we need them to be MF_OWNERDRAW,
 //   each menu item that has MF_OWNERDRAW must store the HMENU of its 
 //   parent into their itemData, hopefully this wont be needed some day
+// - Sends WM_CLOSE to the client to consult about closing the wnd
+//   a non-zero return value means the client handles it, if 0 
+//	 then we destroy the wnd
 // ------------------------------------------------------------- //
 
 // ------------------------ INTERNAL MSGS ------------------------ //
@@ -974,7 +977,10 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		} break;
 		case UNCAPNC_CLOSE:
 		{
-			DestroyWindow(state->wnd);
+			bool client_handled = SendMessage(state->client, WM_CLOSE, 0, 0);
+			if (!client_handled) {
+				DestroyWindow(state->wnd);
+			}
 			return 0;
 		} break;
 		default: return SendMessage(state->client, msg, wparam, lparam);
@@ -1305,6 +1311,22 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	case WM_ENABLE://Sent when the enabled state is changing
 	{
 		return DefWindowProc(hwnd, msg, wparam, lparam);//TODO(fran): may be useful
+	} break;
+	case WM_SYSKEYDOWN:
+	{
+		unsigned char vk = (unsigned char)wparam;
+		bool vk_was_down = lparam & (1 << 30); //if true this is a repeated msg, otherwise it's the first time
+		bool alt_is_down = lparam & (1<<29);
+		switch (vk) {
+		case VK_F4:
+		{
+			if (!vk_was_down && alt_is_down) {
+				PostMessage(state->wnd, WM_COMMAND, (WPARAM)MAKELONG(UNCAPNC_CLOSE, 0), (LPARAM)state->btn_close);//TODO(fran): should I use WM_CLOSE?
+			}
+			return 0;
+		} break;
+		default:return DefWindowProc(hwnd, msg, wparam, lparam);
+		}
 	} break;
 	default:
 		if (msg >= 0xC000 && msg <= 0xFFFF) {//String messages for use by applications  

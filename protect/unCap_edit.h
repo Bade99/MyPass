@@ -209,7 +209,7 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 #endif
 	case EM_SHOWSEARCHWND:
 	{
-		BOOL show = wparam;
+		BOOL show = (BOOL)wparam;
 		if (state->search)ShowWindow(state->search, show ? SW_SHOW : SW_HIDE);
 		return 0;
 	} break;

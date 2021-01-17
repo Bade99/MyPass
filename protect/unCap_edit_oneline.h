@@ -155,7 +155,7 @@ SIZE EDITONELINE_calc_text_dim(EditOnelineProcState* state) {
 	LONG_PTR  style = GetWindowLongPtr(state->wnd, GWL_STYLE);
 	if (style & ES_PASSWORD) {
 		res = EDITONELINE_calc_char_dim(state, 0);
-		res.cx *= state->char_text.length();
+		res.cx *= (LONG)state->char_text.length();
 	}
 	else {
 		HDC dc = GetDC(state->wnd); defer{ ReleaseDC(state->wnd,dc); };
@@ -420,7 +420,7 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 		toolInfo.lpszText = 0;
 		toolInfo.lParam = 0;
 		toolInfo.lpReserved = 0;
-		BOOL addtool_res = SendMessage(state->controls.tooltip, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
+		BOOL addtool_res = (BOOL)SendMessage(state->controls.tooltip, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
 		Assert(addtool_res);
 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -559,7 +559,7 @@ LRESULT CALLBACK EditOnelineProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 				}
 
 				if (show_default_text) {
-					TextOut(dc, xPos, yPos, state->default_text, cstr_len(state->default_text));
+					TextOut(dc, xPos, yPos, state->default_text, (int)cstr_len(state->default_text));
 				}
 				else if (style & ES_PASSWORD) {
 					//TODO(fran): what's faster, full allocation or for loop drawing one by one

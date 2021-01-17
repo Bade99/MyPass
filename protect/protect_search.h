@@ -90,7 +90,7 @@ SEARCH_search_result SEARCH_search(SearchProcState* state, bool search_in_curren
 	//TODO(fran): searching should roll over, say we get to the end of the file and dont find anything then we go from the start, and only then can we say to the user that we didnt find anything
 	SEARCH_search_result res;
 
-	int match_len = SendMessageW(state->controls.edit_match, WM_GETTEXTLENGTH, 0, 0) + 1;//lenght in characters, includes null terminator
+	int match_len = (int)SendMessageW(state->controls.edit_match, WM_GETTEXTLENGTH, 0, 0) + 1;//lenght in characters, includes null terminator
 	res.sz_char = match_len-1;
 	if (match_len > 1) {
 		WCHAR* match = (WCHAR*)malloc(match_len * sizeof(*match)); defer{ free(match); };
@@ -111,7 +111,7 @@ SEARCH_search_result SEARCH_search(SearchProcState* state, bool search_in_curren
 		{
 			HLOCAL loc = (HLOCAL)SendMessage(state->parent, EM_GETHANDLE, 0, 0);
 			WCHAR* str = (WCHAR*)LocalLock(loc); defer{ LocalUnlock(loc); }; //INFO: with commctrl version 6 the text is always stored as WCHAR
-			int str_len = SendMessage(state->parent, WM_GETTEXTLENGTH, 0, 0)+1;//in characters, includes null terminator
+			int str_len = (int)SendMessage(state->parent, WM_GETTEXTLENGTH, 0, 0)+1;//in characters, includes null terminator
 			DWORD sel_start, sel_end;
 			SendMessage(state->parent, EM_GETSEL, (WPARAM)&sel_start, (LPARAM)&sel_end);//INFO: even if the selection was made backwards, say the user clicked and dragged to the left, this msg always returns the right facing selection with the lower number on sel_start //TODO(fran): what happens in smth like arabic?
 			DWORD sel;
@@ -121,7 +121,7 @@ SEARCH_search_result SEARCH_search(SearchProcState* state, bool search_in_curren
 			if (!(state->search_flags & SearchFlag::case_sensitive))
 				search_flags |= LINGUISTIC_IGNORECASE; //TODO(fran): study the flags, there are some more complex things that I may want to add
 			if (state->search_flags & SearchFlag::search_up) {//search from the beginning of the selection to the first char
-				sel = (search_in_current_selection) ? min(sel_end+2, str_len/*-1 ?*/) : sel_start;
+				sel = (search_in_current_selection) ? min(sel_end+2, (DWORD)str_len/*-1 ?*/) : sel_start;
 				//INFO IMPORTANT: searching up is tricky, each time we search we establish a selection and the next time we search up from it, problem with this is that the user is actually looking for something that will potentially be on the right of that selection ("downwards"), therefore we need to extend the selection +1 to the right to avoid the continually scrolling problem, also +1 is probably not enough since you could have those additive codepoints that take more than one wchar
 				range.min = 0;
 				range.max = sel;// should subtract 1
@@ -194,13 +194,13 @@ void SEARCH_scroll_to_selection(SearchProcState* state) {//Scrolls the text to t
 		SendMessage(state->parent, EM_SCROLLCARET, 0, 0);
 
 		//The current selection should be on a visible line, now we move that line a little closer to the center if it is too close to the top or bottom
-		int first_visible_line = SendMessage(state->parent, EM_GETFIRSTVISIBLELINE, 0, 0);
+		int first_visible_line = (int)SendMessage(state->parent, EM_GETFIRSTVISIBLELINE, 0, 0);
 		//EM_GETLASTVISIBLELINE
 		RECT r; SendMessage(state->parent, EM_GETRECT, 0, (LPARAM)&r);//TODO(fran): make sure this is actually useful when the rect is modified instead of just using getclientrect
-		DWORD c = SendMessage(state->parent, EM_CHARFROMPOS, 0, MAKELONG(0,RECTHEIGHT(r)-1));
+		DWORD c = (DWORD)SendMessage(state->parent, EM_CHARFROMPOS, 0, MAKELONG(0,RECTHEIGHT(r)-1));
 		int last_visible_line = HIWORD(c);
 		int max_visible_lines = distance(first_visible_line,last_visible_line);
-		int current_line = SendMessage(state->parent, EM_LINEFROMCHAR, -1 /*get the line of the current selection*/, 0);
+		int current_line = (int)SendMessage(state->parent, EM_LINEFROMCHAR, -1 /*get the line of the current selection*/, 0);
 		int dist_to_first_line = distance(current_line, first_visible_line);
 		int dist_to_last_line = distance(current_line, last_visible_line);
 		if (max_visible_lines > 3 ) {
@@ -687,7 +687,7 @@ static LRESULT CALLBACK SearchProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 				switch (notif) {
 				case EN_CHANGE:
 				{
-					int char_len = SendMessage(state->controls.edit_match, WM_GETTEXTLENGTH, 0, 0);//doesnt include null terminator
+					int char_len = (int)SendMessage(state->controls.edit_match, WM_GETTEXTLENGTH, 0, 0);//doesnt include null terminator
 					if (!char_len) {
 						DWORD sel_start;
 						SendMessage(state->parent, EM_GETSEL, (WPARAM)&sel_start, 0); //TODO(fran): this should be type dependent, but really everybody should have this same one
