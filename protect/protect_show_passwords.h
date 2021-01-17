@@ -9,12 +9,7 @@
 
 constexpr TCHAR protect_wndclass_show_passwords[] = TEXT("protect_wndclass_show_passwords");
 
-//TODO(fran): add search function for edit control, finding one password is hard
-//TODO(fran): add * indicator when the file has modifications that need saving, eg MyPass - fran -> MyPass - fran*
-//TODO(fran): if when closing the wnd there's stuff left to be saved ask the user whether to save it or not
 //TODO(fran): would it be better to use a gridview instead of an edit control?
-//TODO(fran): EM_GETHANDLE gives you access to the memory for the text!
-//TODO(fran): append the username to the text when saving and check that it matches when loading
 
 struct ShowPasswordsSettings {
 
