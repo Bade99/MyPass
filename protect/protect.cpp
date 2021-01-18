@@ -1,5 +1,7 @@
-// protect.cpp : Defines the entry point for the application.
-//
+
+//TODO(fran): store show_passwords wnd position
+//TODO(fran): get a non stolen app icon
+
 #include "resource.h"
 #include "targetver.h"
 #define WIN32_LEAN_AND_MEAN // Exclude rarely-used stuff from Windows headers

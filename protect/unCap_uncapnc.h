@@ -1337,7 +1337,7 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			return DefWindowProc(hwnd, msg, wparam, lparam);
 		}
 #ifdef _DEBUG
-		Assert(0);
+			Assert(0);
 #else 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 #endif
