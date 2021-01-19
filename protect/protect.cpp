@@ -259,6 +259,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
     _BeginSerialize();
     serialized += _serialize_struct(lang_mgr);
     serialized += _serialize_struct(login_cl);
+    serialized += _serialize_struct(show_cl);
     serialized += _serialize_struct(unCap_colors);
 
     save_to_file_serialized(serialized, serialization_folder);

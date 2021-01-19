@@ -35,7 +35,7 @@ union UNCAP_COLORS {//TODO(fran): HBRUSH Border
 		foreach_color(_generate_member_no_default_init);
 
 	};
-	HBRUSH brushes[20];//REMEMBER to update
+	HBRUSH brushes[0 + foreach_color(_generate_count)];
 
 	_generate_default_struct_serialize(foreach_color);
 

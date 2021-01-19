@@ -14,6 +14,7 @@ constexpr TCHAR protect_wndclass_login[] = TEXT("protect_wndclass_login");
 //USAGE: once the user presses on "Login" we will send a msg to ourselves that will not arrive, it's for the guy on top controlling the msg loop, it will have a state machine type of thing where it knows to current state, the next, and what's needed to get to the next (eg getting data from the previous), and finally to request the current wnd to stop (DestroyWindow)
 
 //TODO(fran): failure after multiple wrong passwords? eg 10 min block
+//TODO(fran): we should check whether the username is not in our "database" in which case ask if they want to create a new user
 
 #define LOGIN_EDIT_USERNAME 10
 #define LOGIN_EDIT_PASSWORD 11
