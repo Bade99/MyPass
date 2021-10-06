@@ -409,6 +409,7 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 					if ((bitmap.bmWidth % 2) == 0) max_sz = bitmap.bmWidth / 2;
 					else max_sz = bitmap.bmWidth; //More HACKs
 				}
+				if (max_sz > bitmap.bmWidth) max_sz = bitmap.bmWidth;//TODO(fran): HACK nº 1000, for this specific program (MyPass) some if we scale some icons bigger than their original size they look terrible (specially the close button), therefore we dont allow it. Solution: stop using 1 bit images for icons and use 8 bit grayscale
 
 				int bmp_height = max_sz;
 				int bmp_width = bmp_height;

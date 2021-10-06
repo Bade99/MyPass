@@ -1,6 +1,10 @@
-
-//TODO(fran): store show_passwords wnd position
+﻿
 //TODO(fran): get a non stolen app icon
+//TODO(fran): add a note about password breaches, eg visit this page "" or a similar one to make sure non of your passwords on different pages has been breached
+//TODO(fran): when hiding the search window setfocus back to the edit control
+//TODO(fran): msg asking whether they want to create a new user (solves the issue of person inputting user wrong and getting an empty file)
+
+//IDEA: file manager, podés crear multiples archivos con una contra, y distintos tipos de archivos (editor de texto, grilla)
 
 #include "resource.h"
 #include "targetver.h"
@@ -112,6 +116,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
     //}
     //Assert(sizeof(*cmd) > 1);
 
+    bool dpi_aware = SetProcessDPIAware(); Assert(dpi_aware); //TODO(fran): only for Windows Vista and above //TODO(fran): this is only sort of dpi aware, we tell windows that we check for dpi the first time but that never check it again, therefore if dpi changes after we already loaded we will be scaled by windows, but at least we look correct as long as the user doesnt change their current dpi (also this means that when we call GetDpiForSystem we will always get the same value, the dpi at the moment the application started)
+
     urender::init(); defer{ urender::uninit(); };
 
 #ifdef _SHOWCONSOLE
@@ -124,7 +130,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 
     LOGFONT lf{ 0 };
     lf.lfQuality = CLEARTYPE_QUALITY;
-    lf.lfHeight = -15;//TODO(fran): parametric
+    lf.lfHeight = DPI(-15);
     //INFO: by default if I dont set faceName it uses "Modern", looks good but it lacks some charsets
     StrCpyN(lf.lfFaceName, GetFontFaceName().c_str(), ARRAYSIZE(lf.lfFaceName));
 
@@ -215,12 +221,9 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
     while ((bRet = GetMessage(&msg, nullptr, 0, 0)) != 0)
     {
         Assert(bRet != -1);//there was an error
-
-        if (msg.message != WM_NEXT) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-        else {
+        switch (msg.message) {
+        case WM_NEXT:
+        {
             state_idx = next_state(state_idx);
             wnd_state new_state = state_machine[state_idx];
             wnd_state old_state = state_machine[prev_state(state_idx)];
@@ -252,6 +255,27 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
                 ShowWindow(new_wnd, SW_SHOW);
             } break;
             }
+        } break;
+#if 0
+        case WM_DPICHANGED:
+        {
+            //TODO(fran): move this somewhere more sensible, maybe it should even be on main and not enter an hwnd
+            int new_dpi = HIWORD(msg.wParam);
+            auto a = GetDpiForSystem();
+            //UpdateDpiDependentFontsAndResources();
+
+            RECT* const prcNewWindow = (RECT*)msg.lParam;
+            SetWindowPos(msg.hwnd, NULL, prcNewWindow->left, prcNewWindow->top, prcNewWindow->right - prcNewWindow->left, prcNewWindow->bottom - prcNewWindow->top, SWP_NOZORDER | SWP_NOACTIVATE);
+            break;
+        } break;
+#endif
+        default:
+        {
+            if (msg.message != WM_NEXT) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+        } break;
         }
     }
 

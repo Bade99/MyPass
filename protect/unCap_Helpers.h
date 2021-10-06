@@ -389,3 +389,12 @@ static void SetText_txt_app(HWND wnd, const TCHAR* new_txt, const TCHAR* new_app
 		SetWindowTextW(wnd, title_window.c_str());
 	}
 }
+
+// DPI related
+
+static f32 dpiCorrection(f32 val) {
+	auto a = GetDpiForSystem();
+	f32 res = val * (f32)GetDpiForSystem() / 96/*default dpi*/;
+	return res;
+}
+static f32 DPI(f32 val) { return dpiCorrection(val); }

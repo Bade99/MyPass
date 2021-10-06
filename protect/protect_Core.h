@@ -27,6 +27,7 @@ static wchar_t* convert_ascii_to_utf16(char* s, int char_cnt) {
 			res = (wchar_t*)mem;
 		}
 	}
+	return res;
 }
 
 void free_convert(void* converted_string) {

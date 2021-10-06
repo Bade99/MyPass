@@ -25,8 +25,6 @@ struct LoginSettings {
 #define foreach_LoginSettings_member(op) \
 		op(RECT, rc,200,200,600,450 ) \
 
-	//TODO(fran): last_dir wont work for ansi cause the function that uses it is only unicode, problem is I need serialization and that is encoding dependent, +1 for binary serializaiton
-
 	foreach_LoginSettings_member(_generate_member);
 
 	_generate_default_struct_serialize(foreach_LoginSettings_member);
@@ -82,8 +80,8 @@ void LOGIN_resize_controls(LoginProcState* state) {
 
 	int h_center = h / 2;
 
-	int edit_username_w = 140;
-	int edit_username_h = 30;
+	int edit_username_w = DPI(140);
+	int edit_username_h = DPI(30);
 
 	int edit_password_w = edit_username_w;
 	int edit_password_h = edit_username_h;
@@ -91,7 +89,7 @@ void LOGIN_resize_controls(LoginProcState* state) {
 	int edit_username_edit_password_pad_h = h_pad;//maybe constant pad is better
 	int edit_password_btn_login_pad_h = h_pad;//maybe constant pad is better
 
-	int btn_login_w = 70;
+	int btn_login_w = DPI(70);
 	int btn_login_h = edit_password_h;
 
 	int edit_password_y = h_center - edit_password_h/2;
@@ -101,7 +99,7 @@ void LOGIN_resize_controls(LoginProcState* state) {
 	int edit_username_x = (w - edit_username_w) / 2;
 
 	int btn_login_y = edit_password_y + edit_password_h + edit_password_btn_login_pad_h;
-	int btn_login_x = (w - btn_login_w) / 2;;
+	int btn_login_x = (w - btn_login_w) / 2;
 
 	//TODO(fran): resizer that takes into account multiple hwnds
 	MoveWindow(state->controls.edit_username, edit_username_x, edit_username_y, edit_username_w, edit_username_h, FALSE);
