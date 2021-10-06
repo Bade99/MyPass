@@ -117,6 +117,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
     //Assert(sizeof(*cmd) > 1);
 
     bool dpi_aware = SetProcessDPIAware(); Assert(dpi_aware); //TODO(fran): only for Windows Vista and above //TODO(fran): this is only sort of dpi aware, we tell windows that we check for dpi the first time but that never check it again, therefore if dpi changes after we already loaded we will be scaled by windows, but at least we look correct as long as the user doesnt change their current dpi (also this means that when we call GetDpiForSystem we will always get the same value, the dpi at the moment the application started)
+    //https://docs.microsoft.com/en-us/windows/win32/hidpi/setting-the-default-dpi-awareness-for-a-process
+    //https://github.com/tringi/win32-dpi/blob/master/win32-dpi.cpp
 
     urender::init(); defer{ urender::uninit(); };
 

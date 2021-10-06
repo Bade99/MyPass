@@ -386,7 +386,16 @@ LRESULT CALLBACK ShowPasswordsProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 				PostMessage(0, WM_NEXT, 0, 0);
 			}
 		}
-		else set_passwords_saved = false;
+		else {
+			//NOTE: if the user previously created an account but didnt save then it will not count as a created account and next time they will be prompted to create the account again, this is a limitation of the fact that we dont save anything inside the user folder till the first time they save what they wrote, therefore we cannot currently do this any other way since there's no information inside the folder to allow us to check whether the second time the user input the same password as the first time
+			utf16 tmp[100];
+			_snwprintf_s(tmp, ARRAYSIZE(tmp)-(state->start->username.sz_chars+1), RCS(LANG_CREATEACCOUNT), state->current_user);
+			auto ret = MessageBox(0, tmp, RCS(LANG_SIGNUP), MB_YESNOCANCEL | MB_ICONQUESTION | MB_SETFOREGROUND);
+			bool signup = ret == IDYES;
+			if (signup) set_passwords_saved = false;
+			else PostMessage(0, WM_NEXT, 0, 0);
+			
+		}
 		SHOWPASSWORDS_set_passwords_saved(state, set_passwords_saved);
 		return 0;
 	} break;

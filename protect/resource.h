@@ -40,6 +40,8 @@
 #define LANG_MENU_EDIT_FIND             152
 #define LANG_UNSAVEDCHANGES_TITLE       153
 #define LANG_UNSAVEDCHANGES_TXT         154
+#define LANG_SIGNUP                     155
+#define LANG_CREATEACCOUNT              156
 #define IDC_STATIC                      -1
 
 // Next default values for new objects
