@@ -1,12 +1,16 @@
 #pragma once
-#include <Windows.h>
-#include "unCap_Reflection.h"
-#include "unCap_Serialization.h"
+#include "win_sdk.h"
+#include "reflection.h"
+#include "serialization.h"
 
-union UNCAP_COLORS {//TODO(fran): HBRUSH Border
+static FILE* console_file_handle;
+
+constexpr auto& serialization_folder = L"\\MyPass";
+
+static i32 n_tabs = 0; //Needed for serialization
+
+union known_colors {
 	struct {
-		//TODO(fran): macro magic to auto generate the appropriately sized HBRUSH array
-		//TODO(fran): add _disabled for at least txt,bk,border
 #define foreach_color(op) \
 		op(HBRUSH,ControlBk,CreateSolidBrush(RGB(40, 41, 35))) \
 		op(HBRUSH,ControlBkPush,CreateSolidBrush(RGB(0, 110, 200))) \
@@ -23,6 +27,7 @@ union UNCAP_COLORS {//TODO(fran): HBRUSH Border
 		op(HBRUSH,CaptionBk_Inactive,CreateSolidBrush(RGB(60, 61, 65))) \
 		op(HBRUSH,ControlBk_Disabled,CreateSolidBrush(RGB(35, 36, 30))) \
 		op(HBRUSH,ControlTxt_Disabled,CreateSolidBrush(RGB(128, 128, 122))) \
+		op(HBRUSH,ControlTxt_Disabled_Strong,CreateSolidBrush(RGB(188, 188, 182))) \
 		op(HBRUSH,Img_Disabled,CreateSolidBrush(RGB(98, 98, 92))) \
 		op(HBRUSH,Search_Bk,CreateSolidBrush(RGB(30, 31, 25))) \
 		op(HBRUSH,Search_BkPush,CreateSolidBrush(RGB(0, 120, 210))) \
@@ -31,31 +36,72 @@ union UNCAP_COLORS {//TODO(fran): HBRUSH Border
 		op(HBRUSH,Search_Edit_Bk,CreateSolidBrush(RGB(60, 61, 65))) \
 		op(HBRUSH,Search_Edit_Txt,CreateSolidBrush(RGB(248, 248, 242))) \
 		op(HBRUSH,Search_BkSelected,CreateSolidBrush(RGB(60, 61, 55))) \
+		op(HBRUSH,Toast_Success,CreateSolidBrush(RGB(20, 223, 35))) \
+		op(HBRUSH,Toast_Failure,CreateSolidBrush(RGB(243, 21, 35))) \
+		op(HBRUSH,Btn_Delete_Bk,CreateSolidBrush(RGB(203, 21, 35))) \
+		op(HBRUSH,Btn_Delete_BkMouseOver,CreateSolidBrush(RGB(243, 21, 35))) \
+		op(HBRUSH,Btn_Delete_BkPush,CreateSolidBrush(RGB(183, 21, 35))) \
+		op(HBRUSH,Control_BkPush_Soft,CreateSolidBrush(RGB(58, 93, 156))) \
+		op(HBRUSH,Card_Bk_Soft,CreateSolidBrush(RGB(209, 246, 255))) \
+		op(HBRUSH,Btn_Static_TxtMouseOver,CreateSolidBrush(RGB(29,47,79))) \
+		
+		//op(HBRUSH,Card_Bk_Soft,CreateSolidBrush(RGB(142, 195, 230))) \
+		
 
 		foreach_color(_generate_member_no_default_init);
-
 	};
 	HBRUSH brushes[0 + foreach_color(_generate_count)];
 
 	_generate_default_struct_serialize(foreach_color);
 
 	_generate_default_struct_deserialize(foreach_color);
-};
+} static colors{};
 
-void default_colors_if_not_set(UNCAP_COLORS* c) {
+#ifdef _DEBUG
+#define _get_color_name(type, name, value) _t(#name),
+constexpr const utf16* known_colors_names[] = { foreach_color(_get_color_name) };
+#endif
+
+void default_colors_if_not_set(known_colors* c) {
 #define _default_initialize(type, name,value) if(!c->name) c->name = value;
 	foreach_color(_default_initialize);
 #undef _default_initialize
 }
 
-extern UNCAP_COLORS unCap_colors;
-
-union UNCAP_FONTS {
+union known_fonts {
 	struct {
 		HFONT General;
+		HFONT GeneralBold;
 		HFONT Menu;
 	};
-	HFONT fonts[2];//REMEMBER to update
-};
+	HFONT all[3];
+	private: void _() { static_assert(sizeof(*this) == sizeof(all)); }
+} static fonts{};
 
-extern UNCAP_FONTS unCap_fonts;
+union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
+	struct {
+		HBITMAP close;
+		HBITMAP maximize;
+		HBITMAP minimize;
+		HBITMAP arrow_right;
+		HBITMAP tick;
+		HBITMAP dropdown;
+		HBITMAP circle;
+		HBITMAP bin;
+		HBITMAP arrowLine_left;
+		HBITMAP arrowSimple_right;
+		HBITMAP eye_open;
+		HBITMAP eye_closed;
+		HBITMAP threeLines;
+		HBITMAP add;
+		HBITMAP edit;
+		HBITMAP clipboard;
+		HBITMAP padlock;
+		HBITMAP cancel;
+		HBITMAP search;
+		HBITMAP calendar;
+	};
+	HBITMAP all[20];
+
+	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
+} static bmps{};

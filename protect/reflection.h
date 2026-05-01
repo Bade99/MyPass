@@ -1,5 +1,5 @@
 #pragma once
-#include "unCap_Platform.h"
+#include "platform.h"
 
 //
 //Here we establish the standard for implementing reflection in this project

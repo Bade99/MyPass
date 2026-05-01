@@ -1,10 +1,10 @@
 #pragma once
-#include "unCap_Platform.h"
-#include "unCap_Helpers.h"
+#include "platform.h"
+#include "helpers.h"
+#include "win_sdk.h"
+#include "reflection.h"
+#include <Shlobj.h> //SHGetKnownFolderPath
 #include <string>
-#include <Windows.h>
-#include <Shlobj.h>//SHGetKnownFolderPath
-#include "unCap_Reflection.h"
 
 //--------------------------------------------------------
 //Defines serialization and deserialization for every type (preferably ones not expected to change, for complex structs we have "Reflection for serialization")
@@ -186,7 +186,7 @@ namespace userial {
 	}
 
 	static str serialize(RECT var) {//Also simple structs that we know wont change
-		str res = _structbegin + str(TEXT("left")) + _keyvaluesepartor + serialize(var.left) + _memberseparator + str(TEXT("top")) + _keyvaluesepartor + serialize(var.top) + _memberseparator + str(TEXT("right")) + _keyvaluesepartor + serialize(var.right) + _memberseparator + str(TEXT("bottom")) + _keyvaluesepartor + serialize(var.bottom) + _structend;
+		str res = _structbegin + str(TEXT("left")) + _keyvaluesepartor + serialize((i32)var.left) + _memberseparator + str(TEXT("top")) + _keyvaluesepartor + serialize((i32)var.top) + _memberseparator + str(TEXT("right")) + _keyvaluesepartor + serialize((i32)var.right) + _memberseparator + str(TEXT("bottom")) + _keyvaluesepartor + serialize((i32)var.bottom) + _structend;
 		return res;
 	}
 

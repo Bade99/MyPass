@@ -1,7 +1,7 @@
 #pragma once
-#include <Windows.h>
-#include "protect_sha256.h"
-#include "protect_twofish.h"
+#include "win_sdk.h"
+#include "sha256.h"
+#include "twofish.h"
 
 static std::wstring get_general_save_folder() { //NOTE: this folder is guaranteed to exist
 	static std::wstring folder; //folder stored globally, if the user decides to delete it mid execution I wish them good luck
@@ -12,26 +12,9 @@ static std::wstring get_general_save_folder() { //NOTE: this folder is guarantee
 		(folder = general_folder) += application_folder;
 		CoTaskMemFree(general_folder);
 		BOOL res = CreateDirectoryW(folder.c_str(), 0);
-		runtime_assert(res || GetLastError()==ERROR_ALREADY_EXISTS,"Unable to create work folder on AppData\\Roaming");
+		runtime_assert(res || GetLastError()==ERROR_ALREADY_EXISTS, L"Unable to create work folder on AppData\\Roaming");
 	}
 	return folder;
-}
-
-static wchar_t* convert_ascii_to_utf16(char* s, int char_cnt) {
-	wchar_t* res;
-	int sz_char = MultiByteToWideChar(CP_ACP, 0, (LPCCH)s, char_cnt, 0, 0);
-	if (sz_char) {
-		void* mem = VirtualAlloc(0, sz_char * sizeof(wchar_t), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-		if (mem) {
-			MultiByteToWideChar(CP_ACP, 0, (LPCCH)s, char_cnt, (LPWSTR)mem, sz_char);
-			res = (wchar_t*)mem;
-		}
-	}
-	return res;
-}
-
-void free_convert(void* converted_string) {
-	VirtualFree(converted_string, 0, MEM_RELEASE);
 }
 
 u32 next_multiple_of(u32 multiple, u32 n) {
