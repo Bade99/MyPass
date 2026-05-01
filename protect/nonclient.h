@@ -1,16 +1,13 @@
 #pragma once
-#include <Windows.h>
-#include <windowsx.h>
-#include "unCap_Helpers.h"
-#include "unCap_Math.h"
-#include "unCap_Global.h"
-#include "unCap_Renderer.h"
-#include "unCap_button.h"
+#include "win_sdk.h"
+#include "helpers.h"
+#include "math.h"
+#include "global.h"
+#include "renderer.h"
+#include "button.h"
 #include "resource.h" //TODO(fran): everything that we take from the resources must be parameterized
-#include "windows_undoc.h"
-#include "unCap_Serialization.h"
-#include "unCap_Reflection.h"
-#include "windows_msg_mapper.h"
+#include "serialization.h"
+#include "reflection.h"
 
 // ------------------------ USAGE NOTES ------------------------ //
 // - If you need menus to resize, for example when you change languages
@@ -26,65 +23,22 @@
 // ------------------------------------------------------------- //
 
 // ------------------------ INTERNAL MSGS ------------------------ //
-#define UNCAPNC_MINIMIZE 100 //sent through WM_COMMAND
-#define UNCAPNC_MAXIMIZE 101 //sent through WM_COMMAND
-#define UNCAPNC_CLOSE 102 //sent through WM_COMMAND
-#define UNCAPNC_RESTORE 103 //sent through WM_COMMAND
+constexpr auto NC_MINIMIZE = 100; //sent through WM_COMMAND
+constexpr auto NC_MAXIMIZE = 101; //sent through WM_COMMAND
+constexpr auto NC_CLOSE = 102; //sent through WM_COMMAND
+constexpr auto NC_RESTORE = 103; //sent through WM_COMMAND
 
-#define UNCAPNC_TIMER_MENUDELAY 0xf1 //A little delay before allowing the user to select a new menu, this prevents problems, eg the user trying to close the menu by selecting it again in the menu bar
+constexpr auto NC_TIMER_MENUDELAY = 0xf1; //A little delay before allowing the user to select a new menu, this prevents problems, eg the user trying to close the menu by selecting it again in the menu bar
 
 //TODO(fran): look at SetWindowLong(hWnd, GWL_STYLE, currStyles | WS_MAXIMIZE); maybe that helps with maximizing correctly?
 
-constexpr TCHAR unCap_wndclass_uncap_nc[] = TEXT("unCap_wndclass_uncap_nc"); //Non client uncap
+namespace nonclient {
 
-struct unCapNcLpParam {//NOTE: pass a pointer to unCapNcLpParam to set up the client area, if client_class_name is null no client is created
-	const TCHAR* client_class_name;
-	void* client_lp_param;
-};
+constexpr auto top_border_thickness = 1;
 
-struct MY_MARGINS
-{
-	int cxLeftWidth;
-	int cxRightWidth;
-	int cyTopHeight;
-	int cyBottomHeight;
-};
+auto get_state(HWND wnd) { _control_create_function__get_state }
 
-struct unCapNcProcState {
-	HWND wnd;
-	HWND client;
-	//TODO(fran): might be good to store client and wnd rect, find the one place where we get this two. Then we wont have the code littered with those two calls
-
-	MY_MARGINS nc;
-
-	HWND btn_min, btn_max, btn_close;
-
-	RECT rc_caption;
-	SIZE caption_btn;
-	bool active;
-
-	RECT rc_icon;
-
-	struct {//menu related
-		HMENU menu; //The menu that contains all the other menus, the ones that go in the menu bar, and the ones inside of each of those 
-					//IMPLEMENTATION: every submenu asks this one for the bk brush
-		RECT menubar_items[10];//coords are relative to wnd client
-		i32 menubar_itemcnt;
-		i32 menubar_mouseover_idx_from1;//IMPLEMENTATION: 0=no item is on mouseover, we'll start from 1 so in case you search by position you'll need to subtract 1
-		bool menu_on_delay;//NOTE: the delay is only needed for left click accessed menus //TODO(fran): this is quite a bit of a cheap hack solution
-	};
-};
-
-unCapNcProcState* UNCAPNC_get_state(HWND uncapnc) {
-	unCapNcProcState* state = (unCapNcProcState*)GetWindowLongPtr(uncapnc, 0);//INFO: windows recomends to use GWL_USERDATA https://docs.microsoft.com/en-us/windows/win32/learnwin32/managing-application-state-
-	return state;
-}
-
-void UNCAPNC_set_state(HWND uncapnc, unCapNcProcState* state) {
-	SetWindowLongPtr(uncapnc, 0, (LONG_PTR)state);
-}
-
-void UNCAPNC_calc_caption(unCapNcProcState* state) {
+void calc_caption(State* state) {
 	GetClientRect(state->wnd, &state->rc_caption);
 
 	RECT testrc{ 0,0,100,100 }; RECT ncrc = testrc;
@@ -92,62 +46,65 @@ void UNCAPNC_calc_caption(unCapNcProcState* state) {
 
 	state->rc_caption.bottom = distance(testrc.top, ncrc.top);
 
-	state->caption_btn.cy = RECTHEIGHT(state->rc_caption); state->caption_btn.cx = state->caption_btn.cy * 16 / 9;;
+	state->caption_btn.cy = RECTH(state->rc_caption); state->caption_btn.cx = state->caption_btn.cy * 16 / 9;
 }
 
-RECT UNCAPNC_calc_nonclient_rc_from_client(RECT uncapcl_rc, BOOL has_menu) {
+RECT calc_nonclient_rc_from_client(RECT uncapcl_rc, BOOL has_menu) {
 	RECT res = uncapcl_rc;
 	AdjustWindowRect(&res, WS_OVERLAPPEDWINDOW, has_menu);//TODO(fran): standardize this or some other measure
 	return res;
 }
 
-RECT UNCAPNC_calc_menu_rc(unCapNcProcState* state) {
+RECT calc_menu_rc(State* state) {
 	RECT rc{ 0 };
 	if (state->menu) {
 		RECT r; GetClientRect(state->wnd, &r);
 		rc.left = r.left;
-		rc.top = RECTHEIGHT(state->rc_caption);
+		rc.top = RECTH(state->rc_caption);
 		rc.right = r.right;
 		rc.bottom = rc.top + GetSystemMetrics(SM_CYMENU);
 	}
 	return rc;
 }
 
-RECT UNCAPNC_calc_client_rc(unCapNcProcState* state) {
+RECT calc_client_rc(State* state) {
 	RECT r; GetClientRect(state->wnd, &r);
-	RECT menu_rc = UNCAPNC_calc_menu_rc(state);
-	RECT rc{ r.left, RECTHEIGHT(state->rc_caption) + RECTHEIGHT(menu_rc), r.right, r.bottom };
+	RECT menu_rc = calc_menu_rc(state);
+	RECT rc{ r.left, RECTH(state->rc_caption) + RECTH(menu_rc), r.right, r.bottom };
 	return rc;
 }
 
-RECT UNCAPNC_calc_btn_min_rc(unCapNcProcState* state) {
+RECT calc_btn_min_rc(State* state) {
 	RECT r; GetClientRect(state->wnd, &r);
 	RECT rc{ r.right - 3 * state->caption_btn.cx, r.top, r.right - 2 * state->caption_btn.cx, r.top + state->caption_btn.cy };
+	rc.top += top_border_thickness;
 	return rc;
 }
 
-RECT UNCAPNC_calc_btn_max_rc(unCapNcProcState* state) {
+RECT calc_btn_max_rc(State* state) {
 	RECT r; GetClientRect(state->wnd, &r);
 	RECT rc{ r.right - 2 * state->caption_btn.cx, r.top, r.right - 1 * state->caption_btn.cx, r.top + state->caption_btn.cy };
+	rc.top += top_border_thickness;
 	return rc;
 }
 
-RECT UNCAPNC_calc_btn_close_rc(unCapNcProcState* state) {
+RECT calc_btn_close_rc(State* state) {
 	RECT r; GetClientRect(state->wnd, &r);
 	RECT rc{ r.right - 1 * state->caption_btn.cx, r.top, r.right - 0 * state->caption_btn.cx, r.top + state->caption_btn.cy };
+	rc.top += top_border_thickness;
 	return rc;
 }
 
-HMENU UNCAPNC_get_menu(HWND uncapnc) {
-	unCapNcProcState* state = UNCAPNC_get_state(uncapnc);
+HMENU get_menu(HWND uncapnc) {
+	State* state = get_state(uncapnc);
 	return state->menu;
 }
 
-//NOTE:windows' menu bar is terrible, it doesnt care to update for nothing
+//NOTE: windows' menu bar is terrible, it doesnt care to update for nothing
 
-//The user should call this instead of SetMenu, and UNCAPNC_get_menu instead of GetMenu
-void UNCAPNC_set_menu(HWND uncapnc, HMENU menu) { //TODO(fran): set to NULL should clear the menu
-	unCapNcProcState* state = UNCAPNC_get_state(uncapnc);
+//The user should call this instead of SetMenu, and get_menu instead of GetMenu
+void set_menu(HWND uncapnc, HMENU menu) { //TODO(fran): set to NULL should clear the menu
+	State* state = get_state(uncapnc);
 
 	if (menu) {
 		state->menu = menu;
@@ -155,7 +112,7 @@ void UNCAPNC_set_menu(HWND uncapnc, HMENU menu) { //TODO(fran): set to NULL shou
 		MENUINFO mi{ sizeof(mi) };
 		mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS; //NOTE: important to also use "apply to submenus", cause the nc area is bigger than 1px and it will look very claustrophobic
 		//TODO(fran): MIM_MAXHEIGHT and other fMask params that we should set
-		mi.hbrBack = state->active ? unCap_colors.CaptionBk : unCap_colors.CaptionBk_Inactive;
+		mi.hbrBack = state->active ? colors.CaptionBk : colors.CaptionBk_Inactive;
 		SetMenuInfo(menu, &mi);
 
 	}
@@ -165,13 +122,13 @@ void UNCAPNC_set_menu(HWND uncapnc, HMENU menu) { //TODO(fran): set to NULL shou
 	}
 	RECT wndrc; GetWindowRect(state->wnd, &wndrc);
 	//Update to accommodate for menu change
-	MoveWindow(state->wnd, wndrc.left, wndrc.top, RECTWIDTH(wndrc), RECTHEIGHT(wndrc), FALSE);//NOTE: for some reason specifying TRUE for the last param doesnt force repainting
+	MoveWindow(state->wnd, wndrc.left, wndrc.top, RECTW(wndrc), RECTH(wndrc), FALSE);//NOTE: for some reason specifying TRUE for the last param doesnt force repainting
 	RedrawWindow(state->wnd, NULL, NULL, RDW_INVALIDATE);
 
 }
 
 //NOTE: this function request for a UINT since the top 32 bits of an HMENU are not used, if you have an HMENU simply cast down (UINT)hmenu
-bool UNCAPNC_is_on_menu_bar(unCapNcProcState* state, UINT menuitem) {
+bool is_on_menu_bar(State* state, UINT menuitem) {
 	int cnt = GetMenuItemCount(state->menu);
 	bool res = false;
 	for (int i = 0; i < cnt; i++) {
@@ -186,28 +143,28 @@ bool UNCAPNC_is_on_menu_bar(unCapNcProcState* state, UINT menuitem) {
 }
 
 //Mouse in screen coords
-void UNCAPNC_show_rclickmenu(unCapNcProcState* state, POINT mouse) {
+void show_rclickmenu(State* state, POINT mouse) {
 	HMENU m = CreateMenu();
 	HMENU subm = CreateMenu();//IMPORTANT: you need a MF_POPUP submenu for the menu wnd to be rendered properly, thanks https://www.codeproject.com/Questions/334598/Popup-Menu-Problem-is-not-working-properly
 	AppendMenuW(m, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)subm, (LPCWSTR)m);
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, UNCAPNC_RESTORE, (LPCWSTR)subm);
-	SetMenuItemString(subm, UNCAPNC_RESTORE, FALSE, RCS(LANG_NC_RESTORE));
+	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, NC_RESTORE, (LPCWSTR)subm);
+	SetMenuItemString(subm, NC_RESTORE, FALSE, RCS(LANG_NC_RESTORE));
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, UNCAPNC_MINIMIZE, (LPCWSTR)subm);
-	SetMenuItemString(subm, UNCAPNC_MINIMIZE, FALSE, RCS(LANG_NC_MINIMIZE));
+	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, NC_MINIMIZE, (LPCWSTR)subm);
+	SetMenuItemString(subm, NC_MINIMIZE, FALSE, RCS(LANG_NC_MINIMIZE));
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, UNCAPNC_MAXIMIZE, (LPCWSTR)subm);
-	SetMenuItemString(subm, UNCAPNC_MAXIMIZE, FALSE, RCS(LANG_NC_MAXIMIZE));
+	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, NC_MAXIMIZE, (LPCWSTR)subm);
+	SetMenuItemString(subm, NC_MAXIMIZE, FALSE, RCS(LANG_NC_MAXIMIZE));
 
 	AppendMenuW(subm, MF_SEPARATOR | MF_OWNERDRAW, 0, (LPCWSTR)subm);
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, UNCAPNC_CLOSE, (LPCWSTR)subm);
-	SetMenuItemString(subm, UNCAPNC_CLOSE, FALSE, RCS(LANG_NC_CLOSE));
+	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, NC_CLOSE, (LPCWSTR)subm);
+	SetMenuItemString(subm, NC_CLOSE, FALSE, RCS(LANG_NC_CLOSE));
 
 	MENUINFO mi{ sizeof(mi) };
 	mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
-	mi.hbrBack = unCap_colors.CaptionBk;
+	mi.hbrBack = colors.CaptionBk;
 	SetMenuInfo(m, &mi);
 
 	//NOTE: using tpm_returncmd would be a quick and simple cheat to get past msg collision problems and the like
@@ -216,7 +173,7 @@ void UNCAPNC_show_rclickmenu(unCapNcProcState* state, POINT mouse) {
 	DestroyMenu(m);
 }
 
-void UNCAPNC_manual_maximize(unCapNcProcState* state) {//Maximize only works correctly for WM_OVERLAPPEDWINDOW, we gotta do it by hand
+void manual_maximize(State* state) {//Maximize only works correctly for WM_OVERLAPPEDWINDOW, we gotta do it by hand
 	WINDOWPLACEMENT old_placement; GetWindowPlacement(state->wnd, &old_placement);
 	HMONITOR mon = MonitorFromWindow(state->wnd, MONITOR_DEFAULTTOPRIMARY);
 	MONITORINFO monnfo{ sizeof(monnfo) };
@@ -230,7 +187,7 @@ void UNCAPNC_manual_maximize(unCapNcProcState* state) {//Maximize only works cor
 	work_rc.right += state->nc.cxRightWidth;
 	work_rc.top -= state->nc.cyTopHeight;
 	work_rc.bottom += state->nc.cyBottomHeight;
-	MoveWindow(state->wnd, work_rc.left, work_rc.top, RECTWIDTH(work_rc), RECTHEIGHT(work_rc), TRUE);
+	MoveWindow(state->wnd, work_rc.left, work_rc.top, RECTW(work_rc), RECTH(work_rc), TRUE);
 	WINDOWPLACEMENT placement{ sizeof(placement) };
 	placement.showCmd = SW_MAXIMIZE;
 	placement.flags = WPF_ASYNCWINDOWPLACEMENT;
@@ -248,12 +205,12 @@ void UNCAPNC_manual_maximize(unCapNcProcState* state) {//Maximize only works cor
 LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
 	//printf(msgToString(msg)); printf("\n");
-	unCapNcProcState* state = UNCAPNC_get_state(hwnd);
+	State* state = get_state(hwnd);
 
 	{
 #if 0
 		RECT rw; GetWindowRect(hwnd, &rw);
-		printf("left %d top %d right %d bottom %d width %d height %d\n", rw.left, rw.top, rw.right, rw.bottom, RECTWIDTH(rw), RECTHEIGHT(rw));
+		printf("left %d top %d right %d bottom %d width %d height %d\n", rw.left, rw.top, rw.right, rw.bottom, RECTW(rw), RECTH(rw));
 #endif
 	}
 
@@ -283,17 +240,21 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	} break;
 	case WM_WINDOWPOSCHANGED: //TODO(fran): we can use this guy to replace WM_SIZE and WM_MOVE by not calling defwindowproc
 	{
-		UNCAPNC_calc_caption(state);
+		calc_caption(state);
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	case WM_PAINT://TODO(fran): we gotta offset the painting a few pixels down when maximized, the amount of things that will need an extra condition on calculation is pretty awful, maybe we should just handle maximizing ourselves
 	{
 		PAINTSTRUCT ps;
-		HDC dc = BeginPaint(state->wnd, &ps);
+		HDC dc = BeginPaint(state->wnd, &ps); defer{ EndPaint(state->wnd, &ps); };
 
 		if (rcs_overlap(state->rc_caption, ps.rcPaint)) {
+			//We get system painted 1px borders on the left, right and bottom, but not on the top, for now until we find out why we just emulate it
+			auto top_border_rc = state->rc_caption; top_border_rc.bottom = top_border_rc.top + top_border_thickness;
+			FillRect(dc, &top_border_rc, colors.CaptionBk_Inactive); //TODO(fran): could not find a system default that matches to the brush used for the borders, used mine which matches prety well
 
-			FillRect(dc, &state->rc_caption, state->active ? unCap_colors.CaptionBk : unCap_colors.CaptionBk_Inactive);
+			auto bk_rc = state->rc_caption; bk_rc.top += top_border_thickness;
+			FillRect(dc, &bk_rc, state->active ? colors.CaptionBk : colors.CaptionBk_Inactive);
 
 			SelectFont(dc, GetStockFont(DEFAULT_GUI_FONT));
 			TCHAR title[256]; int sz = GetWindowText(state->wnd, title, ARRAYSIZE(title));
@@ -303,42 +264,49 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			HICON icon = (HICON)GetClassLongPtr(state->wnd, GCLP_HICONSM);
 			int icon_height = (int)((float)tm.tmHeight * 1.5f);
 			int icon_width = icon_height;
-			int icon_align_height = (RECTHEIGHT(state->rc_caption) - icon_height) / 2;
+			int icon_align_height = (RECTH(state->rc_caption) - icon_height) / 2;
 			int icon_align_width = icon_align_height;
 			state->rc_icon = rectWH(icon_align_height, icon_align_width, icon_width, icon_height);
-			MYICON_INFO iconnfo = MyGetIconInfo(icon);
+			auto iconnfo = MyGetIconInfo(icon);
 			//TODO(fran): the last pixels from the circle dont seem to get rendered
-			urender::draw_icon(dc, icon_align_height, icon_align_width, icon_width, icon_height, icon, 0, 0, iconnfo.nWidth, iconnfo.nHeight);
+			urender::draw_icon(dc, icon_align_height, icon_align_width, icon_width, icon_height, icon, 0, 0, iconnfo.w, iconnfo.h);
 
 			int yPos = (state->rc_caption.bottom + state->rc_caption.top - tm.tmHeight) / 2;
-			HBRUSH txtbr = state->active ? unCap_colors.ControlTxt : unCap_colors.ControlTxt_Inactive;
+			HBRUSH txtbr = state->active ? colors.ControlTxt : colors.ControlTxt_Inactive;
 			SetTextColor(dc, ColorFromBrush(txtbr)); SetBkMode(dc, TRANSPARENT);
-
 
 			TextOut(dc, icon_align_width * 2 + icon_width, yPos, title, sz);
 
 			HBRUSH btn_border, btn_bk, btn_fore, btn_bk_push, btn_bk_mouseover;
 			if (state->active) {
-				btn_border = unCap_colors.CaptionBk;
-				btn_bk = unCap_colors.CaptionBk;
-				btn_fore = unCap_colors.Img;
-				btn_bk_push = unCap_colors.ControlBkPush;
-				btn_bk_mouseover = unCap_colors.ControlBkMouseOver;
+				btn_border = colors.CaptionBk;
+				btn_bk = colors.CaptionBk;
+				btn_fore = colors.Img;
+				btn_bk_push = colors.ControlBkPush;
+				btn_bk_mouseover = colors.ControlBkMouseOver;
 			}
 			else {
-				btn_border = unCap_colors.CaptionBk_Inactive;
-				btn_bk = unCap_colors.CaptionBk_Inactive;
-				btn_fore = unCap_colors.Img_Inactive;
-				btn_bk_push = unCap_colors.ControlBkPush;
-				btn_bk_mouseover = unCap_colors.ControlBkMouseOver;
+				btn_border = colors.CaptionBk_Inactive;
+				btn_bk = colors.CaptionBk_Inactive;
+				btn_fore = colors.Img_Inactive;
+				btn_bk_push = colors.ControlBkPush;
+				btn_bk_mouseover = colors.ControlBkMouseOver;
 			}
-			UNCAPBTN_set_brushes(state->btn_close, TRUE, btn_border, btn_bk, btn_fore, btn_bk_push, btn_bk_mouseover);
-			UNCAPBTN_set_brushes(state->btn_min, TRUE, btn_border, btn_bk, btn_fore, btn_bk_push, btn_bk_mouseover);
-			UNCAPBTN_set_brushes(state->btn_max, TRUE, btn_border, btn_bk, btn_fore, btn_bk_push, btn_bk_mouseover);
+			button::Theme btn{
+				.brushes = {
+					.foreground = {.normal = btn_fore},
+					.bk = {.normal = btn_bk, .mouseover = btn_bk_mouseover, .clicked = btn_bk_push},
+					.border = {.normal = btn_border}
+				}
+			};
+			//TODO: we shouldnt be triggering a redraw while on wm_paint, this can be done elsewhere
+			button::set_theme(state->btn_close, btn);
+			button::set_theme(state->btn_min, btn);
+			if (state->btn_max) button::set_theme(state->btn_max, btn);
 		}
 
 		//TODO(fran): move the menu up to get more screen real state, visual studio differentiates the menu items from the window title by rendering a darker square around the latter
-		if (RECT menurc = UNCAPNC_calc_menu_rc(state); state->menu && rcs_overlap(menurc, ps.rcPaint)) {
+		if (RECT menurc = calc_menu_rc(state); state->menu && rcs_overlap(menurc, ps.rcPaint)) {
 
 			MENUINFO mi{ sizeof(mi) };
 			mi.fMask = MIM_BACKGROUND;
@@ -347,13 +315,17 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 
 			//Set font and colors
 			HBRUSH bkbr = mi.hbrBack;
-			HBRUSH txtbr = state->active ? unCap_colors.ControlTxt : unCap_colors.ControlTxt_Inactive;
+			HBRUSH txtbr = state->active ? colors.ControlTxt : colors.ControlTxt_Inactive;
 			COLORREF oldbkclr = SetBkColor(dc, ColorFromBrush(bkbr)); defer{ if (oldbkclr != CLR_INVALID)SetBkColor(dc, oldbkclr); };
 			COLORREF oldtxtclr = SetTextColor(dc, ColorFromBrush(txtbr)); defer{ if (oldtxtclr != CLR_INVALID)SetTextColor(dc, oldtxtclr); };
-			HFONT oldmenufont = (HFONT)SelectObject(dc, unCap_fonts.Menu); defer{ SelectObject(dc,oldmenufont); };
+			HFONT oldmenufont = (HFONT)SelectObject(dc, fonts.Menu); defer{ SelectObject(dc,oldmenufont); };
 
+			constexpr bool bottom_border = true;
+			constexpr int bottom_border_thickness = 1;
 			//Paint background
+			if (bottom_border) menurc.bottom -= bottom_border_thickness;
 			FillRect(dc, &menurc, bkbr);
+			if (bottom_border) menurc.bottom += bottom_border_thickness;
 
 			RECT menuitemrc = menurc;
 			int menu_xpad = 4;
@@ -375,8 +347,8 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				bool on_mouseover = (i == menubar_mouseover_idx);
 				if (on_mouseover) {
 					//Paint mouseover bk
-					FillRect(dc, &state->menubar_items[i], unCap_colors.ControlBkMouseOver);//TODO(fran): im having to cheat a little bit here by using the rc from a previous painting, it could be outdated
-					SetBkColor(dc, ColorFromBrush(unCap_colors.ControlBkMouseOver));
+					FillRect(dc, &state->menubar_items[i], colors.ControlBkMouseOver);//TODO(fran): im having to cheat a little bit here by using the rc from a previous painting, it could be outdated
+					SetBkColor(dc, ColorFromBrush(colors.ControlBkMouseOver));
 				}
 				else {
 					SetBkColor(dc, ColorFromBrush(bkbr));
@@ -399,7 +371,7 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				// Calculate vertical and horizontal position for the string so that it will be centered
 				//NOTE: TabbedTextOut doesnt care for alignment (SetTextAlign)
 				TEXTMETRIC mtm; GetTextMetrics(dc, &mtm);
-				//int yPos = menuitemrc.top + (RECTHEIGHT(menuitemrc) - mtm.tmHeight) / 2;
+				//int yPos = menuitemrc.top + (RECTH(menuitemrc) - mtm.tmHeight) / 2;
 				int yPos = (menuitemrc.bottom + menuitemrc.top - mtm.tmHeight) / 2;
 				int xPos = menuitemrc.left;
 				LONG txtsz = TabbedTextOut(dc, xPos, yPos, menu_str, menu_str_character_cnt - 1, 0, 0, xPos);
@@ -412,11 +384,11 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			}
 			SelectClipRgn(dc, restoreRegion); if (restoreRegion != NULL) DeleteObject(restoreRegion); //Restore old region
 
-			RECT menuborder = menurc; menuborder.top = menuborder.bottom - 1;
-			FillRect(dc, &menuborder, txtbr);//TODO(fran):parametric, not everyone might like this
+			if (bottom_border) {
+				RECT menuborder = menurc; menuborder.top = menuborder.bottom - bottom_border_thickness;
+				FillRect(dc, &menuborder, txtbr);//TODO(fran):parametric, not everyone might like this
+			}
 		}
-		EndPaint(state->wnd, &ps);
-
 		return 0;
 	} break;
 	case WM_CREATE:
@@ -431,35 +403,43 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 
 		CREATESTRUCT* createnfo = (CREATESTRUCT*)lparam;
 
-		unCapNcLpParam* lpParam = (unCapNcLpParam*)createnfo->lpCreateParams;
+		LpParam* lpParam = (LpParam*)createnfo->lpCreateParams;
+
+		state->settings = lpParam;
 
 		SetWindowText(state->wnd, createnfo->lpszName); //NOTE: for handmade classes you have to manually call setwindowtext
 
-		RECT btn_min_rc = UNCAPNC_calc_btn_min_rc(state);
-		state->btn_min = CreateWindow(unCap_wndclass_button, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_min_rc.left, btn_min_rc.top, RECTWIDTH(btn_min_rc), RECTHEIGHT(btn_min_rc), state->wnd, (HMENU)UNCAPNC_MINIMIZE, 0, 0);
-		//UNCAPBTN_set_brushes(state->btn_min, TRUE, unCap_colors.CaptionBk, unCap_colors.CaptionBk, unCap_colors.ControlTxt, unCap_colors.ControlBkPush, unCap_colors.ControlBkMouseOver); //NOTE: now I do this on WM_PAINT, commenting this actually introduces a bug for the first ms of execution where the button might draw with no brushes first and then be asked to redraw with the brushes loaded, introducing at least one frame of flicker
+		RECT btn_min_rc = state->settings->can_maximize ? calc_btn_min_rc(state) : calc_btn_max_rc(state);
+		state->btn_min = CreateWindow(button::wndclass, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_min_rc.left, btn_min_rc.top, RECTW(btn_min_rc), RECTH(btn_min_rc), state->wnd, (HMENU)NC_MINIMIZE, 0, 0);
+		//UNCAPBTN_set_brushes(state->btn_min, TRUE, colors.CaptionBk, colors.CaptionBk, colors.ControlTxt, colors.ControlBkPush, colors.ControlBkMouseOver); //NOTE: now I do this on WM_PAINT, commenting this actually introduces a bug for the first ms of execution where the button might draw with no brushes first and then be asked to redraw with the brushes loaded, introducing at least one frame of flicker
 
-		RECT btn_max_rc = UNCAPNC_calc_btn_max_rc(state);
-		state->btn_max = CreateWindow(unCap_wndclass_button, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_max_rc.left, btn_max_rc.top, RECTWIDTH(btn_max_rc), RECTHEIGHT(btn_max_rc), state->wnd, (HMENU)UNCAPNC_MAXIMIZE, 0, 0);
-		//UNCAPBTN_set_brushes(state->btn_max, TRUE, unCap_colors.CaptionBk, unCap_colors.CaptionBk, unCap_colors.ControlTxt, unCap_colors.ControlBkPush, unCap_colors.ControlBkMouseOver);
+		if (state->settings->can_maximize) {
+			RECT btn_max_rc = calc_btn_max_rc(state);
+			state->btn_max = CreateWindow(button::wndclass, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_max_rc.left, btn_max_rc.top, RECTW(btn_max_rc), RECTH(btn_max_rc), state->wnd, (HMENU)NC_MAXIMIZE, 0, 0);
+			//UNCAPBTN_set_brushes(state->btn_max, TRUE, colors.CaptionBk, colors.CaptionBk, colors.ControlTxt, colors.ControlBkPush, colors.ControlBkMouseOver);
+		}
 
-		RECT btn_close_rc = UNCAPNC_calc_btn_close_rc(state);
-		state->btn_close = CreateWindow(unCap_wndclass_button, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_close_rc.left, btn_close_rc.top, RECTWIDTH(btn_close_rc), RECTHEIGHT(btn_close_rc), state->wnd, (HMENU)UNCAPNC_CLOSE, 0, 0);
-		//UNCAPBTN_set_brushes(state->btn_close, TRUE, unCap_colors.CaptionBk, unCap_colors.CaptionBk, unCap_colors.ControlTxt, unCap_colors.ControlBkPush, unCap_colors.ControlBkMouseOver);
+		RECT btn_close_rc = calc_btn_close_rc(state);
+		state->btn_close = CreateWindow(button::wndclass, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_close_rc.left, btn_close_rc.top, RECTW(btn_close_rc), RECTH(btn_close_rc), state->wnd, (HMENU)NC_CLOSE, 0, 0);
+		//UNCAPBTN_set_brushes(state->btn_close, TRUE, colors.CaptionBk, colors.CaptionBk, colors.ControlTxt, colors.ControlBkPush, colors.ControlBkMouseOver);
 
-		HBITMAP bCross = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(UNCAP_BMP_CLOSE));//TODO(fran): let the user set this guys, store them in state
-		HBITMAP bMax = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(UNCAP_BMP_MAX));
-		HBITMAP bMin = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(UNCAP_BMP_MIN));
-		SendMessage(state->btn_close, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bCross);
-		SendMessage(state->btn_max, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bMax);
-		SendMessage(state->btn_min, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bMin);
+		//TODO(fran): let the user set the bitmaps, pass them in theme
+		SendMessage(state->btn_close, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.close);
+		if (state->btn_max) {
+			SendMessage(state->btn_max, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.maximize);
+		}
+		SendMessage(state->btn_min, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.minimize);
 
 		//TODO(fran): create the icons, one idea is to ask windows to paint them in some dc, and then I can store the HBITMAP and re-use it all I want
 
 		if (lpParam->client_class_name) {
-			RECT rc = UNCAPNC_calc_client_rc(state);
-			state->client = CreateWindow(lpParam->client_class_name, TEXT(""), WS_CHILD | WS_VISIBLE, rc.left, rc.top, RECTWIDTH(rc), RECTHEIGHT(rc), state->wnd, 0, 0, lpParam->client_lp_param);
+			RECT rc = calc_client_rc(state);
+			state->client = CreateWindowExW(WS_EX_COMPOSITED, lpParam->client_class_name, TEXT(""), WS_CHILD | WS_VISIBLE, rc.left, rc.top, RECTW(rc), RECTH(rc), state->wnd, 0, 0, lpParam->client_lp_param);
 		}
+
+		state->toast = create_window(state->client ? state->client : state->wnd, toast::wndclass, nil, WS_CHILD);
+		toast::set_theme(state->toast, themes.base_toast);
+
 		return 0;
 	} break;
 	case WM_NCLBUTTONDBLCLK:
@@ -471,7 +451,7 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			POINT cl_mouse = mouse; ScreenToClient(state->wnd, &cl_mouse);
 
 			if (test_pt_rc(cl_mouse, state->rc_icon)) {
-				PostMessage(state->wnd, WM_COMMAND, (WPARAM)MAKELONG(UNCAPNC_CLOSE, 0), (LPARAM)state->btn_close);//TODO(fran): should I use WM_CLOSE?
+				PostMessage(state->wnd, WM_COMMAND, (WPARAM)MAKELONG(NC_CLOSE, 0), (LPARAM)state->btn_close);//TODO(fran): should I use WM_CLOSE?
 				return 0;
 			}
 
@@ -484,7 +464,7 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				//SetWindowLongPtr(state->wnd, GWL_STYLE, dwStyle | WS_OVERLAPPEDWINDOW);//TODO(fran): now im REALLY confused, I had to specifically take out WS_OVERLAPPEDWINDOW so it wouldnt paint over me and now it doesnt seem to, test more thoroughly //still though sizing isnt perfect, the top is still cut off
 				ShowWindow(state->wnd, SW_MAXIMIZE);
 #else
-				UNCAPNC_manual_maximize(state);
+				manual_maximize(state);
 #endif
 			}
 		}
@@ -492,7 +472,6 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	} break;
 	case WM_NCHITTEST:
 	{
-
 		LRESULT res = DefWindowProc(hwnd, msg, wparam, lparam);
 		if (res == HTCLIENT) {
 			int top_margin = 8;
@@ -503,7 +482,7 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			RECT rc_topleft; rc_topleft.top = rc.top; rc_topleft.left = rc.left; rc_topleft.bottom = rc_topleft.top + top_margin; rc_topleft.right = rc_topleft.left + top_side_margin;
 			RECT rc_topright; rc_topright.top = rc.top; rc_topright.left = rc.right - top_side_margin; rc_topright.bottom = rc_topright.top + top_margin; rc_topright.right = rc.right;
 
-			RECT rc_menu = UNCAPNC_calc_menu_rc(state);
+			RECT rc_menu = calc_menu_rc(state);
 
 			if (test_pt_rc(mouse, rc_top)) res = HTTOP;
 			else if (test_pt_rc(mouse, rc_topleft)) res = HTTOPLEFT;
@@ -523,9 +502,9 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	{
 		RECT testrc{ 0,0,100,100 };
 		RECT ncrc = testrc;
-		AdjustWindowRect(&ncrc, WS_OVERLAPPEDWINDOW, FALSE); //TODO(fran): somehow link this params with UNCAPNC_calc_caption
+		AdjustWindowRect(&ncrc, WS_OVERLAPPEDWINDOW, FALSE); //TODO(fran): somehow link this params with calc_caption
 
-		UNCAPNC_calc_caption(state);//TODO(fran): find out which is the one and only magical msg where this can be put in
+		calc_caption(state);//TODO(fran): find out which is the one and only magical msg where this can be put in
 
 		MY_MARGINS margins;
 
@@ -569,11 +548,14 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	} break;
 	case WM_SIZE:
 	{
-		RECT rc = UNCAPNC_calc_client_rc(state); MoveWindow(state->client, rc.left, rc.top, RECTWIDTH(rc), RECTHEIGHT(rc), TRUE);
+		RECT rc = calc_client_rc(state); MoveWindow(state->client, rc.left, rc.top, RECTW(rc), RECTH(rc), TRUE);
 
-		RECT btn_min_rc = UNCAPNC_calc_btn_min_rc(state); MoveWindow(state->btn_min, btn_min_rc.left, btn_min_rc.top, RECTWIDTH(btn_min_rc), RECTHEIGHT(btn_min_rc), TRUE);//TODO(fran): I dont really need to ask for repaint do I?
-		RECT btn_max_rc = UNCAPNC_calc_btn_max_rc(state); MoveWindow(state->btn_max, btn_max_rc.left, btn_max_rc.top, RECTWIDTH(btn_max_rc), RECTHEIGHT(btn_max_rc), TRUE);
-		RECT btn_close_rc = UNCAPNC_calc_btn_close_rc(state); MoveWindow(state->btn_close, btn_close_rc.left, btn_close_rc.top, RECTWIDTH(btn_close_rc), RECTHEIGHT(btn_close_rc), TRUE);
+		RECT btn_min_rc = state->settings->can_maximize ? calc_btn_min_rc(state) : calc_btn_max_rc(state);
+		MoveWindow(state->btn_min, btn_min_rc.left, btn_min_rc.top, RECTW(btn_min_rc), RECTH(btn_min_rc), TRUE);//TODO(fran): I dont really need to ask for repaint do I?
+		if (state->settings->can_maximize) {
+			RECT btn_max_rc = calc_btn_max_rc(state); MoveWindow(state->btn_max, btn_max_rc.left, btn_max_rc.top, RECTW(btn_max_rc), RECTH(btn_max_rc), TRUE);
+		}
+		RECT btn_close_rc = calc_btn_close_rc(state); MoveWindow(state->btn_close, btn_close_rc.left, btn_close_rc.top, RECTW(btn_close_rc), RECTH(btn_close_rc), TRUE);
 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
@@ -608,9 +590,9 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	{
 		CREATESTRUCT* create_nfo = (CREATESTRUCT*)lparam;
 		//TODO(fran): check for minimize and maximize button requirements
-		unCapNcProcState* st = (unCapNcProcState*)calloc(1, sizeof(unCapNcProcState));
+		State* st = (State*)calloc(1, sizeof(State));
 		Assert(st);
-		UNCAPNC_set_state(hwnd, st);
+		set_window_state(hwnd, st);
 		st->wnd = hwnd;
 		return TRUE;
 	} break;
@@ -625,7 +607,7 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS; //TODO(fran): MIM_APPLYTOSUBMENUS is garbage, it only goes one level down, just terrible, make my own
 			//TODO(fran): MIM_MAXHEIGHT and other fMask params that we should set
 
-			mi.hbrBack = state->active ? unCap_colors.CaptionBk : unCap_colors.CaptionBk_Inactive;
+			mi.hbrBack = state->active ? colors.CaptionBk : colors.CaptionBk_Inactive;
 
 			SetMenuInfo(state->menu, &mi);
 		}
@@ -669,7 +651,7 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				//wprintf(L"%s\n", menu_str);
 
 				HDC dc = GetDC(hwnd); //Of course they had to ask for a dc, and not give the option to just provide the font, which is the only thing this function needs
-				HFONT hfntPrev = (HFONT)SelectObject(dc, unCap_fonts.Menu);//TODO(fran): parametric
+				HFONT hfntPrev = (HFONT)SelectObject(dc, fonts.Menu);//TODO(fran): parametric
 				int old_mapmode = GetMapMode(dc);
 				SetMapMode(dc, MM_TEXT);
 				WORD text_width = LOWORD(GetTabbedTextExtent(dc, menu_str, menu_str_character_cnt - 1, 0, NULL)); //TODO(fran): make common function for this and the one that does rendering, also look at how tabs work
@@ -682,7 +664,7 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				//
 				//printf("MEASURE: item->itemID=%#016x\n", item->itemID);
 				//if (item->itemID == ((UINT)HACK_toplevelmenu & 0xFFFFFFFF)) { //Check if we are a "top level" menu
-				//if (UNCAPNC_is_on_menu_bar(state, item->itemID)) { //Check if we are a "top level" menu
+				//if (is_on_menu_bar(state, item->itemID)) { //Check if we are a "top level" menu
 				if ((HMENU)item->itemData == state->menu) { //Check if we are a "top level" menu
 					item->itemWidth = text_width + space_width * 2;
 				}
@@ -743,12 +725,12 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				HBRUSH txt_br, bk_br;
 				if (item->itemState & ODS_SELECTED || item->itemState & ODS_HOTLIGHT /*needed for "top level" menus*/) //TODO(fran): ODS_CHECKED ODS_FOCUS
 				{
-					txt_br = unCap_colors.ControlTxt;
-					bk_br = unCap_colors.ControlBkMouseOver;
+					txt_br = colors.ControlTxt;
+					bk_br = colors.ControlBkMouseOver;
 				}
 				else
 				{
-					txt_br = unCap_colors.ControlTxt;
+					txt_br = colors.ControlTxt;
 					Assert((UINT)(UINT_PTR)item->hwndItem);
 					//GetMenuInfo((HMENU)item->hwndItem, &mnfo); //We will not ask our "parent" hmenu since sometimes it decides it doesnt have the hbrush, we'll go straight to the menu bar, if there is one
 					if (state->menu) {
@@ -756,7 +738,7 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 						GetMenuInfo(state->menu, &mnfo);
 						bk_br = mnfo.hbrBack;
 					}
-					else bk_br = unCap_colors.CaptionBk;
+					else bk_br = colors.CaptionBk;
 
 				}
 				clrPrevText = SetTextColor(item->hDC, ColorFromBrush(txt_br));//TODO(fran): separate menu brushes
@@ -768,14 +750,14 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				}
 
 				// Select the font and draw the text. 
-				hfntPrev = (HFONT)SelectObject(item->hDC, unCap_fonts.Menu);//TODO(fran): parametric
+				hfntPrev = (HFONT)SelectObject(item->hDC, fonts.Menu);//TODO(fran): parametric
 
 				WORD x_pad = LOWORD(GetTabbedTextExtent(item->hDC, TEXT(" "), 1, 0, NULL)); //an extra 1 space before drawing text (for not top level menus)
 				//printf("item->hwndItem=%#016x GetMenu(hwnd)=%#016x state->menu=%#016x\n",item->hwndItem,GetMenu(hwnd),state->menu);
 				//if (item->hwndItem == (HWND)GetMenu(hwnd)) { //If we are a "top level" menu
 				if (item->hwndItem == (HWND)state->menu) { //If we are on the menu bar (then hwndItem, our parent, will be the same as state->menu)
 				//Assert(GetMenu(hwnd) == state->menu);
-				//if (UNCAPNC_is_on_menu_bar(state, (UINT)item->hwndItem)) { //If we are a "top level" menu
+				//if (is_on_menu_bar(state, (UINT)item->hwndItem)) { //If we are a "top level" menu
 
 					//we just want to draw the text, nothing more
 					//TODO(fran): clean this huge if-else, very bug prone with things being set/initialized in different parts
@@ -839,8 +821,8 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 							if (bitmap.bmBitsPixel == 1) {
 
 								int img_max_x = GetSystemMetrics(SM_CXMENUCHECK);
-								int img_max_y = RECTHEIGHT(item->rcItem);
-								int img_sz = roundNdown(bitmap.bmWidth, min(img_max_x, img_max_y));//HACK: instead use png + gdi+ + color matrices
+								int img_max_y = RECTH(item->rcItem);
+								int img_sz = roundNdown(bitmap.bmWidth, minimum(img_max_x, img_max_y));//HACK: instead use png + gdi+ + color matrices
 								if (!img_sz)img_sz = bitmap.bmWidth; //More HACKs
 								int bmp_height = img_sz;
 								int bmp_width = bmp_height;
@@ -848,7 +830,7 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 								int bmp_align_height = item->rcItem.top + (img_max_y - bmp_height) / 2;
 
 								//NOTE: for some insane and nonsensical reason we cant use MaskBlt here, so no urender::draw_mask.
-								urender::draw_menu_mask(item->hDC, bmp_align_width, bmp_align_height, bmp_width, bmp_height, hbmp, 0, 0, bitmap.bmWidth, bitmap.bmHeight, unCap_colors.Img);//TODO(fran): parametric brush
+								urender::draw_menu_mask(item->hDC, bmp_align_width, bmp_align_height, bmp_width, bmp_height, hbmp, 0, 0, bitmap.bmWidth, bitmap.bmHeight, colors.Img);//TODO(fran): parametric brush
 								//TODO(fran): clipping
 							}
 						}
@@ -896,19 +878,19 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 					}
 
 					if (menu_type.hSubMenu) { //Draw the submenu arrow
-						HBITMAP mask = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(UNCAP_BMP_RIGHTARROW)); //TODO(fran): parametric
-						defer{ DeleteBitmap(mask); };
-						BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo); Assert(bmpnfo.bmBitsPixel == 1);
+						HBITMAP mask = bmps.arrow_right; //TODO(fran): parametric
+						BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo); 
+						Assert(bmpnfo.bmBitsPixel == 1);
 						int img_max_x = GetSystemMetrics(SM_CXMENUCHECK);
-						int img_max_y = RECTHEIGHT(item->rcItem);
-						int img_sz = roundNdown(bmpnfo.bmWidth, min(img_max_x, img_max_y));//HACK: instead use png + gdi+ + color matrices
+						int img_max_y = RECTH(item->rcItem);
+						int img_sz = roundNdown(bmpnfo.bmWidth, minimum(img_max_x, img_max_y));//HACK: instead use png + gdi+ + color matrices
 						if (!img_sz) img_sz = bmpnfo.bmWidth; //More HACKs
 
 						int bmp_left = item->rcItem.right - img_sz;
 						int bmp_top = item->rcItem.top + (img_max_y - img_sz) / 2;
 						int bmp_height = img_sz;
 						int bmp_width = bmp_height;
-						urender::draw_menu_mask(item->hDC, bmp_left, bmp_top, bmp_width, bmp_height, mask, 0, 0, bmpnfo.bmWidth, bmpnfo.bmHeight, unCap_colors.Img);//TODO(fran): parametric brush
+						urender::draw_menu_mask(item->hDC, bmp_left, bmp_top, bmp_width, bmp_height, mask, 0, 0, bmpnfo.bmWidth, bmpnfo.bmHeight, colors.Img);//TODO(fran): parametric brush
 
 						//Prevent windows from drawing what nobody asked it to draw
 						//Many thanks to David Sumich https://www.codeguru.com/cpp/controls/menu/miscellaneous/article.php/c13017/Owner-Drawing-the-Submenu-Arrow.htm 
@@ -930,15 +912,15 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 					GetMenuInfo(state->menu, &mnfo);
 					bk_br = mnfo.hbrBack; //TODO: unfinished trash
 				}
-				else bk_br = unCap_colors.CaptionBk;
+				else bk_br = colors.CaptionBk;
 
 				FillRect(item->hDC, &item->rcItem, bk_br);
 				RECT separator_rc;
-				separator_rc.top = item->rcItem.top + RECTHEIGHT(item->rcItem) / 2;
+				separator_rc.top = item->rcItem.top + RECTH(item->rcItem) / 2;
 				separator_rc.bottom = separator_rc.top + 1; //TODO(fran): fancier calc and position
 				separator_rc.left = item->rcItem.left + separator_x_padding;
 				separator_rc.right = item->rcItem.right - separator_x_padding;
-				FillRect(item->hDC, &separator_rc, unCap_colors.ControlTxt);
+				FillRect(item->hDC, &separator_rc, colors.ControlTxt);
 				//TODO(fran): clipping
 			}
 			default: return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -949,7 +931,6 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		default: return DefWindowProc(hwnd, msg, wparam, lparam);
 		}
 	} break;
-
 	case WM_COMMAND:
 	{
 		//TODO(fran): reserved msg range for UNCAPNC
@@ -957,17 +938,17 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		// Msgs from my controls
 		switch (LOWORD(wparam))
 		{
-		case UNCAPNC_RESTORE:
+		case NC_RESTORE:
 		{
 			ShowWindow(state->wnd, SW_RESTORE);
 			return 0;
 		} break;
-		case UNCAPNC_MINIMIZE: //TODO(fran): move away from WM_COMMAND and start using WM_SYSCOMMAND, that probably means getting rid of the individual nc buttons and handling all myself like with the menubar
+		case NC_MINIMIZE: //TODO(fran): move away from WM_COMMAND and start using WM_SYSCOMMAND, that probably means getting rid of the individual nc buttons and handling all myself like with the menubar
 		{
 			ShowWindow(state->wnd, SW_MINIMIZE);
 			return 0;
 		} break;
-		case UNCAPNC_MAXIMIZE:
+		case NC_MAXIMIZE:
 		{
 			WINDOWPLACEMENT p{ sizeof(p) }; GetWindowPlacement(state->wnd, &p);
 
@@ -975,7 +956,7 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			else ShowWindow(state->wnd, SW_MAXIMIZE); //TODO(fran): maximize covers the whole screen, I dont want that, I want to leave the navbar visible. For this to be done automatically by windows we need the WS_MAXIMIZEBOX style, which decides to draw a maximize box when pressed, if we can hide that we are all set
 			return 0;
 		} break;
-		case UNCAPNC_CLOSE:
+		case NC_CLOSE:
 		{
 			bool client_handled = SendMessage(state->client, WM_CLOSE, 0, 0);
 			if (!client_handled) {
@@ -1023,87 +1004,15 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 #endif
 	} break;
-	case WM_STYLECHANGING:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_STYLECHANGED:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_PARENTNOTIFY://Different notifs about your childs
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_WINDOWPOSCHANGING:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_SHOWWINDOW:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_ACTIVATEAPP:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_ACTIVATE:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_IME_SETCONTEXT:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_IME_NOTIFY:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_GETOBJECT:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_SETFOCUS:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_NCPAINT:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
 	case WM_ERASEBKGND://havent found a good use for this msg yet
 	{
 		return 1;
 		//return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
-	case WM_MOVE:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_GETTEXT:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_GETICON:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_DWMNCRENDERINGCHANGED:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_KILLFOCUS: //TODO(fran): in case I should stop tracking the mouse or things the like
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_SETCURSOR:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
 	case WM_NCMOUSEMOVE:
 	{
 		POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) }; ScreenToClient(state->wnd, &mouse);
-		RECT menurc = UNCAPNC_calc_menu_rc(state);
+		RECT menurc = calc_menu_rc(state);
 		if (wparam == HTMENU || wparam == HTSYSMENU) {
 			//Trackmouse to know when it leaves the nc area
 			TRACKMOUSEEVENT trackmouse{ sizeof(trackmouse) };
@@ -1139,24 +1048,16 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	{
 		if (state->menubar_mouseover_idx_from1) {
 			state->menubar_mouseover_idx_from1 = 0;
-			RECT menurc = UNCAPNC_calc_menu_rc(state);
+			RECT menurc = calc_menu_rc(state);
 			RedrawWindow(state->wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
 		}
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_MOUSEACTIVATE:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_CONTEXTMENU://Interesting (also seems like the defproc of a child asks the parent for it)
-	{
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	case WM_TIMER:
 	{
 		WPARAM timerID = wparam;
 		switch (timerID) {
-		case UNCAPNC_TIMER_MENUDELAY:
+		case NC_TIMER_MENUDELAY:
 		{
 			state->menu_on_delay = false;
 			KillTimer(state->wnd, timerID);
@@ -1180,7 +1081,7 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 							TrackPopupMenu(submenu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, menupt.x, menupt.y, 0, state->wnd, 0);
 							//Set menu delay to stop possible reopening
 							state->menu_on_delay = true;
-							SetTimer(state->wnd, UNCAPNC_TIMER_MENUDELAY, menu_delay_ms, NULL);
+							SetTimer(state->wnd, NC_TIMER_MENUDELAY, menu_delay_ms, NULL);
 							//TODO(fran): here we could pass our client wnd as the owner of the menu
 							//TODO(fran): TPM_RETURNCMD could be interesting
 							//TODO(fran): TPM_RECURSE ?
@@ -1195,144 +1096,92 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			if (!state->menu_on_delay) {
 				if (test_pt_rc(cl_mouse, state->rc_icon)) {
 					POINT mpos{ state->rc_icon.left,state->rc_icon.bottom }; ClientToScreen(state->wnd, &mpos);
-					UNCAPNC_show_rclickmenu(state, mpos);
+					show_rclickmenu(state, mpos);
 					//Set menu delay to stop possible reopening
 					state->menu_on_delay = true;
-					SetTimer(state->wnd, UNCAPNC_TIMER_MENUDELAY, menu_delay_ms, NULL);
+					SetTimer(state->wnd, NC_TIMER_MENUDELAY, menu_delay_ms, NULL);
 					return 0;
 				}
 			}
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
-	case WM_NCLBUTTONUP:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_SYSCOMMAND://Menu and nc buttons related //TODO(fran): maybe I should use this for sending max,min,close
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_CAPTURECHANGED://just a notif
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_ENTERSIZEMOVE://window entered moving/sizing loop
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_SIZING://sent while user is resizing, you can monitor and change size/pos of "drag" rectangle
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_EXITSIZEMOVE:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_MOVING:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_NCRBUTTONDOWN:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
 	case WM_NCRBUTTONUP:
 	{
 		POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
-		UNCAPNC_show_rclickmenu(state, mouse);
+		show_rclickmenu(state, mouse);
 		return 0;
-	} break;
-	case WM_ENTERMENULOOP://notif
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_INITMENU://sent before the menu becomes active, we can modify it before it is displayed <- TODO(fran)
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_MENUSELECT://the user selected a menu item
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_EXITMENULOOP://notif
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_INITMENUPOPUP://sent before a submenu/popup menu is displayed, eg when the user clicks on an item from the menu bar, TODO(fran): here we can modify the menu before it is displayed
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_ENTERIDLE://menu has no more msgs to process in its queue
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_UNINITMENUPOPUP:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_CANCELMODE://system wants us to stop mouse tracking and similar
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_DWMCOLORIZATIONCOLORCHANGED://why opening spy++ generated this msg? what u doing spy++?
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_KEYUP://Non system key released
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_QUERYOPEN://Sent when we are in icon form, aka minimized, and the user wants us restored //TODO(fran): we can use this
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_SYNCPAINT://Interesting
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_KEYDOWN://here we could parse keyboard shortcuts
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_SETTINGCHANGE://also WM_WININICHANGE for older things (yes, same msg, slightly different params)
-		//Sent to all top level windows after someone changes some windows settings with SystemParametersInfo
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_IME_REQUEST://TODO(fran): looks like you can set up the ime wnd from here
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_DEVICECHANGE: //TODO(fran): I keep getting this msg and Im sure that nothing has changed, problaly I secrewed up somewhere
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_ENABLE://Sent when the enabled state is changing
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);//TODO(fran): may be useful
 	} break;
 	case WM_SYSKEYDOWN:
 	{
 		unsigned char vk = (unsigned char)wparam;
 		bool vk_was_down = lparam & (1 << 30); //if true this is a repeated msg, otherwise it's the first time
-		bool alt_is_down = lparam & (1<<29);
+		bool alt_is_down = lparam & (1 << 29);
 		switch (vk) {
 		case VK_F4:
 		{
 			if (!vk_was_down && alt_is_down) {
-				PostMessage(state->wnd, WM_COMMAND, (WPARAM)MAKELONG(UNCAPNC_CLOSE, 0), (LPARAM)state->btn_close);//TODO(fran): should I use WM_CLOSE?
+				PostMessage(state->wnd, WM_COMMAND, (WPARAM)MAKELONG(NC_CLOSE, 0), (LPARAM)state->btn_close);//TODO(fran): should I use WM_CLOSE?
 			}
 			return 0;
 		} break;
 		default:return DefWindowProc(hwnd, msg, wparam, lparam);
 		}
 	} break;
+	#ifdef _DEBUG
+	case WM_NCLBUTTONUP:
+	case WM_SYSCOMMAND://Menu and nc buttons related //TODO(fran): maybe I should use this for sending max,min,close
+	case WM_CAPTURECHANGED://just a notif
+	case WM_ENTERSIZEMOVE://window entered moving/sizing loop
+	case WM_SIZING://sent while user is resizing, you can monitor and change size/pos of "drag" rectangle
+	case WM_EXITSIZEMOVE:
+	case WM_MOVING:
+	case WM_NCRBUTTONDOWN:
+	case WM_ENTERMENULOOP://notif
+	case WM_INITMENU://sent before the menu becomes active, we can modify it before it is displayed <- TODO(fran)
+	case WM_MENUSELECT://the user selected a menu item
+	case WM_EXITMENULOOP://notif
+	case WM_INITMENUPOPUP://sent before a submenu/popup menu is displayed, eg when the user clicks on an item from the menu bar, TODO(fran): here we can modify the menu before it is displayed
+	case WM_ENTERIDLE://menu has no more msgs to process in its queue
+	case WM_UNINITMENUPOPUP:
+	case WM_CANCELMODE://system wants us to stop mouse tracking and similar
+	case WM_DWMCOLORIZATIONCOLORCHANGED://why opening spy++ generated this msg? what u doing spy++?
+	case WM_KEYUP://Non system key released
+	case WM_QUERYOPEN://Sent when we are in icon form, aka minimized, and the user wants us restored //TODO(fran): we can use this
+	case WM_SYNCPAINT://Interesting
+	case WM_KEYDOWN://here we could parse keyboard shortcuts
+	case WM_SETTINGCHANGE://also WM_WININICHANGE for older things (yes, same msg, slightly different params)
+		//Sent to all top level windows after someone changes some windows settings with SystemParametersInfo
+	case WM_IME_REQUEST://TODO(fran): looks like you can set up the ime wnd from here
+	case WM_DEVICECHANGE: //TODO(fran): I keep getting this msg and Im sure that nothing has changed, problaly I secrewed up somewhere
+	case WM_ENABLE://Sent when the enabled state is changing //TODO(fran): may be useful
 	case WM_DISPLAYCHANGE:
+	case WM_MOVE:
+	case WM_GETTEXT:
+	case WM_GETICON:
+	case WM_DWMNCRENDERINGCHANGED:
+	case WM_KILLFOCUS: //TODO(fran): in case I should stop tracking the mouse or things the like
+	case WM_SETCURSOR:
+	case WM_MOUSEACTIVATE:
+	case WM_CONTEXTMENU://Interesting (also seems like the defproc of a child asks the parent for it)
+	case WM_STYLECHANGING:
+	case WM_STYLECHANGED:
+	case WM_PARENTNOTIFY://Different notifs about your childs
+	case WM_WINDOWPOSCHANGING:
+	case WM_SHOWWINDOW:
+	case WM_ACTIVATEAPP:
+	case WM_ACTIVATE:
+	case WM_IME_SETCONTEXT:
+	case WM_IME_NOTIFY:
+	case WM_GETOBJECT:
+	case WM_SETFOCUS:
+	case WM_NCPAINT:
 	{
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
+	#endif
 	default:
+	#ifdef _DEBUG_HWND_MESSAGES
 		if (msg >= 0xC000 && msg <= 0xFFFF) {//String messages for use by applications  
 			//IMPORTANT: a way to find out the name of 0xC000 through 0xFFFF messages
 			//NOTE: the only one I see often is TaskbarButtonCreated, with a different id each time
@@ -1340,32 +1189,36 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			int res = GetClipboardFormatName(msg, arr, 256);
 			return DefWindowProc(hwnd, msg, wparam, lparam);
 		}
-#ifdef _DEBUG
-			Assert(0);
-#else 
+		Assert(0);
+	#else 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
-#endif
+	#endif
 	}
 	return 0;
 }
 
-ATOM init_wndclass_unCap_uncapnc(HINSTANCE inst) {
+ATOM init_wndclass(HINSTANCE inst) {
 	WNDCLASSEXW wcex;
 
 	wcex.cbSize = sizeof(WNDCLASSEX);
 	wcex.style = CS_HREDRAW | CS_VREDRAW;
 	wcex.lpfnWndProc = UncapNcProc;
 	wcex.cbClsExtra = 0;
-	wcex.cbWndExtra = sizeof(unCapNcProcState*);
+	wcex.cbWndExtra = sizeof(State*);
 	wcex.hInstance = inst;
-	wcex.hIcon = LoadIcon(inst, MAKEINTRESOURCE(MYPASS_ICO_LOGO)); //TODO(fran): LoadImage to choose the best size
+	wcex.hIcon = LoadIcon(inst, MAKEINTRESOURCE(ICO_LOGO)); //TODO(fran): LoadImage to choose the best size
 	wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
 	wcex.hbrBackground = NULL;
 	wcex.lpszMenuName = 0;
-	wcex.lpszClassName = unCap_wndclass_uncap_nc;
-	wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(MYPASS_ICO_LOGO)); //TODO(fran): LoadImage to choose the best size
+	wcex.lpszClassName = wndclass;
+	wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(ICO_LOGO)); //TODO(fran): LoadImage to choose the best size
 
 	ATOM class_atom = RegisterClassExW(&wcex);
 	Assert(class_atom);
 	return class_atom;
+}
+struct pre_post_main {
+	pre_post_main() { init_wndclass(GetModuleHandleW(nil)); }
+	~pre_post_main() {}
+} static const PREMAIN_POSTMAIN;
 }
