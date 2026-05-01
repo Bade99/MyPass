@@ -1,10 +1,8 @@
 #pragma once
-#include <Windows.h>
-#include <windowsx.h>
-#include "unCap_Global.h"
-#include "unCap_Helpers.h"
-#include "unCap_Renderer.h"
-#include "windows_undoc.h"
+#include "win_sdk.h"
+#include "global.h"
+#include "helpers.h"
+#include "renderer.h"
 
 //TODO(fran): new class btn_text_or_img: if the text fits then draw it, otherwise render the img, great for cool resizing that allows for the same control to take different shapes but maintain all functionality
 
@@ -13,82 +11,43 @@
 //NOTE: this button follows the standard button tradition of getting the msg to send to the parent from the hMenu param of CreateWindow/Ex
 //NOTE: when clicked notifies the parent through WM_COMMAND with LOWORD(wParam)= msg number specified in hMenu param of CreateWindow/Ex ; HIWORD(wParam)=0 ; lParam= HWND of the button. Just like the standard button
 
-constexpr TCHAR unCap_wndclass_button[] = TEXT("unCap_wndclass_button");
+namespace button {
 
-static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
+auto get_state(HWND wnd) { _control_create_function__get_state }
 
-struct ButtonProcState { //NOTE: must be initialized to zero
-	HWND wnd;
-	HWND parent;
+void set_theme(HWND wnd, const Theme& src) { _control_create_function__set_theme }
 
-	bool onMouseOver;
-	bool onLMouseClick;//The left click is being pressed on the background area
-	bool OnMouseTracking; //Left click was pressed in our bar and now is still being held, the user will probably be moving the mouse around, so we want to track it to move the scrollbar
+void set_user_data(HWND wnd, void* user_data) { _control_create_function__set_user_data }
 
-	UINT msg_to_send;
+void set_functions(HWND wnd, const Functions& functions) { _control_create_function__set_functions }
 
-	HFONT font;
-
-	HBRUSH br_border, br_bk, br_fore, br_bkpush, br_bkmouseover;
-
-	HICON icon;
-	HBITMAP bmp;
-};
-
-void init_wndclass_unCap_button(HINSTANCE instance) {
-	WNDCLASSEXW button;
-
-	button.cbSize = sizeof(button);
-	button.style = CS_HREDRAW | CS_VREDRAW;
-	button.lpfnWndProc = ButtonProc;
-	button.cbClsExtra = 0;
-	button.cbWndExtra = sizeof(ButtonProcState*);
-	button.hInstance = instance;
-	button.hIcon = NULL;
-	button.hCursor = LoadCursor(nullptr, IDC_ARROW);
-	button.hbrBackground = NULL;
-	button.lpszMenuName = NULL;
-	button.lpszClassName = unCap_wndclass_button;
-	button.hIconSm = NULL;
-
-	ATOM class_atom = RegisterClassExW(&button);
-	Assert(class_atom);
+void notify_on_click(State& state) {
+	if (state.functions.on_click) state.functions.on_click(state.user_data);
+	else PostMessage(state.parent, WM_COMMAND, (WPARAM)MAKELONG(state.msg_to_send, 0), (LPARAM)state.wnd);
 }
 
-ButtonProcState* UNCAPBTN_get_state(HWND hwnd) {
-	ButtonProcState* state = (ButtonProcState*)GetWindowLongPtr(hwnd, 0);//INFO: windows recomends to use GWL_USERDATA https://docs.microsoft.com/en-us/windows/win32/learnwin32/managing-application-state-
-	return state;
-}
-
-//NOTE: any NULL HBRUSH remains unchanged
-void UNCAPBTN_set_brushes(HWND uncap_btn, BOOL repaint, HBRUSH border_br, HBRUSH bk_br, HBRUSH fore_br, HBRUSH bkpush_br, HBRUSH bkmouseover_br) {
-	ButtonProcState* state = UNCAPBTN_get_state(uncap_btn);
-	if (state) {
-		if (border_br)state->br_border = border_br;
-		if (bk_br)state->br_bk = bk_br;
-		if (fore_br)state->br_fore = fore_br;
-		if (bkpush_br)state->br_bkpush = bkpush_br;
-		if (bkmouseover_br)state->br_bkmouseover = bkmouseover_br;
-		if (repaint)InvalidateRect(state->wnd, NULL, TRUE);
+void set_selected(HWND btn, bool selected) {
+	State& state = *get_state(btn);
+	if (state.selected != selected) {
+		state.selected = selected;
+		ask_window_for_repaint(btn);
 	}
 }
 
-static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
-
-	ButtonProcState* state = UNCAPBTN_get_state(hwnd);
-	//Assert(state); //NOTE: cannot check thanks to the grandeur of windows' msgs before WM_NCCREATE
+static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+	State& state = *get_state(hwnd);
 	switch (msg) {
 	case BCM_GETIDEALSIZE:
 	{
 		SIZE* sz = (SIZE*)lparam;//NOTE: all sizes are relative to the entire button, not just the img or text
-		DWORD style = (DWORD)GetWindowLongPtr(state->wnd, GWL_STYLE);
+		DWORD style = (DWORD)GetWindowLongPtr(state.wnd, GWL_STYLE);
 		if (sz->cx) { //calculate cy based on cx
 			if (style & BS_ICON || style & BS_BITMAP) {
 				sz->cy = sz->cx; //we always assume that imgs are square
 			}
 			else { //we got text
-				HFONT font = state->font;
-				HDC dc = GetDC(state->wnd); defer{ ReleaseDC(state->wnd,dc); };
+				HFONT font = state.theme.font;
+				HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd,dc); };
 				if (font) (HFONT)SelectObject(dc, (HGDIOBJ)font);
 				TEXTMETRIC tm; GetTextMetrics(dc, &tm);
 				sz->cy = (int)((float)tm.tmHeight * 1.2f);
@@ -96,22 +55,22 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		}
 		else { //calculate cx and cy
 			if (style & BS_ICON) {
-				MYICON_INFO iconnfo = MyGetIconInfo(state->icon);
-				sz->cx = iconnfo.nWidth;
-				sz->cy = iconnfo.nHeight;
+				auto iconnfo = MyGetIconInfo(state.theme.icon);
+				sz->cx = iconnfo.w;
+				sz->cy = iconnfo.h;
 			}
 			else if (style & BS_BITMAP) {
-				BITMAP bitmap; GetObject(state->bmp, sizeof(bitmap), &bitmap);
+				BITMAP bitmap; GetObject(state.theme.bmp, sizeof(bitmap), &bitmap);
 				sz->cx = bitmap.bmWidth;
 				sz->cy = bitmap.bmHeight;
 			}
 			else { //we got text
-				HDC dc = GetDC(state->wnd); defer{ ReleaseDC(state->wnd,dc); };
-				if (state->font) (HFONT)SelectObject(dc, (HGDIOBJ)state->font);
+				HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd,dc); };
+				if (state.theme.font) (HFONT)SelectObject(dc, (HGDIOBJ)state.theme.font);
 				TEXTMETRIC tm; GetTextMetrics(dc, &tm);
 
-				TCHAR Text[40]; //TODO(fran): this could not be more stupid, I should have the text, at least with a str
-				int len = (int)SendMessage(state->wnd, WM_GETTEXT, ARRAYSIZE(Text), (LPARAM)Text);
+				TCHAR Text[max_expected_text_length];
+				int len = (int)SendMessage(state.wnd, WM_GETTEXT, ARRAYSIZE(Text), (LPARAM)Text);
 				
 				GetTextExtentPoint32(dc, Text, len, sz);
 				sz->cx = (int)((float)sz->cx * 1.2f);
@@ -122,35 +81,34 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 	} break;
 	case BM_GETIMAGE:
 	{
-		if (wparam == IMAGE_BITMAP) return (LRESULT)state->bmp;
-		else if (wparam == IMAGE_ICON) return (LRESULT)state->icon;
+		if (wparam == IMAGE_BITMAP) return (LRESULT)state.theme.bmp;
+		else if (wparam == IMAGE_ICON) return (LRESULT)state.theme.icon;
 		return 0;
 	}
 	case BM_SETIMAGE://TODO: in this call you decide whether to show both img and txt, only txt or only img, see doc
 	{
 		if (wparam == IMAGE_BITMAP) {
-			HBITMAP old = state->bmp;
-			state->bmp = (HBITMAP)lparam;
+			HBITMAP old = state.theme.bmp;
+			state.theme.bmp = (HBITMAP)lparam;
 			return (LRESULT)old;
 		}
 		else if (wparam == IMAGE_ICON) {
-			HICON old = state->icon;
-			state->icon = (HICON)lparam;
+			HICON old = state.theme.icon;
+			state.theme.icon = (HICON)lparam;
 			return (LRESULT)old;
 		}
 		return 0;
 	} break;
 	case WM_CANCELMODE:
 	{
-		printf("\n\n\nWM_CANCELMODE\n\n\n");
-		//We got canceled by the system, not really sure what it means but doc says we should cancel everything mouse capture related, so stop tracking
-		if (state->OnMouseTracking) {
+		//We got canceled/deactivated, but doc says we should cancel everything mouse capture related, so stop tracking
+		if (state.OnMouseTracking) {
 			ReleaseCapture();//stop capturing the mouse
-			state->OnMouseTracking = false;
+			state.OnMouseTracking = false;
 		}
-		state->onLMouseClick = false;
-		state->onMouseOver = false;
-		InvalidateRect(state->wnd, NULL, TRUE);
+		state.onLMouseClick = false;
+		state.onMouseOver = false;
+		InvalidateRect(state.wnd, NULL, TRUE);
 		return 0;
 	} break;
 	case WM_NCDESTROY:
@@ -166,39 +124,39 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 	case WM_CAPTURECHANGED:
 	{
 		//We lost mouse capture
-		InvalidateRect(state->wnd, NULL, TRUE);
+		ask_window_for_repaint(state.wnd);
 		return 0;
 	} break;
 	case WM_LBUTTONUP:
 	{
-		if (state->OnMouseTracking) {
-			if (state->onMouseOver) PostMessage(state->parent, WM_COMMAND, (WPARAM)MAKELONG(state->msg_to_send, 0), (LPARAM)state->wnd);//notify parent
+		if (state.OnMouseTracking) {
+			if (state.onMouseOver) notify_on_click(state);
 			ReleaseCapture();//stop capturing the mouse
-			state->OnMouseTracking = false;
+			state.OnMouseTracking = false;
 		}
-		state->onLMouseClick = false;
+		state.onLMouseClick = false;
 
 		return 0;
 	} break;
 	case WM_LBUTTONDOWN:
 	{
 		//Left click is down
-		if (state->onMouseOver) {
+		if (state.onMouseOver) {
 			//Click happened inside the button, so we want to capture the mouse movement in case the user starts moving the mouse trying to scroll
 
-			//TODO(fran): maybe first check that we arent already tracking (!state->OnMouseTrackingSb)
-			SetCapture(state->wnd);//We want to keep capturing the mouse while the user is still pressing some button, even if the mouse leaves our client area
-			state->OnMouseTracking = true;
-			state->onLMouseClick = true;
+			//TODO(fran): maybe first check that we arent already tracking (!state.OnMouseTrackingSb)
+			SetCapture(state.wnd);//We want to keep capturing the mouse while the user is still pressing some button, even if the mouse leaves our client area
+			state.OnMouseTracking = true;
+			state.onLMouseClick = true;
 		}
-		InvalidateRect(state->wnd, NULL, TRUE);
+		ask_window_for_repaint(state.wnd);
 		return 0;
 	} break;
 	case WM_MOUSELEAVE:
 	{
 		//we asked TrackMouseEvent for this so we can update when the mouse leaves our client area, which we dont get notified about otherwise and is needed, for example when the user hovers on top the button and then hovers outside the client area
-		state->onMouseOver = false;
-		InvalidateRect(state->wnd, NULL, TRUE);
+		state.onMouseOver = false;
+		ask_window_for_repaint(state.wnd);
 		return 0;
 	} break;
 	case WM_MOUSEMOVE:
@@ -208,22 +166,22 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };//client coords, relative to upper-left corner
 
 		//Store previous state
-		bool prev_onMouseOver = state->onMouseOver;
+		bool prev_onMouseOver = state.onMouseOver;
 
-		RECT rc; GetClientRect(state->wnd, &rc);
+		RECT rc; GetClientRect(state.wnd, &rc);
 		if (test_pt_rc(mouse, rc)) {//Mouse is inside the button
-			state->onMouseOver = true;
+			state.onMouseOver = true;
 		}
 		else {//Mouse is outside the button
-			state->onMouseOver = false;
+			state.onMouseOver = false;
 		}
 
-		bool state_change = prev_onMouseOver != state->onMouseOver;
+		bool state_change = prev_onMouseOver != state.onMouseOver;
 		if (state_change) {
-			InvalidateRect(state->wnd, NULL, TRUE);
+			InvalidateRect(state.wnd, NULL, TRUE);
 			TRACKMOUSEEVENT track;
 			track.cbSize = sizeof(track);
-			track.hwndTrack = state->wnd;
+			track.hwndTrack = state.wnd;
 			track.dwFlags = TME_LEAVE;
 			TrackMouseEvent(&track);
 		}
@@ -248,7 +206,7 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 			3. If there is no class cursor, set the cursor to the arrow cursor.
 		*/
 		//NOTE: I think this is good enough for now
-		return DefWindowProc(hwnd, msg, wparam, lparam);
+		return handle_wm_setcursor(hwnd, msg, wparam, lparam, state.theme.cursor);
 	} break;
 	case WM_NCHITTEST:
 	{
@@ -258,7 +216,7 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };//Screen coords, relative to upper-left corner
 
 		// Get the window rectangle.
-		RECT rw; GetWindowRect(state->wnd, &rw);
+		RECT rw; GetWindowRect(state.wnd, &rw);
 
 		LRESULT hittest = HTNOWHERE;
 
@@ -309,9 +267,9 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	case WM_NCCREATE: { //1st msg received
-		ButtonProcState* st = (ButtonProcState*)calloc(1, sizeof(ButtonProcState));
+		State* st = (State*)calloc(1, sizeof(State));
 		Assert(st);
-		SetWindowLongPtr(hwnd, 0, (LONG_PTR)st);
+		set_window_state(hwnd, st);
 		CREATESTRUCT* creation_nfo = (CREATESTRUCT*)lparam;
 		st->parent = creation_nfo->hwndParent;
 		st->wnd = hwnd;
@@ -336,18 +294,18 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		//This function is insane, it actually does painting on it's own without telling nobody, so we need a way to kill that
 		//I think there are a couple approaches that work, I took this one which works since windows 95 (from what the article says)
 		//Many thanks for yet another hack http://www.catch22.net/tuts/win32/custom-titlebar
-		LONG_PTR  dwStyle = GetWindowLongPtr(state->wnd, GWL_STYLE);
+		LONG_PTR  dwStyle = GetWindowLongPtr(state.wnd, GWL_STYLE);
 		// turn off WS_VISIBLE
-		SetWindowLongPtr(state->wnd, GWL_STYLE, dwStyle & ~WS_VISIBLE);
+		SetWindowLongPtr(state.wnd, GWL_STYLE, dwStyle & ~WS_VISIBLE);
 
 		// perform the default action, minus painting
-		LRESULT ret = DefWindowProc(state->wnd, msg, wparam, lparam);
+		LRESULT ret = DefWindowProc(state.wnd, msg, wparam, lparam);
 
 		// turn on WS_VISIBLE
-		SetWindowLongPtr(state->wnd, GWL_STYLE, dwStyle);
+		SetWindowLongPtr(state.wnd, GWL_STYLE, dwStyle);
 
 		// perform custom painting, aka dont and do what should be done, repaint, it's really not that expensive for our case, we barely call WM_SETTEXT, and it can be optimized out later
-		RedrawWindow(state->wnd, NULL, NULL, RDW_INVALIDATE);
+		RedrawWindow(state.wnd, NULL, NULL, RDW_INVALIDATE);
 
 		return ret;
 	} break;
@@ -356,55 +314,51 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		//IMPORTANT TODO(fran): fix rendering bugs, sometimes part of the borders dont get drawn, I think I found the bug, border br doesnt adapt like bk, we have push, mouseover, etc, the border is just one so it's probably creating inconsistency problems
 
 		PAINTSTRUCT ps; //TODO(fran): we arent using the rectangle from the ps, I think we should for performance
-		HDC dc = BeginPaint(state->wnd, &ps);
-
-		RECT rc; GetClientRect(state->wnd, &rc);
-
 		//TODO(fran): Check that we are going to paint something new
-		HBRUSH oldbr, bkbr;
-		if (state->onMouseOver && state->onLMouseClick) {
-			bkbr = state->br_bkpush;
+		HDC dc = BeginPaint(state.wnd, &ps); defer{ EndPaint(state.wnd, &ps); };
+
+		RECT rc; GetClientRect(state.wnd, &rc);
+		auto w = RECTW(rc), h = RECTH(rc);
+		auto min_dim = minimum(w, h);
+
+		DWORD style = (DWORD)GetWindowLongPtr(state.wnd, GWL_STYLE);
+		const auto& theme = state.theme;
+		HBRUSH bkbr, forebr, borderbr = theme.brushes.border.normal;
+		if ((state.onMouseOver && state.onLMouseClick) || state.selected) {
+			bkbr = theme.brushes.bk.clicked;
+			forebr = theme.brushes.foreground.clicked;
 		}
-		else if (state->onMouseOver || state->OnMouseTracking || (GetFocus()==state->wnd)) {
-			bkbr = state->br_bkmouseover;
+		else if (state.onMouseOver || state.OnMouseTracking || (GetFocus()==state.wnd)) {
+			bkbr = theme.brushes.bk.mouseover;
+			forebr = theme.brushes.foreground.mouseover;
 		}
 		else {
-			bkbr = state->br_bk;
+			bkbr = theme.brushes.bk.normal;
+			forebr = theme.brushes.foreground.normal;
 		}
 		SetBkColor(dc, ColorFromBrush(bkbr));
-		oldbr = SelectBrush(dc, bkbr);
+		HBRUSH oldbr = SelectBrush(dc, bkbr); defer{ SelectBrush(dc, oldbr); };
 
-		//TODO(clipping)
-		int borderSize = 1;
-		HBRUSH borderbr = state->br_border;
-		HPEN pen = CreatePen(PS_SOLID, borderSize, ColorFromBrush(borderbr)); //border
+		//TODO: clip text rendering to this
+		urender::draw_background(dc, rc, bkbr, borderbr, theme.dimensions);
 
-		HPEN oldpen = (HPEN)SelectObject(dc, pen);
-
-		//Border
-		Rectangle(dc, rc.left, rc.top, rc.right, rc.bottom); //uses pen for border and brush for bk
-
-		SelectObject(dc, oldpen);
-		DeleteObject(pen);
-
-		DWORD style = (DWORD)GetWindowLongPtr(state->wnd, GWL_STYLE);
 		if (style & BS_ICON) {//Here will go buttons that only have an icon
 
-			HICON icon = state->icon;
+			HICON icon = state.theme.icon;
 			//NOTE: we assume all icons to be squares 1:1
-			MYICON_INFO iconnfo = MyGetIconInfo(icon);
-			int max_sz = (int)((float)min(RECTWIDTH(rc), RECTHEIGHT(rc)) * .8f);
+			auto iconnfo = MyGetIconInfo(icon);
+			int max_sz = (int)((float)min_dim * .8f);
 			int icon_height = max_sz;
 			int icon_width = icon_height;
-			int icon_align_height = (RECTHEIGHT(rc) - icon_height) / 2;
-			int icon_align_width = (RECTWIDTH(rc) - icon_width) / 2;
-			urender::draw_icon(dc, icon_align_height, icon_align_width, icon_width, icon_height, icon, 0, 0, iconnfo.nWidth, iconnfo.nHeight);
+			int icon_align_height = (h - icon_height) / 2;
+			int icon_align_width = (w - icon_width) / 2;
+			urender::draw_icon(dc, icon_align_height, icon_align_width, icon_width, icon_height, icon, 0, 0, iconnfo.w, iconnfo.h);
 		}
 		else if (style & BS_BITMAP) {
-			BITMAP bitmap; GetObject(state->bmp, sizeof(bitmap), &bitmap);
+			BITMAP bitmap; GetObject(state.theme.bmp, sizeof(bitmap), &bitmap);
 			if (bitmap.bmBitsPixel == 1) {
 				//TODO(fran):unify rect calculation with icon
-				int max_sz = roundNdown(bitmap.bmWidth, (int)((float)min(RECTWIDTH(rc), RECTHEIGHT(rc)) * .8f)); //HACK: instead use png + gdi+ + color matrices
+				int max_sz = roundNdown(bitmap.bmWidth, (int)((float)min_dim * .8f)); //HACK: instead use png + gdi+ + color matrices
 				if (!max_sz) {
 					if ((bitmap.bmWidth % 2) == 0) max_sz = bitmap.bmWidth / 2;
 					else max_sz = bitmap.bmWidth; //More HACKs
@@ -413,19 +367,20 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 
 				int bmp_height = max_sz;
 				int bmp_width = bmp_height;
-				int bmp_align_height = (RECTHEIGHT(rc) - bmp_height) / 2;
-				int bmp_align_width = (RECTWIDTH(rc) - bmp_width) / 2;
-				urender::draw_mask(dc, bmp_align_width, bmp_align_height, bmp_width, bmp_height, state->bmp, 0, 0, bitmap.bmWidth, bitmap.bmHeight, state->br_fore);
+				int bmp_align_height = (h - bmp_height) / 2;
+				int bmp_align_width = (w - bmp_width) / 2;
+				urender::draw_mask(dc, bmp_align_width, bmp_align_height, bmp_width, bmp_height, state.theme.bmp, 0, 0, bitmap.bmWidth, bitmap.bmHeight, forebr);
 			}
 		}
 		else { //Here will go buttons that only have text
-			HFONT font = state->font;
+			HFONT font = state.theme.font;
 			if (font) {//if font == NULL then it is using system font(default I assume)
 				(HFONT)SelectObject(dc, (HGDIOBJ)font);
 			}
-			SetTextColor(dc, ColorFromBrush(state->br_fore));
-			TCHAR Text[40];
-			int len = (int)SendMessage(state->wnd, WM_GETTEXT, ARRAYSIZE(Text), (LPARAM)Text);
+			SetTextColor(dc, ColorFromBrush(forebr));
+			auto oldbkmode = SetBkMode(dc, TRANSPARENT); defer{ SetBkMode(dc, oldbkmode); };
+			TCHAR Text[max_expected_text_length];
+			int len = (int)SendMessage(state.wnd, WM_GETTEXT, ARRAYSIZE(Text), (LPARAM)Text);
 
 			// Calculate vertical position for the item string so that it will be vertically centered
 			SIZE txt_sz; GetTextExtentPoint32(dc, Text, len, &txt_sz);
@@ -435,15 +390,11 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 			int xPos = (rc.right - rc.left) / 2;
 			TextOut(dc, xPos, yPos, Text, len);
 		}
-
-		SelectBrush(dc, oldbr);
-		EndPaint(state->wnd, &ps);
-
 		return 0;
 	} break;
 	case WM_DESTROY:
 	{
-		free(state);
+		free(&state);
 	}break;
 	case WM_STYLECHANGING:
 	{
@@ -457,13 +408,13 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 	} break;
 	case WM_SETFONT:
 	{
-		state->font = (HFONT)wparam;
-		if ((BOOL)LOWORD(lparam) == TRUE) InvalidateRect(state->wnd, NULL, TRUE);
+		state.theme.font = (HFONT)wparam;
+		if ((BOOL)LOWORD(lparam) == TRUE) ask_window_for_repaint(state.wnd);
 		return 0;
 	} break;
 	case WM_GETFONT:
 	{
-		return (LRESULT)state->font;
+		return (LRESULT)state.theme.font;
 	} break;
 	case WM_GETICON:
 	{
@@ -480,7 +431,7 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 	case WM_SETFOCUS: //Button has WS_TABSTOP style and we got keyboard focus thanks to that
 	{
 		//TODO(fran): repaint and show as if the user is hovering over the button
-		InvalidateRect(state->wnd, NULL, TRUE);
+		InvalidateRect(state.wnd, NULL, TRUE);
 		return 0;
 	}
 	case WM_KEYUP:
@@ -499,28 +450,29 @@ static LRESULT CALLBACK ButtonProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		switch (c) {
 		case VK_TAB://Tab
 		{
-			SetFocus(GetNextDlgTabItem(GetParent(state->wnd), state->wnd, FALSE));
+			SetFocus(GetNextDlgTabItem(GetParent(state.wnd), state.wnd, FALSE));
 		}break;
 		case VK_RETURN://Received when the user presses the "enter" key //Carriage Return aka \r
 		{
-			//SendMessage(state->wnd, WM_LBUTTONDOWN, ); //TODO(fran): repaint and show as if the user clicked the button
-			PostMessage(state->parent, WM_COMMAND, (WPARAM)MAKELONG(state->msg_to_send, 0), (LPARAM)state->wnd);//notify parent
-			
+			//SendMessage(state.wnd, WM_LBUTTONDOWN, ); //TODO(fran): send this to cause repaint and thus make it look as if the user clicked the button
+			notify_on_click(state);
 		}break;
 		}
 		return 0;
 	} break;
 	case WM_KILLFOCUS:
 	{
-		InvalidateRect(state->wnd, NULL, TRUE);
+		ask_window_for_repaint(state.wnd);
 		return 0;
 	} break;
 	default:
-#ifdef _DEBUG
+#ifdef _DEBUG_HWND_MESSAGES
 		Assert(0);
 #else 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 #endif
 	}
 	return 0;
+}
+_init_wndclass_at_startup;
 }
