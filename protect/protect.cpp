@@ -1,88 +1,68 @@
 ﻿
-//TODO(fran): get a non stolen app icon
-//TODO(fran): add a note about password breaches, eg visit this page "" or a similar one to make sure non of your passwords on different pages has been breached
-//TODO(fran): when hiding the search window setfocus back to the edit control
-//TODO(fran): msg asking whether they want to create a new user (solves the issue of person inputting user wrong and getting an empty file)
+//TODO(fran): add a note about password breaches, eg visit this page "" or a similar one to make sure non of your passwords on different pages have been breached
 
 //IDEA: file manager, podés crear multiples archivos con una contra, y distintos tipos de archivos (editor de texto, grilla)
 
-#include "resource.h"
-#include "targetver.h"
-#define WIN32_LEAN_AND_MEAN // Exclude rarely-used stuff from Windows headers
-#include <windows.h>
-#include <windowsx.h>
-#include <Shlwapi.h>
-#include <vector>
-#include <algorithm> //any_of
-#include "unCap_Renderer.h"
-#include "LANGUAGE_MANAGER.h"
-#include "unCap_Global.h"
-#include "unCap_Serialization.h"
-#include "protect_Core.h"
+
+#include "win_sdk.h" //include first before anything so we don't run the risk of breaking anything with our macros
+
+
+//----------------------Warnings-----------------------:
+#pragma warning (disable: 4244) // C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
+#pragma warning (disable: 4312) // C4312 : 'type cast' : conversion from 'int' to 'HMENU' of greater size
+
 
 #define WM_NEXT (WM_USER+5000) //proceed to the next window in the state machine
 #define WM_RESET (WM_USER+5001) //clear critical information
-#define WM_START (WM_USER+5002) //you are all set up, start whatever it is you do, this is always a SendMessage, you must use all the init data right there, it's not guaranteed to be there after this msg finishes
+#define WM_START (WM_USER+5002) //you are all set up, start whatever it is you do, this is always a SendMessage, you must use all the init data right there, it's not guaranteed to be there after this msg finishes (return 1 if sucessfully started, 0 otherwise to go back to the prior wnd)
 
-//+ Fixing windows' bad design: //TODO(fran): move to richedit .h file
-LPCWSTR get_richedit_classW(int setclass = 0 /*for internal use, not end user*/) {
-    static int v = 1;
-    if (setclass) v = setclass;
-    switch (v) {
-    case 1: return L"RICHEDIT";     //v1.0
-    case 2:
-    case 3: return L"RichEdit20W"; //v3.0 or 2.0
-    case 4: return L"RICHEDIT50W";  //v4.1
-    default: return L"";
-    }
 
-}
+#include "resource.h"
+#include "platform.h"
+#include "macros.h"
+#include "renderer.h"
+#include "language_manager.h"
+#include "global.h"
+#include "serialization.h"
+#include "core.h"
 
-BOOL load_richedit() {//NOTE: use RICHEDIT_CLASS for the window's class name
-    int success = false;
-    if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Msftedit.dll")); if (success)success = 4; } //v4.1
-    if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Riched20.dll")); if (success)success = 2; } //v3.0 or 2.0
-    if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Riched32.dll")); if (success)success = 1; } //v1.0
-    get_richedit_classW(success);
-    return success;
-}
-//+
+#include "button_types.h"
+#include "toast_types.h"
+#include "nonclient_types.h"
+#include "scrollbar_types.h"
+#include "text_types.h"
+#include "table_types.h"
+#include "search_types.h"
+#include "password_editor_types.h"
 
-//----------------------GLOBALS----------------------:
-i32 n_tabs = 0;//Needed for serialization
+#include "img.h"
+#include "style.h"
 
-UNCAP_COLORS unCap_colors{ 0 };
-UNCAP_FONTS unCap_fonts{ 0 };
+#include "page.h"
+#include "custom.h"
+#include "button.h"
+#include "text.h"
+#include "search.h"
+#include "nonclient.h"
+#include "toast.h"
+#include "scrollbar.h"
+#include "table.h"
+#include "password_editor.h"
+#include "list.h"
+#include "combo.h"
 
-constexpr cstr app_name[] = _t("MyPass");
+#include "login.h"
+#include "editor.h"
 
-#ifdef _DEBUG
-//TODO(fran): change to logging
-#define _SHOWCONSOLE
-#else
-//#define _SHOWCONSOLE
-#endif
-
-#include "unCap_button.h"
-#include "unCap_edit_oneline.h"
-#include "unCap_uncapnc.h"
-#include "protect_login.h"
-#include "unCap_scrollbar.h"
-#include "protect_show_passwords.h"
-
-//----------------------LINKER----------------------:
-#pragma comment(lib, "comctl32.lib" ) //common controls lib
-#pragma comment(lib,"shlwapi.lib") //strcpynw
-#pragma comment(lib,"UxTheme.lib") // setwindowtheme
-#pragma comment(lib,"Imm32.lib") // IME related stuff
-
-#pragma comment(linker,"/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"") //for multiline edit control
+#include "debug.h"
 
 str GetFontFaceName() {
     //Font guidelines: https://docs.microsoft.com/en-us/windows/win32/uxguide/vis-fonts
     //Stock fonts: https://docs.microsoft.com/en-us/windows/win32/gdi/using-a-stock-font-to-draw-text
 
     //TODO(fran): can we take the best codepage from each font and create our own? (look at font linking & font fallback)
+    //TODO(fran): case insensitive comparison
+    //TODO(fran): speed up: use a custom allocator that starts by performing a single wchar_t[2500][22] allocation instead of using individually allocated strings
 
     //We looked at 2195 fonts, this is what's left
     //Options:
@@ -91,177 +71,238 @@ str GetFontFaceName() {
     //-Microsoft YaHei or UI (look the same,good txt,good jp) (6 codepages) (supported on most versions of windows)
     //-Microsoft JhengHei or UI (look the same,good txt,ok jp) (3 codepages) (supported on most versions of windows)
 
-    i64 cnt = StartCounter(); defer{ printf("ELAPSED: %f ms\n",EndCounter(cnt)); };
+    i64 cnt = StartCounter(); defer{ printf("ELAPSED3: %f ms\n",EndCounter(cnt)); };
 
-    HDC dc = GetDC(GetDesktopWindow()); defer{ ReleaseDC(GetDesktopWindow(),dc); }; //You can use any hdc, but not NULL
-    std::vector<str> fontnames;
+    HDC dc = GetDC(GetDesktopWindow()); defer{ ReleaseDC(GetDesktopWindow(),dc); };
+    std::set<str> fontnames;
     EnumFontFamiliesEx(dc, NULL
-        , [](const LOGFONT* lpelfe, const TEXTMETRIC* /*lpntme*/, DWORD /*FontType*/, LPARAM lParam)->int {((std::vector<str>*)lParam)->push_back(lpelfe->lfFaceName); return TRUE; }
+        , [](const LOGFONT* lpelfe, const TEXTMETRIC* /*lpntme*/, DWORD /*FontType*/, LPARAM lParam) -> int {
+            ((std::set<str>*)lParam)->insert(lpelfe->lfFaceName);
+            return TRUE;
+        }
     , (LPARAM)&fontnames, NULL);
 
-    const TCHAR* requested_fontname[] = { TEXT("Segoe UI"), TEXT("Arial Unicode MS"), TEXT("Microsoft YaHei"), TEXT("Microsoft YaHei UI")
-                                        , TEXT("Microsoft JhengHei"), TEXT("Microsoft JhengHei UI") };
+    const TCHAR* requested_fontname[] = { TEXT("Segoe UI"), TEXT("Arial Unicode MS"), TEXT("Microsoft YaHei"), TEXT("Microsoft YaHei UI"), TEXT("Microsoft JhengHei"), TEXT("Microsoft JhengHei UI") };
 
-    for (int i = 0; i < ARRAYSIZE(requested_fontname); i++)
-        if (std::any_of(fontnames.begin(), fontnames.end(), [f = requested_fontname[i]](str s) {return !s.compare(f); })) return requested_fontname[i];
+    for (const auto requested_font : requested_fontname)
+        if (fontnames.find(requested_font) != fontnames.end())
+            return requested_font;
 
     return TEXT("");
 }
 
-int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
-{
-    //if (!cmd && !PathFileExists(cmd)) {
-    //    MessageBox(0, _t("You must specify a valid file to decrypt through the command line parameter"), _t("Error - Invalid File"), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
-    //    return 0;
-    //}
-    //Assert(sizeof(*cmd) > 1);
-
-    bool dpi_aware = SetProcessDPIAware(); Assert(dpi_aware); //TODO(fran): only for Windows Vista and above //TODO(fran): this is only sort of dpi aware, we tell windows that we check for dpi the first time but that never check it again, therefore if dpi changes after we already loaded we will be scaled by windows, but at least we look correct as long as the user doesnt change their current dpi (also this means that when we call GetDpiForSystem we will always get the same value, the dpi at the moment the application started)
-    //https://docs.microsoft.com/en-us/windows/win32/hidpi/setting-the-default-dpi-awareness-for-a-process
-    //https://github.com/tringi/win32-dpi/blob/master/win32-dpi.cpp
-
-    urender::init(); defer{ urender::uninit(); };
-
-#ifdef _SHOWCONSOLE
-    AllocConsole();
-    FILE* ___s; defer{ fclose(___s); };
-    freopen_s(&___s, "CONIN$", "r", stdin);
-    freopen_s(&___s, "CONOUT$", "w", stdout);
-    freopen_s(&___s, "CONOUT$", "w", stderr);
-#endif
-
+void setup_fonts() {
     LOGFONT lf{ 0 };
     lf.lfQuality = CLEARTYPE_QUALITY;
     lf.lfHeight = DPI(-15);
     //INFO: by default if I dont set faceName it uses "Modern", looks good but it lacks some charsets
     StrCpyN(lf.lfFaceName, GetFontFaceName().c_str(), ARRAYSIZE(lf.lfFaceName));
 
-    unCap_fonts.General = CreateFontIndirect(&lf);
-    Assert(unCap_fonts.General);
+    fonts.General = CreateFontIndirect(&lf);
+    Assert(fonts.General);
+
+    auto default_weight = lf.lfWeight;
+    lf.lfWeight = FW_BOLD;
+    fonts.GeneralBold = CreateFontIndirect(&lf);
+    Assert(fonts.GeneralBold);
+    lf.lfWeight = default_weight;
+
 
     lf.lfHeight = (LONG)((float)GetSystemMetrics(SM_CYMENU) * .85f);
 
-    unCap_fonts.Menu = CreateFontIndirectW(&lf);
-    Assert(unCap_fonts.Menu);
+    fonts.Menu = CreateFontIndirectW(&lf);
+    Assert(fonts.Menu);
 
-    constexpr wchar_t serialization_folder[] = L"\\MyPass";
+    atexit([]() { for (auto& f : fonts.all) if (f) { DeleteObject(f); f = nil; } });
+}
+
+void setup_dpi_awareness() {
+    bool dpi_aware = SetProcessDPIAware(); Assert(dpi_aware); //TODO(fran): only for Windows Vista and above //TODO(fran): this is only sort of dpi aware, we tell windows that we check for dpi the first time but that never check it again, therefore if dpi changes after we already loaded we will be scaled by windows, but at least we look correct as long as the user doesnt change their current dpi (also this means that when we call GetDpiForSystem we will always get the same value, the dpi at the moment the application started)
+    //https://docs.microsoft.com/en-us/windows/win32/hidpi/setting-the-default-dpi-awareness-for-a-process
+    //https://github.com/tringi/win32-dpi/blob/master/win32-dpi.cpp
+}
+
+void ensure_close_windows(HWND login, HWND editor) {
+    /**
+     * When a window is closed we destroy it and send the quit message to the app.
+     * That does not mean that other open windows are automatically destroyed,
+     * so we do it manually to allow them to exit gracefully.
+     */
+    constexpr auto& nonclient = nonclient::wndclass;
+    constexpr auto sz = ARRAYSIZE(nonclient);
+    WCHAR test_class[sz];
+    for (auto w : {login, editor})
+        if (IsWindow(w) && GetClassNameW(w, &test_class[0], sz) && !wcsncmp(test_class, nonclient, sz))
+            DestroyWindow(w);
+}
+
+void setup_debug_console() {
+#ifdef _SHOWCONSOLE
+    AllocConsole();
+    
+    freopen_s(&console_file_handle, "CONIN$", "r", stdin);
+    freopen_s(&console_file_handle, "CONOUT$", "w", stdout);
+    freopen_s(&console_file_handle, "CONOUT$", "w", stderr);
+    atexit([]() { if (console_file_handle) { fclose(console_file_handle); console_file_handle = nil; } });
+#endif
+}
+
+HWND create_root_window(HINSTANCE instance, RECT r, void* data = nil, const utf16* title = app_name, u32 extra_styles = 0, u32 extra_extended_styles = 0) {
+    HWND res = CreateWindowEx(
+        WS_EX_CONTROLPARENT | extra_extended_styles,
+        nonclient::wndclass, title,
+        WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | extra_styles,
+        r.left, r.top, RECTW(r), RECTH(r), nil, nil, instance, data
+    );
+    Assert(res);
+    UpdateWindow(res);
+    return res;
+}
+
+int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
+{
+    setup_debug_console();
+    setup_fonts();
+
     const str to_deserialize = load_file_serialized(serialization_folder);
 
     LANGUAGE_MANAGER& lang_mgr = LANGUAGE_MANAGER::Instance(); lang_mgr.SetHInstance(hInstance);
-    LoginSettings login_cl;
-    ShowPasswordsSettings show_cl;
+    login::Settings login_cl;
+    editor::Settings editor_cl;
 
     _BeginDeserialize();
     _deserialize_struct(lang_mgr, to_deserialize);
     _deserialize_struct(login_cl, to_deserialize);
-    _deserialize_struct(show_cl, to_deserialize);
-    _deserialize_struct(unCap_colors, to_deserialize);
-    default_colors_if_not_set(&unCap_colors);
-    defer{ for (HBRUSH& b : unCap_colors.brushes) if (b) { DeleteBrush(b); b = NULL; } };
+    login_cl.validate();
+    _deserialize_struct(editor_cl, to_deserialize);
+    editor_cl.validate();
+    #ifndef _DEBUG // While debugging always use default struct colors to make it easier to try different ones
+    _deserialize_struct(colors, to_deserialize);
+    #endif
+    default_colors_if_not_set(&colors);
+    defer{ for (HBRUSH& b : colors.brushes) if (b) { DeleteBrush(b); b = NULL; } };
 
+    load_styles();
+
+    #ifdef _DEBUG
+    HWND debug_track_wnd = nil;
+    nonclient::LpParam debug_nc_param{
+        .client_class_name = debug::wndclass,
+        .client_lp_param = &debug_track_wnd,
+    };
+    HWND debug_wnd = create_root_window(
+        hInstance,
+        nonclient::calc_nonclient_rc_from_client({ .left = 0, .top = 0, .right = 300, .bottom = 300 }, false),
+        &debug_nc_param
+    );
+    #endif
+
+    login::Results login_results{0};
+    login::Data login_data{ &login_cl, &login_results };
+    nonclient::LpParam login_nclpparam{
+        .client_class_name = login::wndclass,
+        .client_lp_param = &login_data,
+        .can_maximize = false,
+    };
+
+    editor::Start show_start{0};
+    editor::Data show_data{
+        .settings = &editor_cl,
+        .start = &show_start,
+    };
+
+    nonclient::LpParam show_nclpparam{
+        .client_class_name = editor::wndclass,
+        .client_lp_param = &show_data,
+    };
+
+    HWND login_wnd = create_root_window(
+        hInstance, 
+        nonclient::calc_nonclient_rc_from_client(login_cl.rc, false), 
+        &login_nclpparam
+    );
+
+    HWND editor_wnd = create_root_window(
+        hInstance, 
+        nonclient::calc_nonclient_rc_from_client(editor_cl.rc, true), 
+        &show_nclpparam
+    );
     
-    bool richedit = load_richedit(); runtime_assert(richedit, "Couldn't find any Rich Edit library");
-    init_wndclass_protect_search(hInstance);
-    init_wndclass_unCap_uncapnc(hInstance);
-    init_wndclass_unCap_button(hInstance);
-    init_wndclass_unCap_edit_oneline(hInstance);
-    init_wndclass_protect_login(hInstance);
-    init_wndclass_unCap_scrollbar(hInstance);
-    init_wndclass_protect_show_passwords(hInstance);
-
-    RECT login_nc_rc = UNCAPNC_calc_nonclient_rc_from_client(login_cl.rc, FALSE);
-    RECT show_nc_rc = UNCAPNC_calc_nonclient_rc_from_client(show_cl.rc, TRUE);
-
-    LoginResults login_results{0};
-    LoginData login_data{ &login_cl, &login_results };
-    unCapNcLpParam login_nclpparam;
-    login_nclpparam.client_class_name = protect_wndclass_login;
-    login_nclpparam.client_lp_param = &login_data;
-
-    ShowPasswordsStart show_start;
-    ShowPasswordsData show_data; show_data.settings = &show_cl; show_data.start = &show_start;
-
-    unCapNcLpParam show_nclpparam;
-    show_nclpparam.client_class_name = protect_wndclass_show_passwords;
-    show_nclpparam.client_lp_param = &show_data;
-
-    HWND login_nc = CreateWindowEx(WS_EX_CONTROLPARENT, unCap_wndclass_uncap_nc, app_name, WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
-        login_nc_rc.left, login_nc_rc.top, RECTWIDTH(login_nc_rc), RECTHEIGHT(login_nc_rc), nullptr, nullptr, hInstance, &login_nclpparam);
-    Assert(login_nc);
-
-    HWND show_nc = CreateWindowEx(WS_EX_CONTROLPARENT, unCap_wndclass_uncap_nc, app_name, WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
-        show_nc_rc.left, show_nc_rc.top, RECTWIDTH(show_nc_rc), RECTHEIGHT(show_nc_rc), nullptr, nullptr, hInstance, &show_nclpparam);
-    Assert(show_nc);
-
-    UpdateWindow(login_nc);
-    UpdateWindow(show_nc);
-
     PostMessage(0, WM_NEXT, 0, 0); //start the state machine
 
-    MSG msg;
-    BOOL bRet;
+    enum class wnd_task { login, show_passwords };
+    struct wnd_state { HWND wnd; wnd_task task; };
 
-    enum wnd_op {
-        login,show_passwords
+    wnd_state state_machine[] = { 
+        {.wnd = login_wnd, .task = wnd_task::login},
+        {.wnd = editor_wnd, .task = wnd_task::show_passwords} 
+    };
+    i32 state_idx = -1;
+    constexpr i32 state_cnt = ARRAYSIZE(state_machine);
+    
+    auto transition_state = [](i32 current_state, i32 direction) -> i32 {
+        Assert(abs(direction) == 1);
+        current_state += direction;
+        current_state %= state_cnt;
+        if (current_state < 0) current_state = state_cnt + current_state; 
+        return current_state;
     };
 
-    struct wnd_state {
-        HWND wnd;
-        wnd_op op;
-    };
+    auto prev_state = [&transition_state](i32 current_state) ->i32 { return transition_state(current_state, -1); };
+    auto next_state = [&transition_state](i32 current_state) ->i32 { return transition_state(current_state, +1); };
 
-    wnd_state state_machine[] = { {login_nc,login} , {show_nc, show_passwords} };
-    int state_idx = -1;
-    int state_cnt = ARRAYSIZE(state_machine);
-    //auto is_valid_state = [=](int state) -> bool { return state >= 0 && state < state_cnt; };
-    auto prev_state = [=](int current_state)->int {current_state--; current_state %= state_cnt; if (current_state < 0) current_state = state_cnt + current_state; return current_state; };
-    auto next_state = [=](int current_state)->int {current_state++; current_state %= state_cnt; if (current_state < 0) current_state = state_cnt + current_state; return current_state; };
-
-    //TODO(fran): once we get the password we should encrypt it in some way, and send that to the next wnd. SHA for example?
+    auto loading_cursor = LoadCursor(hInstance, IDC_APPSTARTING);
+    auto arrow_cursor = LoadCursor(hInstance, IDC_ARROW);
 
     // Main message loop:
+    MSG msg;
+    BOOL bRet;
     while ((bRet = GetMessage(&msg, nullptr, 0, 0)) != 0)
     {
-        Assert(bRet != -1);//there was an error
+        Assert(bRet != -1);// There was an error
         switch (msg.message) {
         case WM_NEXT:
         {
             state_idx = next_state(state_idx);
             wnd_state new_state = state_machine[state_idx];
             wnd_state old_state = state_machine[prev_state(state_idx)];
-            switch (new_state.op) {
-            case login:
+            switch (new_state.task) {
+            case wnd_task::login:
             {
-                HWND old_wnd = old_state.wnd;
-                HWND old_wnd_cl = UNCAPNC_get_state(old_wnd)->client;
-                HWND new_wnd = new_state.wnd;
-                PostMessage(old_wnd_cl, WM_RESET, 0, 0);
-                ShowWindow(old_wnd, SW_HIDE);
-                ShowWindow(new_wnd, SW_SHOW);
+                PostMessage(nonclient::get_state(old_state.wnd)->client, WM_RESET, 0, 0);
+                ShowWindow(old_state.wnd, SW_HIDE);
+                ShowWindow(new_state.wnd, SW_SHOW);
+                #ifdef _DEBUG
+                debug_track_wnd = login_wnd;
+                #endif
             } break;
-            case show_passwords:
+            case wnd_task::show_passwords:
             {
-                HWND old_wnd = old_state.wnd;
-                HWND old_wnd_cl = UNCAPNC_get_state(old_wnd)->client;
-                HWND new_wnd = new_state.wnd;
-                HWND new_wnd_cl = UNCAPNC_get_state(new_wnd)->client;
-                //int chars_written = SendMessage(old_wnd, WM_GETCREDENTIALS_PASSWORD, (WPARAM)password, ARRAYSIZE(password)); //TODO(fran): maybe this is a better idea
-                //TODO(fran): we shouldnt be using this guys directly, probably better is to ask for their *state and get this stuff from there so it's not specific to this code
+                SetCursor(loading_cursor); defer{ SetCursor(arrow_cursor); };
                 sha256(login_results.password.str, login_results.password.sz_chars * sizeof(*login_results.password.str), show_start.key);
                 show_data.start->username = login_results.username;
 
-                SendMessage(new_wnd_cl, WM_START, 0, 0); //starting the pipeline
+                // Attempt to start the next state
+                auto successful_start = SendMessage(nonclient::get_state(new_state.wnd)->client, WM_START, 0, 0);
 
-                PostMessage(old_wnd_cl, WM_RESET, 0, 0);
-                ShowWindow(old_wnd, SW_HIDE);
-                ShowWindow(new_wnd, SW_SHOW);
+                if (successful_start) {
+                    PostMessage(nonclient::get_state(old_state.wnd)->client, WM_RESET, 0, 0);
+                    ShowWindow(old_state.wnd, SW_HIDE);
+                    ShowWindow(new_state.wnd, SW_SHOW);
+                    #ifdef _DEBUG
+                    debug_track_wnd = editor_wnd;
+                    #endif
+                }
+                else {
+                    // Rollback to previous state
+                    state_idx = prev_state(state_idx); 
+                }
             } break;
             }
         } break;
 #if 0
         case WM_DPICHANGED:
         {
-            //TODO(fran): move this somewhere more sensible, maybe it should even be on main and not enter an hwnd
             int new_dpi = HIWORD(msg.wParam);
             auto a = GetDpiForSystem();
             //UpdateDpiDependentFontsAndResources();
@@ -273,20 +314,20 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 #endif
         default:
         {
-            if (msg.message != WM_NEXT) {
-                TranslateMessage(&msg);
-                DispatchMessage(&msg);
-            }
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
         } break;
         }
     }
+
+    ensure_close_windows(login_wnd, editor_wnd);
 
     str serialized;
     _BeginSerialize();
     serialized += _serialize_struct(lang_mgr);
     serialized += _serialize_struct(login_cl);
-    serialized += _serialize_struct(show_cl);
-    serialized += _serialize_struct(unCap_colors);
+    serialized += _serialize_struct(editor_cl);
+    serialized += _serialize_struct(colors);
 
     save_to_file_serialized(serialized, serialization_folder);
 
