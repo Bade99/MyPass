@@ -1,11 +1,11 @@
 #pragma once
-#include <Windows.h>
-#include "unCap_Helpers.h"
-#include "unCap_math.h"
+#include "win_sdk.h"
+#include "helpers.h"
+#include "math.h"
 
-#define UNCAP_GDIPLUS /*For lazy bilinear filtered drawing*/
+#define USE_GDIPLUS /*For lazy bilinear filtered drawing*/
 
-#ifdef UNCAP_GDIPLUS
+#ifdef USE_GDIPLUS
 #include <objidl.h>
 #include <gdiplus.h>
 #pragma comment (lib,"Gdiplus.lib")
@@ -16,12 +16,11 @@
 
 #include <Objbase.h>
 #include <wincodec.h>
-#include <Windows.h>
 #include <Winerror.h>
 
 #pragma comment(lib, "Windowscodecs.lib")
 
-HRESULT WriteBitmap(HBITMAP bitmap, const wchar_t* pathname = L"C:/Users/Brenda-Vero-Frank/Desktop/t.bmp") {
+HRESULT WriteBitmap(HBITMAP bitmap, const wchar_t* pathname) {
 	//TODO(fran): solve limitations https://stackoverflow.com/questions/24720451/save-hbitmap-to-bmp-file-using-only-win32
 	CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 	HRESULT hr = S_OK;
@@ -106,10 +105,10 @@ HRESULT WriteBitmap(HBITMAP bitmap, const wchar_t* pathname = L"C:/Users/Brenda-
 	CoUninitialize();
 }
 #else
-HRESULT WriteBitmap(HBITMAP bitmap, const wchar_t* pathname = L"");
+HRESULT WriteBitmap(HBITMAP bitmap, const wchar_t* pathname = L"") {};
 #endif
 
-int FillRectAlpha(HDC dc, RECT* r, HBRUSH br, unsigned char alpha) {
+int FillRectAlpha(HDC dc, const RECT& r, HBRUSH br, u8 alpha) {
 	COLORREF color = ColorFromBrush(br);
 	color |= (alpha << 24);
 
@@ -126,7 +125,7 @@ int FillRectAlpha(HDC dc, RECT* r, HBRUSH br, unsigned char alpha) {
 	nfo.bmiHeader.biClrUsed = 0;
 	nfo.bmiHeader.biClrImportant = 0;
 
-	int res = StretchDIBits(dc, r->left, r->top, RECTWIDTH((*r)), RECTHEIGHT((*r)), 0, 0, 1, 1, &color, &nfo, DIB_RGB_COLORS, SRCCOPY);
+	int res = StretchDIBits(dc, r.left, r.top, RECTW(r), RECTH(r), 0, 0, 1, 1, &color, &nfo, DIB_RGB_COLORS, SRCCOPY);
 	return res;
 }
 
@@ -163,25 +162,57 @@ mask_bilinear_sample sample_bilinear_mask(img* mask, i32 x, i32 y) {
 	return sample;
 }
 
+u8 sample_mask(img* mask, i32 x, i32 y) {
+	u8 idx = 7 - (x % 8);
+	x /= 8;
+	u8* texel_ptr = ((u8*)mask->mem + y * mask->pitch + x * 1);
+	u8 tex = (*(u8*)texel_ptr) & (1 << idx);
+	return tex;
+}
+
+void GetRoundRectPath(Gdiplus::GraphicsPath* path, RECT r, float diameter) {
+	float w = RECTW(r), h = RECTH(r);
+	if (diameter > w) diameter = w;
+	if (diameter > h) diameter = h;
+
+	Gdiplus::RectF Corner(r.left, r.top, diameter, diameter);
+
+	path->Reset();
+
+	// top left
+	path->AddArc(Corner, 180, 90);
+
+	// top right
+	Corner.X += (w - diameter - 1);
+	path->AddArc(Corner, 270, 90);
+
+	// bottom right
+	Corner.Y += (h - diameter - 1);
+	path->AddArc(Corner, 0, 90);
+
+	// bottom left
+	Corner.X -= (w - diameter - 1);
+	path->AddArc(Corner, 90, 90);
+
+	path->CloseFigure();
+}
+
+void SetUpRenderSettings(Gdiplus::Graphics& graphics) {
+	graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBilinear);
+	graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+	graphics.SetPageUnit(Gdiplus::UnitPixel);
+}
+
+Gdiplus::Color HbrushToGdiplusColor(HBRUSH br) {
+	Gdiplus::Color c; 
+	static auto hollow_brush = GetStockBrush(HOLLOW_BRUSH);
+	if (br == hollow_brush) c = c.Transparent;
+	else c.SetFromCOLORREF(ColorFromBrush(br));
+	return c;
+}
+
 namespace urender {
-	static ULONG_PTR gdiplusToken;//Horrible HACK, that gdi+ shouldnt need in the first place but the programmers had no idea what they were doing
-
 	//TODO(fran): use something with alpha (png?) for rendering masks https://stackoverflow.com/questions/1505586/gdi-using-drawimage-to-draw-a-transperancy-mask-of-the-source-image
-
-	void init() {
-#ifdef UNCAP_GDIPLUS
-		// Initialize GDI+
-		Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-		Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
-#endif
-	}
-
-	void uninit() {
-#ifdef UNCAP_GDIPLUS
-		//Uninitialize GDI+
-		Gdiplus::GdiplusShutdown(gdiplusToken);
-#endif
-	}
 
 	//NOTE: the caller is in charge of handling the hbitmap, including deletion
 	//NOTE: we add an extra limitation, no offsets, we scale the entire bitmap, at least for now to make it simpler to write
@@ -293,69 +324,25 @@ namespace urender {
 	void draw_mask(HDC dest, int xDest, int yDest, int wDest, int hDest, HBITMAP mask, int xSrc, int ySrc, int wSrc, int hSrc, HBRUSH colorbr) {
 		{BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo); Assert(bmpnfo.bmBitsPixel == 1); }
 
-		//Mask Stretching Setup
-#if 0 //You can never trust Gdi's stretching functions, they are simply terrible and unusable
-		HDC src = CreateCompatibleDC(dest); defer{ DeleteDC(src); };
-		//NOTE: src has a 1x1 _monochrome_ bitmap, we wanna be monochrome too
-		HBITMAP srcbmp = CreateCompatibleBitmap(src, wDest, hDest); defer{ DeleteObject(srcbmp); };
-
-		HBITMAP oldbmp = (HBITMAP)SelectObject(src, (HGDIOBJ)srcbmp); defer{ SelectObject(src, (HGDIOBJ)oldbmp); };
-
-		HDC maskdc = CreateCompatibleDC(dest); defer{ DeleteDC(maskdc); };
-
-		HBITMAP oldmaskdcbmp = (HBITMAP)SelectObject(maskdc, (HGDIOBJ)mask); defer{ SelectObject(maskdc, (HGDIOBJ)oldmaskdcbmp); };
-
-		//Finally we can actually do the stretching
-		int stretchres = StretchBlt(src, 0, 0, wDest, hDest, maskdc, xSrc, ySrc, wSrc, hSrc, SRCCOPY);
-
-		HBRUSH oldbr = (HBRUSH)SelectObject(dest, colorbr); defer{ SelectObject(dest, (HGDIOBJ)oldbr); };
-
-		//TODO(fran): I have no idea why I need to pass the "srcDC", no information from it is needed, and the function explicitly says it should be NULL, but if I do it returns false aka error (some error, cause it also doesnt tell you what it is)
-		//NOTE: info on creating your own raster ops https://docs.microsoft.com/en-us/windows/win32/gdi/ternary-raster-operations?redirectedfrom=MSDN
-		//Thanks https://stackoverflow.com/questions/778666/raster-operator-to-use-for-maskblt
-		HBITMAP stretched_mask = (HBITMAP)GetCurrentObject(src, OBJ_BITMAP);//NOTE: we dont need to do this, we got the hbitmap from before
-		BOOL maskres = MaskBlt(dest, xDest, yDest, wDest, hDest, dest, 0, 0, stretched_mask, 0, 0, MAKEROP4(0x00AA0029, PATCOPY));
-#elif 0
-		//TODO(fran): https://devblogs.microsoft.com/oldnewthing/20061114-01/?p=29013 raymond always to the rescue, why dont I bitblt to color first and then stretch with gdi+?
-		HDC stretch32 = CreateCompatibleDC(dest); defer{ DeleteDC(stretch32); };
-		HBITMAP bmp32 = CreateBitmap(wDest, hDest, 1, 32, nullptr); defer{ DeleteObject(bmp32); };
-		HBITMAP oldbmp32 = (HBITMAP)SelectObject(stretch32, (HGDIOBJ)bmp32); defer{ SelectObject(stretch32, (HGDIOBJ)oldbmp32); };
-		{
-			Gdiplus::Graphics graphics(stretch32);//Yeah, who cares, icons are small, I just want bilinear filtering
-			graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBilinear);
-
-			Gdiplus::Bitmap bmp(mask, 0);//NOTE: gdi converts bitmaps to 32bpp, so, once again, it is useless. Moreover you can ONLY draw to 32bpp dcs with this bmp
-			graphics.DrawImage(&bmp,
-				Gdiplus::Rect(0, 0, wDest, hDest),
-				xSrc, ySrc, wSrc, hSrc,
-				Gdiplus::Unit::UnitPixel);//TODO(fran): get the current unit from the device
-		}
-
-		HDC stretch24 = CreateCompatibleDC(dest); defer{ DeleteDC(stretch24); };
-		HBITMAP bmp24 = CreateBitmap(wDest, hDest, 1, 24, nullptr); defer{ DeleteObject(bmp24); };
-		HBITMAP oldbmp24 = (HBITMAP)SelectObject(stretch24, (HGDIOBJ)bmp24); defer{ SelectObject(stretch24, (HGDIOBJ)oldbmp24); };
-		BitBlt(stretch24, 0, 0, wDest, hDest, stretch32, 0, 0, SRCCOPY);//32bit to 24bit //THIS DOESNT WOOOOOOOOOOOOOOOOOOOOOOOOOOOORRKKKKKK
-
-		HDC stretch1 = CreateCompatibleDC(dest); defer{ DeleteDC(stretch1); };
-		HBITMAP bmp1 = CreateBitmap(wDest, hDest, 1, 1, nullptr); defer{ DeleteObject(bmp1); };
-		HBITMAP oldbmp1 = (HBITMAP)SelectObject(stretch1, (HGDIOBJ)bmp1); defer{ SelectObject(stretch1, (HGDIOBJ)oldbmp1); };
-
-		SetBkColor(stretch24, RGB(0xff, 0xff, 0xff));
-		SetBkColor(stretch1, RGB(0x00, 0x00, 0x00));
-		BitBlt(stretch1, 0, 0, wDest, hDest, stretch24, 0, 0, SRCCOPY);//24bit to 1bit
-
-		BITMAP nfo; GetObject(bmp1, sizeof(nfo), &nfo);
-		char bits[128 * 128];
-		int r = GetBitmapBits(bmp1, nfo.bmHeight * nfo.bmWidthBytes, bits);
-
-		BOOL maskres = MaskBlt(dest, xDest, yDest, wDest, hDest, dest, 0, 0, bmp1, 0, 0, MAKEROP4(0x00AA0029, PATCOPY));
-#else
 		HBITMAP scaled_mask = (wDest != wSrc || hDest != hSrc) ? scale_mask(mask, wDest, hDest) : mask; //NOTE: beware of applying any modification to scaled_mask, you could be modifying the original mask
-		HBRUSH oldbr = (HBRUSH)SelectObject(dest, colorbr); defer{ SelectObject(dest, (HGDIOBJ)oldbr); };
-		BOOL maskres = MaskBlt(dest, xDest, yDest, wDest, hDest, dest, 0, 0, scaled_mask, 0, 0, MAKEROP4(0x00AA0029, PATCOPY));
-		if (scaled_mask != mask)DeleteObject(scaled_mask);
-#endif
-		Assert(maskres);
+		BITMAP masknfo; GetObject(scaled_mask, sizeof(masknfo), &masknfo); Assert(masknfo.bmBitsPixel == 1);
+		img mask_img;
+		mask_img.width = masknfo.bmWidth;
+		mask_img.height = masknfo.bmHeight;
+		mask_img.bits_per_pixel = 1;
+		mask_img.pitch = masknfo.bmWidthBytes;
+		int mask_sz = mask_img.height * mask_img.pitch;
+		mask_img.mem = malloc(mask_sz); defer{ free(mask_img.mem); };
+		int getbits = GetBitmapBits(scaled_mask, mask_sz, mask_img.mem); Assert(getbits == mask_sz);
+
+		for (int y = yDest; y < yDest + hDest; y++) {
+			for (int x = xDest; x < xDest + wDest; x++)
+			{
+				u8 sample = sample_mask(&mask_img, x - xDest, y - yDest);
+				if (!sample) SetPixel(dest, x, y, ColorFromBrush(colorbr));
+			}
+		}
+		if (scaled_mask != mask) DeleteObject(scaled_mask);
 	}
 
 	void draw_icon(HDC dest, int xDest, int yDest, int wDest, int hDest, HICON icon, int xSrc, int ySrc, int wSrc, int hSrc) {
@@ -397,105 +384,130 @@ namespace urender {
 		DeleteObject(fillBitmap);
 		DeleteDC(maskDC);
 	}
-}
 
-/*
-void DrawMenuArrow(HDC destDC, RECT& r)
-{
-	//Thanks again https://www.codeguru.com/cpp/controls/menu/miscellaneous/article.php/c13017/Owner-Drawing-the-Submenu-Arrow.htm
-	//NOTE: I dont know if this will be final, dont really wanna depend on windows, but it's pretty good for now. see https://docs.microsoft.com/en-us/windows/win32/gdi/scaling-an-image maybe some of those stretch modes work better than HALFTONE
-
-	//Create the DCs and Bitmaps we will need
-	HDC arrowDC = CreateCompatibleDC(destDC);
-	HDC fillDC = CreateCompatibleDC(destDC);
-	int arrowW = RECTWIDTH(r);
-	int arrowH = RECTHEIGHT(r);
-	HBITMAP arrowBitmap = CreateCompatibleBitmap(destDC, arrowW, arrowH);
-	HBITMAP oldArrowBitmap = (HBITMAP)SelectObject(arrowDC, arrowBitmap);
-	HBITMAP fillBitmap = CreateCompatibleBitmap(destDC, arrowW, arrowH);
-	HBITMAP oldFillBitmap = (HBITMAP)SelectObject(fillDC, fillBitmap);
-
-	//Set the offscreen arrow rect
-	RECT tmpArrowR = rectWH(0, 0, arrowW, arrowH);
-
-	//Draw the frame control arrow (The OS draws this as a black on white bitmap mask)
-	DrawFrameControl(arrowDC, &tmpArrowR, DFC_MENU, DFCS_MENUARROW);
-
-	//Set the arrow color
-	HBRUSH arrowBrush = unCap_colors.Img;
-
-	//Fill the fill bitmap with the arrow color
-	FillRect(fillDC, &tmpArrowR, arrowBrush);
-
-	//Blit the items in a masking fashion
-	BitBlt(destDC, r.left, r.top, arrowW, arrowH, fillDC, 0, 0, SRCINVERT);
-	BitBlt(destDC, r.left, r.top, arrowW, arrowH, arrowDC, 0, 0, SRCAND);
-	BitBlt(destDC, r.left, r.top, arrowW, arrowH, fillDC, 0, 0, SRCINVERT);
-
-	//Clean up
-	SelectObject(fillDC, oldFillBitmap);
-	DeleteObject(fillBitmap);
-	SelectObject(arrowDC, oldArrowBitmap);
-	DeleteObject(arrowBitmap);
-	DeleteDC(fillDC);
-	DeleteDC(arrowDC);
-}
-*/
-/*
-void DrawMenuImg(HDC destDC, RECT& r, HBITMAP mask) {
-	int imgW = RECTWIDTH(r);
-	int imgH = RECTHEIGHT(r);
-
-	HBRUSH imgBr = unCap_colors.Img;
-	HBRUSH oldBr = SelectBrush(destDC, imgBr);
-
-	//TODO(fran): I have no idea why I need to pass the "srcDC", no information from it is needed, and the function explicitly says it should be NULL, but if I do it returns false aka error (some error, cause it also doesnt tell you what it is)
-	//NOTE: info on creating your own raster ops https://docs.microsoft.com/en-us/windows/win32/gdi/ternary-raster-operations?redirectedfrom=MSDN
-	//Thanks https://stackoverflow.com/questions/778666/raster-operator-to-use-for-maskblt
-	BOOL res = MaskBlt(destDC, r.left, r.top, imgW, imgH, destDC, 0, 0, mask, 0, 0, MAKEROP4(0x00AA0029, PATCOPY));
-	SelectBrush(destDC, oldBr);
-}
-*/
-
-/*
-	void draw_menu_mask(HDC destDC, int xDest, int yDest, int wDest, int hDest, HBITMAP mask, int xSrc, int ySrc, int wSrc, int hSrc, HBRUSH colorbr)
-	{
-		{BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo); Assert(bmpnfo.bmBitsPixel == 1); }
-
-		//Thanks again https://www.codeguru.com/cpp/controls/menu/miscellaneous/article.php/c13017/Owner-Drawing-the-Submenu-Arrow.htm
-		//NOTE: I dont know if this will be final, dont really wanna depend on windows, but it's pretty good for now. see https://docs.microsoft.com/en-us/windows/win32/gdi/scaling-an-image maybe some of those stretch modes work better than HALFTONE
-
-		//Create the DCs and Bitmaps we will need
-		HDC maskDC = CreateCompatibleDC(destDC);
-		HDC fillDC = CreateCompatibleDC(destDC);
-		HBITMAP fillBitmap = CreateCompatibleBitmap(destDC, wDest, hDest);
-		HBITMAP oldFillBitmap = (HBITMAP)SelectObject(fillDC, fillBitmap);
-
-
-		HBITMAP scaled_mask = urender::scale_mask(mask, wDest, hDest);
-		HBITMAP oldArrowBitmap = (HBITMAP)SelectObject(maskDC, scaled_mask);
-		BitBlt(maskDC, 0, 0, wDest, hDest, maskDC, 0, 0, DSTINVERT);
-
-		//Set the arrow color
-		HBRUSH arrowBrush = colorbr;
-
-		//Set the offscreen arrow rect
-		RECT tmpArrowR = rectWH(0, 0, wDest, hDest);
-
-		//Fill the fill bitmap with the arrow color
-		FillRect(fillDC, &tmpArrowR, arrowBrush);
-
-		//Blit the items in a masking fashion //TODO(fran): this doesnt blend correctly
-		BitBlt(destDC, xDest, yDest, wDest, hDest, fillDC, 0, 0, SRCINVERT);
-		BitBlt(destDC, xDest, yDest, wDest, hDest, maskDC, 0, 0, SRCAND);
-		BitBlt(destDC, xDest, yDest, wDest, hDest, fillDC, 0, 0, SRCINVERT);
-
-		//Clean up
-		SelectObject(fillDC, oldFillBitmap);
-		DeleteObject(fillBitmap);
-		SelectObject(maskDC, oldArrowBitmap);
-		DeleteObject(scaled_mask);
-		DeleteDC(fillDC);
-		DeleteDC(maskDC);
+	void draw_round_rectangle(HDC dest, RECT r, float radius, HBRUSH color_br) {
+		Gdiplus::Graphics graphics(dest);
+		SetUpRenderSettings(graphics);
+		auto diameter = radius * 2;
+		Gdiplus::SolidBrush br(HbrushToGdiplusColor(color_br));
+		Gdiplus::GraphicsPath path;
+		GetRoundRectPath(&path, r, diameter);
+		graphics.FillPath(&br, &path);
 	}
-*/
+
+	void draw_round_rectangle_outline(HDC dest, RECT r, float radius, HBRUSH color_br, f32 thickness = 1) {
+		Gdiplus::Graphics graphics(dest);
+		SetUpRenderSettings(graphics);
+		auto diameter = radius * 2;
+		Gdiplus::Pen pen(HbrushToGdiplusColor(color_br), thickness);
+		Gdiplus::GraphicsPath path;
+		GetRoundRectPath(&path, r, diameter);
+		graphics.DrawPath(&pen, &path);
+	}
+
+	//TODO: review why I have this function using gdiplus while the function on top using stretchdibits, does the other one not work?
+	void FillRectAlpha(HDC dc, const RECT& rc, u8 r, u8 g, u8 b, u8 a) {
+#ifdef USE_GDIPLUS
+		using namespace Gdiplus;
+		Graphics graphics(dc);
+		SolidBrush brush(Color(a, r, g, b));
+		graphics.FillRectangle(&brush, (i32)rc.left, (i32)rc.top, (i32)RECTW(rc), (i32)RECTH(rc));
+#endif
+	}
+
+	template<typename T>
+	void draw_background(HDC dc, const RECT& r, HBRUSH bk, HBRUSH border, const T& dimensions) {
+		auto w = RECTW(r), h = RECTH(r);
+		auto min_dim = minimum(w, h);
+		auto borderSize = dimensions.border_thickness;
+		if (dimensions.border_radius.value) {
+			auto radius = dimensions.border_radius.to_px(min_dim);
+			urender::draw_round_rectangle(dc, r, radius, bk);
+			if (borderSize) urender::draw_round_rectangle_outline(dc, r, radius, border, borderSize);
+		}
+		else {
+			if (borderSize) {
+				HPEN pen = CreatePen(PS_SOLID, borderSize, ColorFromBrush(border));
+				auto oldpen = SelectPen(dc, pen); defer{ SelectPen(dc, oldpen); DeletePen(pen); };
+				auto oldbr = SelectBrush(dc, bk); defer{ SelectBrush(dc, oldbr); };
+
+				Rectangle(dc, r.left, r.top, r.right, r.bottom); //uses pen for border and brush for bk
+			}
+			else {
+				FillRect(dc, &r, bk);
+			}
+		}
+	}
+
+	enum class txt_align { center, left, right };
+
+	//Intended for a single line of text
+	void draw_text(HDC dc, const RECT& r, utf16_str txt, HFONT f, HBRUSH txt_br, txt_align alignment, i32 pad_x) {
+		HFONT oldfont = SelectFont(dc, f); defer{ SelectFont(dc, oldfont); };
+		UINT oldalign = GetTextAlign(dc); defer{ SetTextAlign(dc,oldalign); };
+
+		COLORREF oldtxtcol = SetTextColor(dc, ColorFromBrush(txt_br)); defer{ SetTextColor(dc, oldtxtcol); };
+		auto oldbkmode = SetBkMode(dc, TRANSPARENT); defer{ SetBkMode(dc, oldbkmode); };
+
+		TEXTMETRIC tm; GetTextMetrics(dc, &tm);
+		// Calculate vertical position for the string so that it will be vertically centered
+		// We are single line so we want vertical alignment always
+		i32 yPos = (r.bottom + r.top - tm.tmHeight) / 2;
+		i32 xPos;
+		switch (alignment) {
+		case decltype(alignment)::center:
+		{
+			SetTextAlign(dc, TA_CENTER);
+			xPos = (r.right - r.left) / 2;
+		} break;
+		case decltype(alignment)::left:
+		{
+			SetTextAlign(dc, TA_LEFT);
+			xPos = r.left + pad_x;
+		} break;
+		case decltype(alignment)::right:
+		{
+			SetTextAlign(dc, TA_RIGHT);
+			xPos = r.right - pad_x;
+		} break;
+		default: Assert(0);
+		}
+		TextOut(dc, xPos, yPos, txt.str, (i32)(txt.sz_char() - 1));
+
+		//TODO(fran): TabbedTextOut for completeness
+		//TODO(fran): transparent bk color (if possible without gdi+)
+	}
+
+	i32 draw_bitmap_1bpp_right(HBITMAP bmp, HDC dc, rect_i32 r, int x_pad, HBRUSH color) {
+		//TODO(fran): flicker free
+		BITMAP bitmap; GetObject(bmp, sizeof(bitmap), &bitmap);
+		Assert(bitmap.bmBitsPixel == 1);
+		int max_sz = roundNdown(bitmap.bmWidth, (int)((f32)r.h * .6f)); //HACK: instead use png + gdi+ + color matrices
+		if (!max_sz)max_sz = bitmap.bmWidth; //More HACKs
+
+		int bmp_height = max_sz;
+		int bmp_width = bmp_height;
+		int bmp_align_width = r.left + r.w - bmp_width - x_pad;
+		int bmp_align_height = r.top + (r.h - bmp_height) / 2;
+		draw_mask(dc, bmp_align_width, bmp_align_height, bmp_width, bmp_height, bmp, 0, 0, bitmap.bmWidth, bitmap.bmHeight, color);
+
+		return bmp_align_width;
+	}
+
+
+	#ifdef USE_GDIPLUS
+	struct pre_post_main {
+		ULONG_PTR gdiplusToken;
+
+		pre_post_main() {
+			// Initialize GDI+
+			Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+			Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, nil);
+		}
+		~pre_post_main() { 
+			//Uninitialize GDI+
+			Gdiplus::GdiplusShutdown(gdiplusToken);
+		}
+	} static const PREMAIN_POSTMAIN;
+	#endif
+}
