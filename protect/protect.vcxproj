@@ -29,26 +29,26 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -85,10 +85,12 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <TargetName>MyPass</TargetName>
+    <IntDir>$(SolutionDir)$(Platform)\$(Configuration)\intermediate\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <TargetName>MyPass</TargetName>
+    <IntDir>$(SolutionDir)$(Platform)\$(Configuration)\intermediate\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -96,7 +98,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp23</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -111,7 +113,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp23</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -126,7 +128,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp23</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -141,7 +143,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp23</LanguageStandard>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -151,48 +154,75 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="LANGUAGE_MANAGER.h" />
-    <ClInclude Include="protect_Core.h" />
-    <ClInclude Include="protect_login.h" />
-    <ClInclude Include="protect_search.h" />
-    <ClInclude Include="protect_sha256.h" />
-    <ClInclude Include="protect_show_passwords.h" />
-    <ClInclude Include="protect_twofish.h" />
-    <ClInclude Include="Resource.h" />
-    <ClInclude Include="targetver.h" />
-    <ClInclude Include="unCap_button.h" />
-    <ClInclude Include="unCap_edit.h" />
-    <ClInclude Include="unCap_edit_oneline.h" />
-    <ClInclude Include="unCap_Global.h" />
-    <ClInclude Include="unCap_Helpers.h" />
-    <ClInclude Include="unCap_Math.h" />
-    <ClInclude Include="unCap_Platform.h" />
-    <ClInclude Include="unCap_Reflection.h" />
-    <ClInclude Include="unCap_Renderer.h" />
-    <ClInclude Include="unCap_scrollbar.h" />
-    <ClInclude Include="unCap_Serialization.h" />
-    <ClInclude Include="unCap_uncapnc.h" />
-    <ClInclude Include="unCap_Vector.h" />
-    <ClInclude Include="windows_msg_mapper.h" />
-    <ClInclude Include="windows_undoc.h" />
+    <ClInclude Include="combo.h" />
+    <ClInclude Include="custom.h" />
+    <ClInclude Include="debug.h" />
+    <ClInclude Include="img.h" />
+    <ClInclude Include="language_manager.h" />
+    <ClInclude Include="list.h" />
+    <ClInclude Include="macros.h" />
+    <ClInclude Include="core.h" />
+    <ClInclude Include="login.h" />
+    <ClInclude Include="nonclient_types.h" />
+    <ClInclude Include="page.h" />
+    <ClInclude Include="password_editor.h" />
+    <ClInclude Include="password_editor_types.h" />
+    <ClInclude Include="rect.h" />
+    <ClInclude Include="scrollbar_types.h" />
+    <ClInclude Include="search.h" />
+    <ClInclude Include="search_types.h" />
+    <ClInclude Include="sha256.h" />
+    <ClInclude Include="editor.h" />
+    <ClInclude Include="table.h" />
+    <ClInclude Include="table_types.h" />
+    <ClInclude Include="toast.h" />
+    <ClInclude Include="toast_types.h" />
+    <ClInclude Include="twofish.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="style.h" />
+    <ClInclude Include="button.h" />
+    <ClInclude Include="button_types.h" />
+    <ClInclude Include="edit_subclass.h" />
+    <ClInclude Include="text.h" />
+    <ClInclude Include="text_types.h" />
+    <ClInclude Include="global.h" />
+    <ClInclude Include="helpers.h" />
+    <ClInclude Include="math.h" />
+    <ClInclude Include="platform.h" />
+    <ClInclude Include="reflection.h" />
+    <ClInclude Include="renderer.h" />
+    <ClInclude Include="scrollbar.h" />
+    <ClInclude Include="serialization.h" />
+    <ClInclude Include="nonclient.h" />
+    <ClInclude Include="vector.h" />
+    <ClInclude Include="win_info.h" />
+    <ClInclude Include="win_msg_mapper.h" />
+    <ClInclude Include="win_sdk.h" />
+    <ClInclude Include="win_msg_common_handler.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="LANGUAGE_MANAGER.cpp" />
     <ClCompile Include="protect.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="protect.rc" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="..\Icons\Add16.bmp" />
+    <Image Include="..\Icons\Calendar32.bmp" />
+    <Image Include="..\Icons\Cancel32.bmp" />
     <Image Include="..\Icons\Circle16.bmp" />
+    <Image Include="..\Icons\Clipboard32.bmp" />
     <Image Include="..\Icons\Close16.bmp" />
     <Image Include="..\Icons\Earth16.bmp" />
+    <Image Include="..\Icons\Edit32.bmp" />
+    <Image Include="..\Icons\EyeClosed32.bmp" />
+    <Image Include="..\Icons\EyeOpen32.bmp" />
     <Image Include="..\Icons\logo.ico" />
     <Image Include="..\Icons\Max16.bmp" />
     <Image Include="..\Icons\Min16.bmp" />
+    <Image Include="..\Icons\Padlock32.bmp" />
     <Image Include="..\Icons\RightArrow16.bmp" />
-    <Image Include="protect.ico" />
-    <Image Include="small.ico" />
+    <Image Include="..\Icons\Search32.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
