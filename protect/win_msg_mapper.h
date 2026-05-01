@@ -1024,7 +1024,7 @@ static std::map<int, const char*> wmTranslation = {
 {52429, "WM_RASDIALEVENT" },
 };
 
-const char* msgToString(unsigned int msg) {
+static const char* msgToString(unsigned int msg) {
 	const char* res = wmTranslation[msg];
 	if (res == NULL)
 	{
@@ -1036,7 +1036,7 @@ const char* msgToString(unsigned int msg) {
 	return res;
 }
 #else
-const char* msgToString(unsigned int /*msg*/) {
+static const char* msgToString(unsigned int /*msg*/) {
 	const char* res = "UnknownMessage";
 	return res;
 }
@@ -1071,7 +1071,7 @@ static std::map<int, const char*> htTranslation = {
 {21, "HTHELP" },
 };
 
-const char* hittestToString(unsigned int hittest) {
+static const char* hittestToString(unsigned int hittest) {
 	const char* res = htTranslation[hittest];
 	if (res == NULL)
 	{
@@ -1083,7 +1083,7 @@ const char* hittestToString(unsigned int hittest) {
 	return res;
 }
 #else
-const char* hittestToString(unsigned int /*hittest*/) {
+static const char* hittestToString(unsigned int /*hittest*/) {
 	const char* res = "UnknownHitTest";
 	return res;
 }
