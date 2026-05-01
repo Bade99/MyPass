@@ -1,0 +1,391 @@
+#pragma once
+#include "win_sdk.h"
+#include "platform.h"
+#include "helpers.h"
+#include "global.h"
+#include "text.h"
+#include "button.h"
+#include "language_manager.h"
+
+namespace login {
+
+constexpr auto& wndclass = wndclass_name("login");
+
+//IDEA: why not, instead of having two separate hwnds, nc and cl, just have one, and the nc be a separate function call, immediate problem to solve are msgs that both would need, eg create and such
+
+//USAGE: once the user presses on "Login" we will send a msg to ourselves that will not arrive, it's for the guy on top controlling the msg loop, it will have a state machine type of thing where it knows to current state, the next, and what's needed to get to the next (eg getting data from the previous), and finally to request the current wnd to stop (DestroyWindow)
+
+//TODO(fran): failure after multiple wrong passwords? eg 10 min block
+
+//TODO(fran): dont use a msgbox to show the message asking the user to sign up, instead draw the text msg on this same control and show a singup and a cancel button
+
+constexpr auto EDIT_USERNAME = 10;
+constexpr auto EDIT_PASSWORD = 11;
+constexpr auto BTN_LOGIN = 12;
+
+constexpr auto default_text_tooltip_location = edit_oneline::ETP::left | edit_oneline::ETP::top;
+
+struct Settings {
+
+#define foreach_LoginSettings_member(op) \
+		op(RECT, rc,200,200,600,450 ) \
+
+	foreach_LoginSettings_member(_generate_member);
+
+	_generate_default_struct_serialize(foreach_LoginSettings_member);
+
+	_generate_default_struct_deserialize(foreach_LoginSettings_member);
+
+	void validate() {
+		std::remove_reference<decltype(*this)>::type defaults;
+		validate_rect_in_screen(rc, defaults.rc);
+	}
+};
+
+struct Results {
+	text username; //TODO(fran): the control where this is entered shouldnt accept chars that cant be used to create a folder
+
+	text password;
+};
+
+struct Data { //a pointer to this struct is to be sent on CreateWindow, struct MUST be zeroed out
+	Settings* settings;
+	Results* results;
+};
+
+struct State {
+	HWND wnd;
+	HWND nc_parent;
+
+	union LoginControls {
+		struct {
+			HWND edit_username;
+			HWND edit_password;
+			HWND button_login;
+		};
+		HWND all[3];//REMEMBER TO UPDATE
+	}controls;
+	Settings* settings;
+	Results* results;
+};
+
+auto get_state(HWND wnd) { _control_create_function__get_state }
+
+void resize_controls(State& state) {
+	RECT r; GetClientRect(state.wnd, &r);
+	int w = RECTW(r);
+	int h = RECTH(r);
+	int w_pad = DPI(8);
+	int h_pad = DPI(8);
+
+	int h_center = h / 2;
+
+	int edit_username_w = DPI(140);
+	int edit_username_h = DPI(30);
+
+	int edit_password_w = edit_username_w;
+	int edit_password_h = edit_username_h;
+	
+	int edit_username_edit_password_pad_h = h_pad;
+	int edit_password_btn_login_pad_h = h_pad;
+
+	int btn_login_w = DPI(70);
+	int btn_login_h = edit_password_h;
+
+	int edit_password_y = h_center - edit_password_h/2;
+	int edit_password_x = (w - edit_password_w) / 2;
+
+	int edit_username_y = edit_password_y - edit_username_edit_password_pad_h - edit_username_h;
+	int edit_username_x = (w - edit_username_w) / 2;
+
+	int btn_login_y = edit_password_y + edit_password_h + edit_password_btn_login_pad_h;
+	int btn_login_x = (w - btn_login_w) / 2;
+
+	//TODO(fran): resizer that takes into account multiple hwnds
+	MoveWindow(state.controls.edit_username, edit_username_x, edit_username_y, edit_username_w, edit_username_h, false);
+	MoveWindow(state.controls.edit_password, edit_password_x, edit_password_y, edit_password_w, edit_password_h, false);
+	MoveWindow(state.controls.button_login, btn_login_x, btn_login_y, btn_login_w, btn_login_h, false);
+}
+
+void add_controls(State& state) {
+	auto& controls = state.controls;
+	controls.edit_username = create_window(state.wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP, 0, EDIT_USERNAME);
+	edit_oneline::set_theme(controls.edit_username, themes.login_editoneline);
+	AWDT(controls.edit_username, LANG_LOGIN_USERNAME);
+	edit_oneline::set_function_has_invalid_chars(controls.edit_username, [](const utf16* str, size_t char_cnt, void*) -> auto {
+		edit_oneline::_has_invalid_chars res{};
+		constexpr auto& invalid_username_chars = _t("<>:\"/\\|?*"); //INFO: there's more to it than this, there are some special restrictions that we implemented outside the control when the user presses login https://gist.github.com/doctaphred/d01d05291546186941e1b7ddc02034d3
+		for (u64 i = 0; i < ArraySizeWithoutTerminator(invalid_username_chars); i++) {
+			if (contains_char(str, char_cnt, invalid_username_chars[i])) {
+				res.res = true;
+				res.explanation = (RS(LANG_EDIT_USERNAME_INVALIDCHARS) + L" " + invalid_username_chars);
+				break;
+			}
+		}
+		return res;
+	});
+
+	controls.edit_password = create_window(state.wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_PASSWORD, 0, EDIT_PASSWORD);
+	edit_oneline::set_theme(controls.edit_password, themes.login_editoneline);
+	AWDT(controls.edit_password, LANG_LOGIN_PASSWORD);
+
+	controls.button_login = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP, 0, BTN_LOGIN);
+	AWT(controls.button_login, LANG_CONTROL_LOGIN);
+	button::set_theme(controls.button_login, themes.login_btn);
+
+	for (auto ctl : controls.all) SetWindowFont(ctl, fonts.General, true);
+	SetWindowFont(controls.button_login, fonts.GeneralBold, true);
+}
+
+void save_settings(State& state) {
+	RECT rc; GetWindowRect(state.wnd, &rc);
+	state.settings->rc = rc;
+}
+
+bool any_char(cstr* s, bool op(cstr)) {
+	bool res = false;
+	if (s && *s) { //TODO(fran): more compact
+		do {
+			if (op(*s)) {
+				res = true;
+				break;
+			}
+		} while (*++s);
+	}
+	return res;
+}
+
+LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+	State& state = *get_state(hwnd);
+	switch (msg) {
+	case WM_CREATE:
+	{
+		CREATESTRUCT* createnfo = (CREATESTRUCT*)lparam;
+		add_controls(state);
+		return 0;
+	} break;
+	case WM_SIZE:
+	{
+		LRESULT res = DefWindowProc(hwnd, msg, wparam, lparam);
+		resize_controls(state);
+		return res;
+	} break;
+	case WM_NCDESTROY:
+	{
+		save_settings(state);
+		if (&state) {
+			if (state.results->password.str) {
+				ZeroMemory(state.results->password.str, state.results->password.sz_chars * sizeof(*state.results->password.str));
+				free(state.results->password.str);
+				state.results->password.str = nullptr;
+				state.results->password.sz_chars = 0;
+			}
+			if (state.results->username.str) {
+				ZeroMemory(state.results->username.str, state.results->username.sz_chars * sizeof(*state.results->username.str));
+				free(state.results->username.str);
+				state.results->username.str = nullptr;
+				state.results->username.sz_chars = 0;
+			}
+			SetWindowText(state.controls.edit_password, _t("")); //TODO(fran): we should make sure the current bytes get zeroed out
+			SetWindowText(state.controls.edit_username, _t(""));
+			set_window_state(state.wnd, nil);
+			free(&state);
+		}
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
+	case WM_NCCREATE:
+	{
+		CREATESTRUCT* create_nfo = (CREATESTRUCT*)lparam;
+		State* st = (State*)calloc(1, sizeof(State));
+		Assert(st);
+		st->nc_parent = GetParent(hwnd);
+		st->wnd = hwnd;
+		st->settings = ((Data*)create_nfo->lpCreateParams)->settings;
+		st->results = ((Data*)create_nfo->lpCreateParams)->results;
+		set_window_state(hwnd, st);
+		return TRUE;
+	} break;
+	case WM_COMMAND:
+	{
+		printf("HIWORD(wparam)=%d\n", HIWORD(wparam));
+		// Msgs from my controls
+		switch (LOWORD(wparam))
+		{
+		case EDIT_USERNAME://TODO(fran): this is actually pretty stupid, we know all our hwnds so we dont really need identifiers where we could have duplicates without knowing
+		case EDIT_PASSWORD:
+		{
+			WORD msg_code = HIWORD(wparam);
+			switch (msg_code) {
+			case EN_ENTER://User pressed enter key, aka wants to login
+			{
+				PostMessage(state.wnd, WM_COMMAND, MAKELONG(BTN_LOGIN, 0), (LPARAM)state.controls.button_login);//TODO(fran): decide on a general way to simulate the action of a child control, maybe simulate a click? idk
+				return 0;
+			} break;
+			}
+		} break;
+		case BTN_LOGIN:
+		{
+			bool success = false;
+			size_t username_len = GetWindowTextLength(state.controls.edit_username) + 1;//includes null terminator
+			size_t password_len = GetWindowTextLength(state.controls.edit_password) + 1;//includes null terminator
+			if (username_len > 1 && password_len > 1) { //Check: there has to be something written
+				cstr* username_buf = (cstr*)malloc(username_len * sizeof(*username_buf));
+				cstr* password_buf = (cstr*)malloc(password_len * sizeof(*password_buf));
+				GetWindowText(state.controls.edit_username, username_buf, (int)username_len);
+				GetWindowText(state.controls.edit_password, password_buf, (int)password_len);
+				int username_sz = (int)(username_len - 1) * sizeof(*username_buf); //we dont care about the null terminator
+				int password_sz = (int)(password_len - 1) * sizeof(*password_buf); //we dont care about the null terminator
+
+				//Perform the last checks on the username https://gist.github.com/doctaphred/d01d05291546186941e1b7ddc02034d3
+				bool check_failed = false;
+				//1.reserved characters: we manage that with EM_SETINVALIDCHARS in the edit control
+				//2.chars with value 31 or lower (control chars):
+				if (any_char(username_buf, [](cstr c) { return c <= 31; })) {
+					check_failed = true;
+					edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_CONTROLCHARS), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
+				}
+				//3.reserved names (CON, PRN, AUX, NUL, COM0, COM1, COM2, COM3, COM4, COM5, COM6, COM7, COM8, COM9, LPT0, LPT1, LPT2, LPT3, LPT4, LPT5, LPT6, LPT7, LPT8, LPT9, also all this followed by a . (eg. COM0.fefe.ef is invalid, once you put the dot it will always be invalid): we append a known string before each username
+
+				//4.do not start nor end with space:
+				if (username_buf[0] == _t(' ') || username_buf[username_len - 2] == _t(' ')) {
+					//NOTE: actually it can start with a space thanks to our fix to problem 3. but still, a username starting with spaces is strange
+					check_failed = true;
+					edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_STARTENDSPACE), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
+				}
+				//5.do not end with . :
+				if (username_buf[username_len - 2] == _t('.')) {
+					check_failed = true;
+					edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_ENDDOT), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
+				}
+
+				if (check_failed) {
+					ZeroMemory(username_buf, username_sz);//TODO(fran): this two should be a mini function or macro (zero_free())
+					ZeroMemory(password_buf, password_sz);
+					free(username_buf);
+					free(password_buf);
+					return 0;
+				}
+
+				if (sizeof(*username_buf) == 1) {//we got ascii data, we always want utf16 otherwise the key would stop working when switching from ascii to unicode controls
+					defer{ free(username_buf); free(password_buf); };
+					int username_sz_char = MultiByteToWideChar(CP_ACP, 0, (LPCCH)username_buf, username_sz, 0, 0);//TODO(fran): make sure this guy does NOT force a null terminator to be appended at the end
+					int password_sz_char = MultiByteToWideChar(CP_ACP, 0, (LPCCH)password_buf, password_sz, 0, 0);//TODO(fran): make sure this guy does NOT force a null terminator to be appended at the end
+					if (username_sz_char && password_sz_char) {
+						void* username_mem = malloc(username_sz_char * sizeof(WCHAR));
+						void* password_mem = malloc(password_sz_char * sizeof(WCHAR));
+						if (username_mem && password_mem) {
+							MultiByteToWideChar(CP_ACP, 0, (LPCCH)username_buf, username_sz, (LPWSTR)username_mem, username_sz_char);
+							MultiByteToWideChar(CP_ACP, 0, (LPCCH)password_buf, password_sz, (LPWSTR)password_mem, password_sz_char);
+							if (state.results->password.str) free(state.results->password.str);//this shouldnt ever happen
+							if (state.results->username.str) free(state.results->username.str);//this shouldnt ever happen
+							state.results->password.str = (WCHAR*)password_mem;
+							state.results->password.sz_chars = password_sz_char;
+							state.results->username.str = (WCHAR*)username_mem;
+							state.results->username.sz_chars = username_sz_char;
+							success = true;
+						}
+					}
+				}
+				else {
+					state.results->username.str = username_buf;
+					state.results->username.sz_chars = username_len - 1;
+					state.results->password.str = password_buf;
+					state.results->password.sz_chars = password_len - 1;
+					success = true;
+				}
+				if(success) PostMessage(0, WM_NEXT, 0, 0);//TODO(fran): maybe storing the results in WM_NEXT is better?
+			}
+			else {
+				if(username_len==1) edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_EMPTY), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
+				else edit_oneline::show_tip(state.controls.edit_password, RCS(LANG_LOGIN_PASSWORD_EMPTY), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
+			}
+			return 0;
+		}
+#define _generate_enum_cases(member,value_expr) case LANGUAGE::member:
+		_foreach_language(_generate_enum_cases)
+		{
+			LANGUAGE_MANAGER::Instance().ChangeLanguage((LANGUAGE)LOWORD(wparam));
+			return 0;
+		}
+		}
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
+	case WM_LBUTTONUP:
+	{
+		SetFocus(state.wnd);
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
+	case WM_RESET:
+	{
+		if (state.results->password.str) {
+			ZeroMemory(state.results->password.str, state.results->password.sz_chars * sizeof(*state.results->password.str));
+			free(state.results->password.str);
+			state.results->password.str = nullptr;
+			state.results->password.sz_chars = 0;
+		}
+		if (state.results->username.str) {
+			ZeroMemory(state.results->username.str, state.results->username.sz_chars * sizeof(*state.results->username.str));
+			free(state.results->username.str);
+			state.results->username.str = nullptr;
+			state.results->username.sz_chars = 0;
+		}
+		SetWindowText(state.controls.edit_password, _t(""));
+		SetWindowText(state.controls.edit_username, _t(""));
+	} break;
+	case WM_CLOSE:
+	{
+		return 0;
+	} break;
+	case WM_ERASEBKGND:
+	{
+		HDC dc = (HDC)wparam;
+		RECT r; GetClientRect(state.wnd, &r);
+		FillRect(dc, &r, colors.ControlBk);
+		RECT bounds = bounding_box(state.wnd, state.controls.all, ARRAYSIZE(state.controls.all));
+		//TODO: login Theme
+		const auto pad = DPI(20);
+		InflateRect(&bounds, pad, pad);
+		urender::draw_round_rectangle(dc, bounds, themes.base_btn.dimensions.border_radius.to_px(), colors.Card_Bk_Soft);
+		return 1;
+	}
+	#ifdef _DEBUG_HWND_MESSAGES
+	case WM_NCCALCSIZE:
+	case WM_NOTIFYFORMAT:
+	case WM_QUERYUISTATE: //Neat, I dont know who asks for this but it's interesting, you can tell whether you need to draw keyboards accels
+	case WM_MOVE:
+	case WM_SHOWWINDOW:
+	case WM_WINDOWPOSCHANGING:
+	case WM_WINDOWPOSCHANGED:
+	case WM_NCPAINT:
+	case WM_PAINT:
+	case WM_NCHITTEST:
+	case WM_SETCURSOR:
+	case WM_MOUSEMOVE:
+	case WM_MOUSEACTIVATE:
+	case WM_LBUTTONDOWN:
+	case WM_RBUTTONDOWN:
+	case WM_RBUTTONUP:
+	case WM_CONTEXTMENU://Interesting
+	case WM_DESTROY:
+	case WM_DELETEITEM://sent to owner of combo/list box (for menus also) when it is destroyed or items are being removed. when you do SetMenu you also get this msg if you had a menu previously attached
+		//TODO(fran): we could try to use this to manage state destruction
+	case WM_GETTEXT:
+	case WM_PARENTNOTIFY:
+	{
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
+	#endif
+	default:
+#ifdef _DEBUG_HWND_MESSAGES
+		Assert(0);
+#else 
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+#endif
+	}
+	return 0;
+}
+
+_init_wndclass_at_startup;
+}
+
+_add_struct_to_serialization_namespace(login::Settings);
