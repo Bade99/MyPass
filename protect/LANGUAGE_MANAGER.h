@@ -2,9 +2,9 @@
 #include <windows.h>
 #include <map>
 #include <vector>
-#include "unCap_Helpers.h"
-#include "unCap_Reflection.h"
-#include "unCap_Serialization.h"
+#include "helpers.h"
+#include "reflection.h"
+#include "serialization.h"
 
 //Request string
 #define RS(stringID) LANGUAGE_MANAGER::Instance().RequestString(stringID)
@@ -15,11 +15,19 @@
 //Add window string
 #define AWT(hwnd,stringID) LANGUAGE_MANAGER::Instance().AddWindowText(hwnd, stringID)
 
+//Add window default string
+#define AWDT(hwnd,stringID) LANGUAGE_MANAGER::Instance().AddWindowDefaultText(hwnd, stringID)
+
 //Add combobox string in specific ID (Nth element of the list)
 #define ACT(hwnd,ID,stringID) LANGUAGE_MANAGER::Instance().AddComboboxText(hwnd, ID, stringID);
 
 //Add menu string
 #define AMT(hmenu,ID,stringID) LANGUAGE_MANAGER::Instance().AddMenuText(hmenu,ID,stringID);
+
+//Add dynamic window (gets notified with this message when the language changes)
+//One common use case could be using a WM_SIZE message to trigger a full re-render
+//Or WM_PAINT: which the manager reinterprets into a call to ask_window_for_repaint
+#define AWDYN(hwnd,msgID) LANGUAGE_MANAGER::Instance().AddDynamicText(hwnd, msgID);
 
 enum LANGUAGE
 {
@@ -56,13 +64,10 @@ namespace userial {
 
 class LANGUAGE_MANAGER
 {
-public:
-
-
 private:
 
 #define _foreach_LANGUAGE_MANAGER_member(op) \
-		op(LANGUAGE,CurrentLanguage,LANGUAGE::English) \
+		op(LANGUAGE,language,LANGUAGE::English) \
 
 	_foreach_LANGUAGE_MANAGER_member(_generate_member)
 
@@ -99,43 +104,160 @@ public:
 	//愚any hwnds can use the same stringID
 	//意ext time there is a language change the window will be automatically updated
 	//愛eturns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
-	BOOL AddWindowText(HWND hwnd, UINT stringID);
+	BOOL AddWindowText(HWND hwnd, UINT stringID)
+	{
+		BOOL res = UpdateHwnd(hwnd, stringID);
+		if (res) this->Hwnds[hwnd] = stringID;
+		return res;
+	}
+
+	//嫂dds the hwnd to the list of managed hwnds and sets its default text corresponding to stringID and the current language
+	//愚any hwnds can use the same stringID
+	//意ext time there is a language change the window will be automatically updated
+	//愛eturns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
+	BOOL AddWindowDefaultText(HWND hwnd, u32 stringID) {
+		BOOL res = UpdateHwndDefault(hwnd, stringID);
+		if (res) this->HwndsDefault[hwnd] = stringID;
+		return res;
+	}
+
+	//嫂dds the hwnd to the list of managed hwnds and sets its tooltip text corresponding to stringID and the current language
+	//愚any hwnds can use the same stringID
+	//意ext time there is a language change the window will be automatically updated
+	//愛eturns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
+	BOOL AddWindowTooltipText(HWND hwnd, u32 stringID) {
+		BOOL res = UpdateHwndTooltip(hwnd, stringID);
+		if (res) this->HwndsTooltip[hwnd] = stringID;
+		return res;
+	}
 
 	//愈pdates all managed objects to the new language, all the ones added after this call will also use the new language
 	//慈n success returns the new LANGID (language) //TODO(fran): should I return the previous langid? it feels more useful
 	//慈n failure returns (LANGID)-2 if the language is invalid, (LANGID)-3 if failed to change the language
-	LANGID ChangeLanguage(LANGUAGE newLang);
+	LANGID ChangeLanguage(LANGUAGE newLang)
+	{
+		//if (newLang == this->CurrentLanguage) return -1;//TODO: negative values wrap around to huge values, I assume not all lcid values are valid, find out if these arent
+		BOOL res = this->IsValidLanguage(newLang);
+		if (!res) return (LANGID)-2;
+
+		this->language = newLang;
+		//LCID previousLang = SetThreadLocale(this->GetLCID(newLang));
+		//INFO: thanks https://www.curlybrace.com/words/2008/06/10/setthreadlocale-and-setthreaduilanguage-for-localization-on-windows-xp-and-vista/
+		// SetThreadLocale has no effect on Vista and above
+		LANGID newLANGID = this->GetLANGID(newLang);
+		//INFO: On non-Vista platforms, SetThreadLocale can be used. Instead of a language identifier, it accepts a locale identifier
+		LANGID lang_res = SetThreadUILanguage(newLANGID); //If successful returns the same value that you sent it
+
+		for (auto const& hwnd_sid : this->Hwnds)
+			this->UpdateHwnd(hwnd_sid.first, hwnd_sid.second);
+
+		for (auto const& hwnd_sid : this->HwndsDefault)
+			this->UpdateHwndDefault(hwnd_sid.first, hwnd_sid.second);
+
+		for (auto const& hwnd_sid : this->HwndsTooltip)
+			this->UpdateHwndTooltip(hwnd_sid.first, hwnd_sid.second);
+
+		for (auto const& hwnd_id_sid : this->Comboboxes)
+			this->UpdateCombo(hwnd_id_sid.first.first, hwnd_id_sid.first.second, hwnd_id_sid.second);
+
+		for (auto const& hwnd_msg : this->DynamicHwnds) {
+			this->UpdateDynamicHwnd(hwnd_msg.first, hwnd_msg.second);
+		}
+
+		for (auto const& hmenu_id_sid : this->Menus) {
+			this->UpdateMenu(hmenu_id_sid.first.first, hmenu_id_sid.first.second, hmenu_id_sid.second);
+		}
+		for (auto const& menudrawer : this->MenuDrawers) {
+			DrawMenuBar(menudrawer);
+			UpdateWindow(menudrawer);
+		}
+
+		return (lang_res == newLANGID ? lang_res : -3);//is this NULL when failed?
+	}
 
 	//愛eturns the requested string in the current language
 	//弒f stringID is invalid returns L"" //TODO(fran): check this is true
 	//INFO: uses temporary string that lives till the end of the full expression it appears in
-	std::wstring RequestString(UINT stringID);
+	std::wstring RequestString(UINT stringID)
+	{
+		std::wstring res;
+		const utf16* text;
+		auto char_cnt = LoadStringW(this->hInstance, stringID, (LPWSTR)&text, 0);
+		if (char_cnt) res = std::wstring(text, char_cnt);
+		else res = str(L"INVALID ID ") + to_str(stringID);
+		return res;
+	}
 
 	//嫂dds the hwnd to the list of managed comboboxes and sets its text for the specified ID(element in the list) corresponding to stringID and the current language
 	//意ext time there is a language change the window will be automatically updated
-	BOOL AddComboboxText(HWND hwnd, UINT ID, UINT stringID);
+	BOOL AddComboboxText(HWND hwnd, UINT ID, UINT stringID)
+	{
+		BOOL res = UpdateCombo(hwnd, ID, stringID);
+		if (res) this->Comboboxes[std::make_pair(hwnd, ID)] = stringID;
+		return res;
+	}
 
 	//Set the hinstance from where the string resources will be retrieved
-	HINSTANCE SetHInstance(HINSTANCE hInst);
+	HINSTANCE SetHInstance(HINSTANCE hInst)
+	{
+		HINSTANCE oldHInst = this->hInstance;
+		this->hInstance = hInst;
+		return oldHInst;
+	}
 
 	HINSTANCE GetHInstance() { return this->hInstance; };
 
 	//Add a control that manages other windows' text where the string changes
 	//Each time there is a language change we will send a message with the specified code so the window can update its control's text
 	//One hwnd can only be linked to one messageID
-	BOOL AddDynamicText(HWND hwnd, UINT messageID);
+	BOOL AddDynamicText(HWND hwnd, UINT messageID)
+	{
+		if (!hwnd) return FALSE;
+		this->DynamicHwnds[hwnd] = messageID;
+		this->UpdateDynamicHwnd(hwnd, messageID);
+		return TRUE;
+	}
 
 	//Menus are not draw by themselves, instead their owner window draws them, so if you want a menu to be redrawn you need to use this function
 	//to indicate which window to call for its menus to be redrawn
-	BOOL AddMenuDrawingHwnd(HWND MenuDrawer);
+	BOOL AddMenuDrawingHwnd(HWND MenuDrawer)
+	{
+		//TODO(fran): check HWND is valid
+		if (MenuDrawer) {
+			this->MenuDrawers.push_back(MenuDrawer);
+			return TRUE;
+		}
+		return FALSE;
+	}
 
-	BOOL AddMenuText(HMENU hmenu, UINT_PTR ID, UINT stringID);
+	BOOL AddMenuText(HMENU hmenu, UINT_PTR ID, UINT stringID)
+	{
+		BOOL res = UpdateMenu(hmenu, ID, stringID);
+		if (res) this->Menus[std::make_pair(hmenu, ID)] = stringID;
+		return res;
+	}
 
-	LANGUAGE GetCurrentLanguage();
+	LANGUAGE GetCurrentLanguage()
+	{
+		return this->language;
+	}
 
 	_generate_default_struct_serialize(_foreach_LANGUAGE_MANAGER_member);
 
-	bool deserialize(str name, const str& content);
+	bool deserialize(str name, const str& content) {
+		bool res = false;
+		str start = name + _keyvaluesepartor + _structbegin + _newline;
+		size_t s = find_identifier(content, 0, start);
+		size_t e = find_closing_str(content, s + start.size(), _structbegin, _structend);
+		if (str_found(s) && str_found(e)) {
+			s += start.size();
+			str substr = content.substr(s, e - s);
+			_foreach_LANGUAGE_MANAGER_member(_deserialize_member);
+			res = true;
+		}
+		this->ChangeLanguage(this->language);//whatever happens we need to set some language
+		return res;
+	}
 
 private:
 	LANGUAGE_MANAGER() {}
@@ -144,6 +266,8 @@ private:
 	HINSTANCE hInstance = NULL;
 
 	std::map<HWND, UINT> Hwnds;
+	std::map<HWND, UINT> HwndsDefault;
+	std::map<HWND, UINT> HwndsTooltip;
 	std::map<HWND, UINT> DynamicHwnds;
 	std::map<std::pair<HWND, UINT>, UINT> Comboboxes;
 
@@ -154,13 +278,27 @@ private:
 	BOOL UpdateHwnd(HWND hwnd, UINT stringID)
 	{
 		BOOL res = SendMessage(hwnd, WM_SETTEXT, 0, (LPARAM)this->RequestString(stringID).c_str()) == TRUE;
-		InvalidateRect(hwnd, NULL, TRUE);
+		ask_window_for_repaint(hwnd);
+		return res;
+	}
+
+	BOOL UpdateHwndDefault(HWND hwnd, u32 stringID)
+	{
+		BOOL res = SendMessage(hwnd, WM_SETDEFAULTTEXT, 0, (LPARAM)this->RequestString(stringID).c_str()) == TRUE;
+		ask_window_for_repaint(hwnd);
+		return res;
+	}
+
+	BOOL UpdateHwndTooltip(HWND hwnd, u32 stringID)
+	{
+		BOOL res = SendMessage(hwnd, WM_SETTOOLTIPTEXT, 0, (LPARAM)this->RequestString(stringID).c_str()) == TRUE;
 		return res;
 	}
 
 	BOOL UpdateDynamicHwnd(HWND hwnd, UINT messageID)
 	{
-		return PostMessage(hwnd, messageID, 0, 0);
+		if (messageID == WM_PAINT) { ask_window_for_repaint(hwnd); return true; }
+		else return PostMessage(hwnd, messageID, 0, 0);
 	}
 
 	BOOL UpdateCombo(HWND hwnd, UINT ID, UINT stringID)
@@ -170,7 +308,7 @@ private:
 		LRESULT res = SendMessage(hwnd, CB_INSERTSTRING, ID, (LPARAM)this->RequestString(stringID).c_str());
 		if (currentSelection != CB_ERR) {
 			SendMessage(hwnd, CB_SETCURSEL, currentSelection, 0);
-			InvalidateRect(hwnd, NULL, TRUE);
+			ask_window_for_repaint(hwnd);
 		}
 		return res != CB_ERR && res != CB_ERRSPACE;//TODO(fran): can I check for >=0 with lresult?
 	}
