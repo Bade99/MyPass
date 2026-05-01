@@ -202,7 +202,7 @@ void manual_maximize(State* state) {//Maximize only works correctly for WM_OVERL
 //TODO(fran): UNDO support for comment removal
 //TODO(fran): DPI awareness
 //TODO(fran): it'd be nice to have a way to implement good subclassing, eg letting the user assign clip regions where they can draw and we dont, things like that, more communication
-LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
 	//printf(msgToString(msg)); printf("\n");
 	State* state = get_state(hwnd);
@@ -818,20 +818,21 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 						if (hbmp) {
 							BITMAP bitmap; GetObject(hbmp, sizeof(bitmap), &bitmap);
 
+							int img_max_x = GetSystemMetrics(SM_CXMENUCHECK);
+							int img_max_y = RECTH(item->rcItem);
+							int img_sz = roundNdown(bitmap.bmWidth, minimum(img_max_x, img_max_y));//HACK: instead use png + gdi+ + color matrices
+							if (!img_sz)img_sz = bitmap.bmWidth; //More HACKs
+							int bmp_height = img_sz;
+							int bmp_width = bmp_height;
+							int bmp_align_width = item->rcItem.left + (img_max_x + x_pad - bmp_width) / 2;
+							int bmp_align_height = item->rcItem.top + (img_max_y - bmp_height) / 2;
+
 							if (bitmap.bmBitsPixel == 1) {
-
-								int img_max_x = GetSystemMetrics(SM_CXMENUCHECK);
-								int img_max_y = RECTH(item->rcItem);
-								int img_sz = roundNdown(bitmap.bmWidth, minimum(img_max_x, img_max_y));//HACK: instead use png + gdi+ + color matrices
-								if (!img_sz)img_sz = bitmap.bmWidth; //More HACKs
-								int bmp_height = img_sz;
-								int bmp_width = bmp_height;
-								int bmp_align_width = item->rcItem.left + (img_max_x + x_pad - bmp_width) / 2;
-								int bmp_align_height = item->rcItem.top + (img_max_y - bmp_height) / 2;
-
-								//NOTE: for some insane and nonsensical reason we cant use MaskBlt here, so no urender::draw_mask.
 								urender::draw_menu_mask(item->hDC, bmp_align_width, bmp_align_height, bmp_width, bmp_height, hbmp, 0, 0, bitmap.bmWidth, bitmap.bmHeight, colors.Img);//TODO(fran): parametric brush
 								//TODO(fran): clipping
+							}
+							elif (bitmap.bmBitsPixel == 8) {
+								urender::draw_menu_mask8(item->hDC, bmp_align_width, bmp_align_height, bmp_width, bmp_height, hbmp, colors.Img);
 							}
 						}
 					}
@@ -1128,7 +1129,7 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		default:return DefWindowProc(hwnd, msg, wparam, lparam);
 		}
 	} break;
-	#ifdef _DEBUG
+	#ifdef _DEBUG_HWND_MESSAGES
 	case WM_NCLBUTTONUP:
 	case WM_SYSCOMMAND://Menu and nc buttons related //TODO(fran): maybe I should use this for sending max,min,close
 	case WM_CAPTURECHANGED://just a notif
@@ -1197,25 +1198,19 @@ LRESULT CALLBACK UncapNcProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	return 0;
 }
 
-ATOM init_wndclass(HINSTANCE inst) {
-	WNDCLASSEXW wcex;
-
-	wcex.cbSize = sizeof(WNDCLASSEX);
+void init_wndclass(HINSTANCE inst) {
+	WNDCLASSEXW wcex{ sizeof(WNDCLASSEX) };
+	auto icon = LoadIcon(inst, MAKEINTRESOURCE(ICO_LOGO));
 	wcex.style = CS_HREDRAW | CS_VREDRAW;
-	wcex.lpfnWndProc = UncapNcProc;
-	wcex.cbClsExtra = 0;
-	wcex.cbWndExtra = sizeof(State*);
+	wcex.lpfnWndProc = proc;
+	wcex.cbWndExtra = sizeof(void*);
 	wcex.hInstance = inst;
-	wcex.hIcon = LoadIcon(inst, MAKEINTRESOURCE(ICO_LOGO)); //TODO(fran): LoadImage to choose the best size
-	wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
-	wcex.hbrBackground = NULL;
-	wcex.lpszMenuName = 0;
+	wcex.hIcon = icon; //TODO(fran): LoadImage to choose the best size
+	wcex.hCursor = LoadCursor(nil, IDC_ARROW);
 	wcex.lpszClassName = wndclass;
-	wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(ICO_LOGO)); //TODO(fran): LoadImage to choose the best size
+	wcex.hIconSm = icon; //TODO(fran): LoadImage to choose the best size
 
-	ATOM class_atom = RegisterClassExW(&wcex);
-	Assert(class_atom);
-	return class_atom;
+	ATOM class_atom = RegisterClassExW(&wcex); Assert(class_atom);
 }
 struct pre_post_main {
 	pre_post_main() { init_wndclass(GetModuleHandleW(nil)); }

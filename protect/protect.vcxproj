@@ -210,7 +210,7 @@
     <Image Include="..\Icons\Add16.bmp" />
     <Image Include="..\Icons\Calendar32.bmp" />
     <Image Include="..\Icons\Cancel32.bmp" />
-    <Image Include="..\Icons\Circle16.bmp" />
+    <Image Include="..\Icons\Circle_A.bmp" />
     <Image Include="..\Icons\Clipboard32.bmp" />
     <Image Include="..\Icons\Close16.bmp" />
     <Image Include="..\Icons\Earth16.bmp" />

@@ -531,12 +531,10 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 	AMT(menu_file, (UINT_PTR)menu_file_lang, LANG_MENU_LANGUAGE);
 	//TODO(fran): SetMenuItemInfo only accepts UINT, not the UINT_PTR of MF_POPUP, plz dont tell me I have to redo all of it a different way (LANGUAGE_MANAGER just does it normally not caring for the extra 32 bits)
 
-	HBITMAP bTick = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(BMP_CIRCLE));
-
 #define _language_appendtomenu(member,value_expr) \
 		AppendMenuW(menu_file_lang, MF_STRING | MF_OWNERDRAW, LANGUAGE::member, (LPCWSTR)menu_file_lang); \
 		SetMenuItemString(menu_file_lang, LANGUAGE::member, FALSE, _t(#member)); \
-		SetMenuItemBitmaps(menu_file_lang, LANGUAGE::member, MF_BYCOMMAND, NULL, bTick); \
+		SetMenuItemBitmaps(menu_file_lang, LANGUAGE::member, MF_BYCOMMAND, NULL, bmps.circle); \
 
 	_foreach_language(_language_appendtomenu)
 #undef _language_appendtomenu

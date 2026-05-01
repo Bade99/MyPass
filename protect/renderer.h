@@ -170,6 +170,14 @@ u8 sample_mask(img* mask, i32 x, i32 y) {
 	return tex;
 }
 
+//TODO: bilinear sampling, steal again from space_typers
+u8 sample_mask8(img* texture, i32 x, i32 y) {
+	constexpr auto IMG_BYTES_PER_PIXEL = 1;
+	u8* texel_ptr = ((u8*)texture->mem + y * texture->pitch + x * IMG_BYTES_PER_PIXEL);
+	u8 res = *(u8*)texel_ptr;
+	return res;
+}
+
 void GetRoundRectPath(Gdiplus::GraphicsPath* path, RECT r, float diameter) {
 	float w = RECTW(r), h = RECTH(r);
 	if (diameter > w) diameter = w;
@@ -345,6 +353,48 @@ namespace urender {
 		if (scaled_mask != mask) DeleteObject(scaled_mask);
 	}
 
+	HBITMAP create_DIB32(int width, int height, u32** pixels) {
+		BITMAPINFO bmi = {};
+		bmi.bmiHeader.biSize = sizeof(bmi);
+		bmi.bmiHeader.biWidth = width;
+		bmi.bmiHeader.biHeight = -height;
+		bmi.bmiHeader.biPlanes = 1;
+		bmi.bmiHeader.biBitCount = 32;
+		bmi.bmiHeader.biCompression = BI_RGB;
+
+		return CreateDIBSection(nullptr, &bmi, DIB_RGB_COLORS, (void**)pixels, nullptr, 0);
+	}
+
+	void draw_mask8(u32* pixels, HBITMAP mask, HBRUSH br) {
+		//TODO: cache results for reuse
+
+		BITMAP masknfo; GetObject(mask, sizeof(masknfo), &masknfo); Assert(masknfo.bmBitsPixel == 8);
+		img mask_img;
+		mask_img.width = masknfo.bmWidth;
+		mask_img.height = masknfo.bmHeight;
+		mask_img.bits_per_pixel = masknfo.bmBitsPixel;
+		mask_img.pitch = masknfo.bmWidthBytes;
+		int mask_sz = mask_img.height * mask_img.pitch;
+		mask_img.mem = malloc(mask_sz); defer{ free(mask_img.mem); };
+		int getbits = GetBitmapBits(mask, mask_sz, mask_img.mem); Assert(getbits == mask_sz);
+
+		COLORREF col = ColorFromBrush(br);
+		for (int y = 0; y < 0 + mask_img.height; y++) {
+			for (int x = 0; x < 0 + mask_img.width; x++)
+			{
+				u8 alpha = sample_mask8(&mask_img, x - 0, y - 0);
+				f32 sample = (f32)alpha / 255.f;
+				u32 px =
+					(u32)((col & 0xff) * sample) |
+					(u32)(((col >> 8) & 0xff) * sample) << 8 |
+					(u32)(((col >> 16) & 0xff) * sample) << 16 |
+					(u32)(alpha) << 24;
+
+				pixels[y * mask_img.pitch + x] = px;
+			}
+		}
+	}
+
 	void draw_icon(HDC dest, int xDest, int yDest, int wDest, int hDest, HICON icon, int xSrc, int ySrc, int wSrc, int hSrc) {
 		Gdiplus::Graphics graphics(dest);//Yeah, who cares, icons are small, I just want bilinear filtering
 		graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBilinear);
@@ -383,6 +433,30 @@ namespace urender {
 		SelectObject(maskDC, oldFillBitmap);
 		DeleteObject(fillBitmap);
 		DeleteDC(maskDC);
+	}
+
+	void draw_menu_mask8(HDC destDC, int xDest, int yDest, int wDest, int hDest, HBITMAP mask, HBRUSH colorbr)
+	{
+		BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo); Assert(bmpnfo.bmBitsPixel == 8);
+
+		u32* pixels = nullptr;
+		HBITMAP bmp = create_DIB32(bmpnfo.bmWidth, bmpnfo.bmHeight, &pixels); defer{ DeleteObject(bmp); };
+
+		urender::draw_mask8(pixels, mask, colorbr);
+
+		HDC memdc = CreateCompatibleDC(destDC); defer{ DeleteDC(memdc); };
+		HBITMAP oldbmp = (HBITMAP)SelectObject(memdc, bmp); defer{ SelectObject(memdc, oldbmp); };
+		
+		BLENDFUNCTION bf = {
+			.BlendOp = AC_SRC_OVER,
+			.SourceConstantAlpha = 255,
+			.AlphaFormat = AC_SRC_ALPHA,
+		};
+
+		AlphaBlend(destDC, xDest, yDest, wDest, hDest, 
+			memdc, 0, 0, bmpnfo.bmWidth, bmpnfo.bmHeight, bf); 
+		// We allow AlphaBlend to do the scaling 
+		// TODO: check if it scales nicely or it looks like trash and we gotta do it ourselves with bilinear sampling
 	}
 
 	void draw_round_rectangle(HDC dest, RECT r, float radius, HBRUSH color_br) {

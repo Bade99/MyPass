@@ -18,7 +18,6 @@
 #define LANG_MENU_SAVE                  135
 #define BMP_EARTH                       135
 #define LANG_MENU_LANGUAGE              136
-#define BMP_CIRCLE                      136
 #define LANG_MENU_EDIT                  137
 #define BMP_ADD                         137
 #define LANG_MENU_EDIT_UNDO             138
@@ -35,8 +34,9 @@
 #define LANG_LOGIN_USERNAME_STARTENDSPACE 144
 #define BMP_SEARCH                      144
 #define LANG_LOGIN_USERNAME_ENDDOT      145
-#define IDB_BITMAP1                     145
 #define LANG_LOGIN_USERNAME_EMPTY       146
+#define IDB_BITMAP1                     146
+#define BMP_CIRCLE_A                    146
 #define LANG_LOGIN_PASSWORD_EMPTY       147
 #define LANG_ERROR_PASSWORD             148
 #define LANG_ERROR                      149
@@ -79,7 +79,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        146
+#define _APS_NEXT_RESOURCE_VALUE        147
 #define _APS_NEXT_COMMAND_VALUE         32771
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           110

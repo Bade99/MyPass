@@ -243,9 +243,6 @@
     <Image Include="..\Icons\Earth16.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Circle16.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
     <Image Include="..\Icons\Add16.bmp">
       <Filter>Resource Files</Filter>
     </Image>
@@ -271,6 +268,9 @@
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="..\Icons\Calendar32.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\Circle_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>
