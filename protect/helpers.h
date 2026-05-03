@@ -2,6 +2,7 @@
 #include "win_sdk.h"
 #include "platform.h"
 #include "macros.h"
+#include "reflection.h"
 #include "math.h"
 #include "vector.h"
 
@@ -512,6 +513,49 @@ static BOOL SetMenuItemString(HMENU hmenu, UINT item, BOOL fByPositon, const TCH
 }
 
 /**
+  * DPI
+  */
+
+static f32 dpiCorrection(f32 val) {
+	f32 res = val * (f32)GetDpiForSystem() / 96/*default dpi*/;
+	return res;
+}
+static f32 DPI(f32 val) { return dpiCorrection(val); }
+
+
+struct UINumber {
+	enum class type {
+		px,     // Specific pixel value
+		dpi,    // DPI aware (scaled) pixel value
+		dyn,    // Fills whatever space is left
+		percent	// Percentage of a reference dimension
+	} type = type::dpi;
+	f32 value;
+
+	f32 to_px(u32 reference = 0) const {
+		switch (type) {
+		case type::px:      return value;
+		case type::dpi:     return DPI(value);
+		case type::dyn:     return reference; //Not meant to be used like this, it's mostly a marker to start further calculation to assign a size to multiple dyn elements in contention for the same space
+		case type::percent: return reference * (value / 100.f);
+		default: Assert(0); return 0;
+		}
+	}
+};
+
+static SIZE avg_str_dim(HFONT font, size_t char_cnt) {
+	SIZE res;
+
+	HDC dc = GetDC(nil); defer{ ReleaseDC(nil,dc); };
+	HFONT old_font = (HFONT)SelectObject(dc, font); defer{ SelectObject(dc,old_font); };
+	TEXTMETRIC tm{}; GetTextMetrics(dc, &tm);
+	res.cy = tm.tmHeight;
+	res.cx = (int)(tm.tmAveCharWidth * char_cnt);
+
+	return res;
+}
+
+/**
   * HWND
   */
 
@@ -548,6 +592,19 @@ static void init_wndclass(LPCWSTR class_name, WNDPROC proc, UINT extra_styles = 
 		pre_post_main() { init_wndclass(wndclass, proc); } \
 		~pre_post_main() {} \
 	} static const PREMAIN_POSTMAIN; 
+
+static HWND create_root_window(HINSTANCE instance, RECT r, void* data = nil, const utf16* title = app_name, u32 extra_styles = 0, u32 extra_extended_styles = 0) {
+	HWND res = CreateWindowEx(
+		WS_EX_CONTROLPARENT | extra_extended_styles,
+		//TODO(fran): had to manually hack in the wndclass name for nonclient since at this point it's not yet defined
+		wndclass_name("nonclient"), title,
+		WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | extra_styles,
+		r.left, r.top, RECTW(r), RECTH(r), nil, nil, instance, data
+	);
+	Assert(res);
+	UpdateWindow(res);
+	return res;
+}
 
 static HWND create_window(HWND parent, const utf16* wndclass, const utf16* title = nil, u32 styles = WS_VISIBLE | WS_CHILD, u32 extended_styles = 0, u64 wnd_id = 0, HWND manager_parent = nil) {
 	auto res = CreateWindowExW(
@@ -605,7 +662,12 @@ static void SetText_txt_app(HWND wnd, const TCHAR* new_txt, const TCHAR* new_app
 	}
 }
 
-static auto add_mouseover_tooltip(HWND target, u64 msg_resource_id) {
+struct tooltip_props {
+	bool multiline = false;
+	u32 delay_ms = U32MAX; // delay between start of mouse over and showing the tooltip
+	u32 duration_ms = U32MAX; // time that the tooltip remains visible
+};
+static auto add_mouseover_tooltip(HWND target, u64 msg_resource_id, tooltip_props props = {}) {
 	auto tooltip = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL,
 		WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
 		CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
@@ -620,54 +682,16 @@ static auto add_mouseover_tooltip(HWND target, u64 msg_resource_id) {
 	toolInfo.lpszText = (decltype(toolInfo.lpszText))msg_resource_id;
 	auto addtool_res = SendMessage(tooltip, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
 	Assert(addtool_res);
+
+	if (props.multiline)
+		SendMessage(tooltip, TTM_SETMAXTIPWIDTH, 0, DPI(1000)); //Enables multiline
+	if (props.delay_ms != U32MAX)
+		SendMessage(tooltip, TTM_SETDELAYTIME, TTDT_INITIAL, (LPARAM)props.delay_ms);
+	if (props.duration_ms != U32MAX)
+		SendMessage(tooltip, TTM_SETDELAYTIME, TTDT_AUTOPOP, (LPARAM)props.duration_ms);
+
 	return tooltip;
 }
-
-
-/**
-  * DPI
-  */
-
-static f32 dpiCorrection(f32 val) {
-	f32 res = val * (f32)GetDpiForSystem() / 96/*default dpi*/;
-	return res;
-}
-static f32 DPI(f32 val) { return dpiCorrection(val); }
-
-
-struct UINumber {
-	enum class type {
-		px,     // Specific pixel value
-		dpi,    // DPI aware (scaled) pixel value
-		dyn,    // Fills whatever space is left
-		percent	// Percentage of a reference dimension
-	} type = type::dpi;
-	f32 value;
-
-	f32 to_px(u32 reference = 0) const {
-		switch (type) {
-		case type::px:      return value;
-		case type::dpi:     return DPI(value);
-		case type::dyn:     return reference; //Not meant to be used like this, it's mostly a marker to start further calculation to assign a size to multiple dyn elements in contention for the same space
-		case type::percent: return reference * (value / 100.f);
-		default: Assert(0); return 0;
-		}
-	}
-};
-
-static SIZE avg_str_dim(HFONT font, size_t char_cnt) {
-	SIZE res;
-
-	HDC dc = GetDC(nil); defer{ ReleaseDC(nil,dc); };
-	HFONT old_font = (HFONT)SelectObject(dc, font); defer{ SelectObject(dc,old_font); };
-	TEXTMETRIC tm{}; GetTextMetrics(dc, &tm);
-	res.cy = tm.tmHeight;
-	res.cx = (int)(tm.tmAveCharWidth * char_cnt);
-
-	return res;
-}
-
-
 
 /**
   * Clipboard

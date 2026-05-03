@@ -33,7 +33,8 @@ namespace debug {
 				b = create_window(wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD);
 				for (auto& br : t.brushes.bk.all) br = c;
 				button::set_theme(b, t);
-				add_mouseover_tooltip(b, (u64)(void*)(known_colors_names[i]));
+				add_mouseover_tooltip(b, (u64)(void*)(known_colors_names[i]), { .delay_ms = 100 });
+				
 			}
 		}
 

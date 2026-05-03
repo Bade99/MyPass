@@ -217,6 +217,7 @@
     <Image Include="..\Icons\Edit32.bmp" />
     <Image Include="..\Icons\EyeClosed32.bmp" />
     <Image Include="..\Icons\EyeOpen32.bmp" />
+    <Image Include="..\Icons\Language_A.bmp" />
     <Image Include="..\Icons\logo.ico" />
     <Image Include="..\Icons\Max16.bmp" />
     <Image Include="..\Icons\Min16.bmp" />

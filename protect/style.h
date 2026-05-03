@@ -38,6 +38,10 @@ struct Themes {
 } static themes{};
 
 void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
+	auto load_bitmap8 = [](HINSTANCE instance, u32 resource_id) {
+		return (HBITMAP)LoadImage(instance, MAKEINTRESOURCE(resource_id), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION | LR_SHARED);
+	};
+
 	bmps.add = LoadBitmap(instance, MAKEINTRESOURCE(BMP_ADD));
 	bmps.edit = LoadBitmap(instance, MAKEINTRESOURCE(BMP_EDIT));
 	bmps.clipboard = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CLIPBOARD));
@@ -51,7 +55,9 @@ void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 	bmps.eye_closed = LoadBitmap(instance, MAKEINTRESOURCE(BMP_EYE_CLOSED));
 	bmps.search = LoadBitmap(instance, MAKEINTRESOURCE(BMP_SEARCH));
 	bmps.calendar = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CALENDAR));
-	bmps.circle = (HBITMAP)LoadImage(instance, MAKEINTRESOURCE(BMP_CIRCLE_A), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION | LR_SHARED);
+	bmps.circle = load_bitmap8(instance, BMP_CIRCLE_A);
+	bmps.language = load_bitmap8(instance, BMP_LANGUAGE);
+
 
 #define create_global_bmps(bmp) bmps.bmp = CreateBitmap(bmp.w, bmp.h,1,bmp.bpp,bmp.mem); Assert(bmps.bmp);
 

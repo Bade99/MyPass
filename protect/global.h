@@ -100,8 +100,9 @@ union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 		HBITMAP cancel;
 		HBITMAP search;
 		HBITMAP calendar;
+		HBITMAP language;
 	};
-	HBITMAP all[20];
+	HBITMAP all[21];
 
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 } static bmps{};

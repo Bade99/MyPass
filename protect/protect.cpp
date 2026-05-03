@@ -147,18 +147,6 @@ void setup_debug_console() {
 #endif
 }
 
-HWND create_root_window(HINSTANCE instance, RECT r, void* data = nil, const utf16* title = app_name, u32 extra_styles = 0, u32 extra_extended_styles = 0) {
-    HWND res = CreateWindowEx(
-        WS_EX_CONTROLPARENT | extra_extended_styles,
-        nonclient::wndclass, title,
-        WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | extra_styles,
-        r.left, r.top, RECTW(r), RECTH(r), nil, nil, instance, data
-    );
-    Assert(res);
-    UpdateWindow(res);
-    return res;
-}
-
 int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 {
     setup_debug_console();
@@ -192,7 +180,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
     };
     HWND debug_wnd = create_root_window(
         hInstance,
-        nonclient::calc_nonclient_rc_from_client({ .left = 0, .top = 0, .right = 300, .bottom = 300 }, false),
+        nonclient::calc_nonclient_rc_from_client({ .left = 0, .top = 0, .right = 200, .bottom = 300 }, false),
         &debug_nc_param
     );
     #endif

@@ -38,6 +38,8 @@
 #define IDB_BITMAP1                     146
 #define BMP_CIRCLE_A                    146
 #define LANG_LOGIN_PASSWORD_EMPTY       147
+#define IDB_BITMAP2                     147
+#define BMP_LANGUAGE                    147
 #define LANG_ERROR_PASSWORD             148
 #define LANG_ERROR                      149
 #define LANG_SEARCH_FINDPREV            150
@@ -79,7 +81,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        147
+#define _APS_NEXT_RESOURCE_VALUE        148
 #define _APS_NEXT_COMMAND_VALUE         32771
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           110

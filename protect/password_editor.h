@@ -91,10 +91,9 @@ void create_controls(State& state) {
 	controls.btn_dates = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
 	SendMessage(controls.btn_dates, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.calendar);
 	button::set_theme(controls.btn_dates, themes.password_editor_toolbar_btn_static);
-	controls.tooltip_btn_dates = add_mouseover_tooltip(controls.btn_dates, 0);
-	SendMessage(controls.tooltip_btn_dates, TTM_SETMAXTIPWIDTH, 0, DPI(1000)); //Enables multiline
-	SendMessage(controls.tooltip_btn_dates, TTM_SETDELAYTIME, TTDT_INITIAL, (LPARAM)200);
-	SendMessage(controls.tooltip_btn_dates, TTM_SETDELAYTIME, TTDT_AUTOPOP, (LPARAM)15000);
+	controls.tooltip_btn_dates = add_mouseover_tooltip(controls.btn_dates, 0, 
+		{.multiline = true, .delay_ms = 200, .duration_ms = 15000}
+	);
 
 	controls.btn_edit = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
 	SendMessage(controls.btn_edit, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.edit);

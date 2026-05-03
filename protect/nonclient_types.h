@@ -42,6 +42,10 @@ namespace nonclient {
 			i32 menubar_itemcnt;
 			i32 menubar_mouseover_idx_from1;//IMPLEMENTATION: 0=no item is on mouseover, we'll start from 1 so in case you search by position you'll need to subtract 1
 			bool menu_on_delay;//NOTE: the delay is only needed for left click accessed menus //TODO(fran): this is quite a bit of a cheap hack solution
+
+			HDC menu_offscreen_dc;
+			HBITMAP menu_backbuffer;
+			SIZE menu_backbuffer_dim;
 		};
 	};
 }

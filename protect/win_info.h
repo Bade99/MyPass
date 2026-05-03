@@ -33,9 +33,16 @@ namespace Placement {
 
 
 /**
+  * Window Menu
+  */
+// NOTE: Windows' menu bar is terrible, it doesnt care to update for nothing
+// Calling SetMenu after one has already been set doesn't really work, the user should call our set_menu and get_menu instead of Windows' SetMenu and GetMenu
+
+
+/**
   * Window Proc Messages
   */
-static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	switch (msg) {
 	case WM_NCCREATE:
 	{ //1st msg received
@@ -159,6 +166,22 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 		if (child) {//a control has sent a notification
 			WORD notif = HIWORD(wparam);
 		}
+	} break;
+	default:
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	}
+	return 0;
+}
+
+/**
+  * Window Proc Messages Specific for Non Client Windows
+  */
+LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+	switch (msg) {
+	case WM_NCPAINT: 
+	{
+		// Check https://chromium.googlesource.com/chromium/chromium/+/5db69ae220c803e9c1675219b5cc5766ea3bb698/chrome/views/window.cc they block drawing so windows doesnt draw on top of them, cause the non client area is also painted in other msgs like settext
+		// Also https://social.msdn.microsoft.com/Forums/windows/en-US/a407591a-4b1e-4adc-ab0b-3c8b3aec3153/the-evil-wmncpaint?forum=windowsuidevelopment I took the implementation from there, but there's also two others I can try
 	} break;
 	default:
 		return DefWindowProc(hwnd, msg, wparam, lparam);

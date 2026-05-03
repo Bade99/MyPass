@@ -28,113 +28,109 @@ constexpr auto NC_MAXIMIZE = 101; //sent through WM_COMMAND
 constexpr auto NC_CLOSE = 102; //sent through WM_COMMAND
 constexpr auto NC_RESTORE = 103; //sent through WM_COMMAND
 
-constexpr auto NC_TIMER_MENUDELAY = 0xf1; //A little delay before allowing the user to select a new menu, this prevents problems, eg the user trying to close the menu by selecting it again in the menu bar
-
 //TODO(fran): look at SetWindowLong(hWnd, GWL_STYLE, currStyles | WS_MAXIMIZE); maybe that helps with maximizing correctly?
 
 namespace nonclient {
 
 constexpr auto top_border_thickness = 1;
 
+constexpr bool menu_bottom_border = false;
+constexpr auto menu_bottom_border_thickness = 1;
+
 auto get_state(HWND wnd) { _control_create_function__get_state }
 
-void calc_caption(State* state) {
-	GetClientRect(state->wnd, &state->rc_caption);
+void calc_caption(State& state) {
+	GetClientRect(state.wnd, &state.rc_caption);
 
 	RECT testrc{ 0,0,100,100 }; RECT ncrc = testrc;
 	AdjustWindowRect(&ncrc, WS_OVERLAPPEDWINDOW, FALSE);//no menu
 
-	state->rc_caption.bottom = distance(testrc.top, ncrc.top);
+	state.rc_caption.bottom = distance(testrc.top, ncrc.top);
 
-	state->caption_btn.cy = RECTH(state->rc_caption); state->caption_btn.cx = state->caption_btn.cy * 16 / 9;
+	state.caption_btn.cy = RECTH(state.rc_caption); state.caption_btn.cx = state.caption_btn.cy * 16 / 9;
 }
 
-RECT calc_nonclient_rc_from_client(RECT uncapcl_rc, BOOL has_menu) {
-	RECT res = uncapcl_rc;
+RECT calc_nonclient_rc_from_client(RECT client_rc, BOOL has_menu) {
+	RECT res = client_rc;
 	AdjustWindowRect(&res, WS_OVERLAPPEDWINDOW, has_menu);//TODO(fran): standardize this or some other measure
 	return res;
 }
 
-RECT calc_menu_rc(State* state) {
+RECT calc_menu_rc(State& state) {
 	RECT rc{ 0 };
-	if (state->menu) {
-		RECT r; GetClientRect(state->wnd, &r);
+	if (state.menu) {
+		RECT r; GetClientRect(state.wnd, &r);
 		rc.left = r.left;
-		rc.top = RECTH(state->rc_caption);
+		rc.top = RECTH(state.rc_caption);
 		rc.right = r.right;
 		rc.bottom = rc.top + GetSystemMetrics(SM_CYMENU);
 	}
 	return rc;
 }
 
-RECT calc_client_rc(State* state) {
-	RECT r; GetClientRect(state->wnd, &r);
+RECT calc_client_rc(State& state) {
+	RECT r; GetClientRect(state.wnd, &r);
 	RECT menu_rc = calc_menu_rc(state);
-	RECT rc{ r.left, RECTH(state->rc_caption) + RECTH(menu_rc), r.right, r.bottom };
+	RECT rc{ r.left, RECTH(state.rc_caption) + RECTH(menu_rc), r.right, r.bottom };
 	return rc;
 }
 
-RECT calc_btn_min_rc(State* state) {
-	RECT r; GetClientRect(state->wnd, &r);
-	RECT rc{ r.right - 3 * state->caption_btn.cx, r.top, r.right - 2 * state->caption_btn.cx, r.top + state->caption_btn.cy };
+RECT calc_btn_min_rc(State& state) {
+	RECT r; GetClientRect(state.wnd, &r);
+	RECT rc{ r.right - 3 * state.caption_btn.cx, r.top, r.right - 2 * state.caption_btn.cx, r.top + state.caption_btn.cy };
 	rc.top += top_border_thickness;
 	return rc;
 }
 
-RECT calc_btn_max_rc(State* state) {
-	RECT r; GetClientRect(state->wnd, &r);
-	RECT rc{ r.right - 2 * state->caption_btn.cx, r.top, r.right - 1 * state->caption_btn.cx, r.top + state->caption_btn.cy };
+RECT calc_btn_max_rc(State& state) {
+	RECT r; GetClientRect(state.wnd, &r);
+	RECT rc{ r.right - 2 * state.caption_btn.cx, r.top, r.right - 1 * state.caption_btn.cx, r.top + state.caption_btn.cy };
 	rc.top += top_border_thickness;
 	return rc;
 }
 
-RECT calc_btn_close_rc(State* state) {
-	RECT r; GetClientRect(state->wnd, &r);
-	RECT rc{ r.right - 1 * state->caption_btn.cx, r.top, r.right - 0 * state->caption_btn.cx, r.top + state->caption_btn.cy };
+RECT calc_btn_close_rc(State& state) {
+	RECT r; GetClientRect(state.wnd, &r);
+	RECT rc{ r.right - 1 * state.caption_btn.cx, r.top, r.right - 0 * state.caption_btn.cx, r.top + state.caption_btn.cy };
 	rc.top += top_border_thickness;
 	return rc;
 }
 
-HMENU get_menu(HWND uncapnc) {
-	State* state = get_state(uncapnc);
-	return state->menu;
+HMENU get_menu(HWND wnd) {
+	State& state = *get_state(wnd);
+	return state.menu;
 }
 
-//NOTE: windows' menu bar is terrible, it doesnt care to update for nothing
-
-//The user should call this instead of SetMenu, and get_menu instead of GetMenu
-void set_menu(HWND uncapnc, HMENU menu) { //TODO(fran): set to NULL should clear the menu
-	State* state = get_state(uncapnc);
+void set_menu(HWND uncapnc, HMENU menu) {
+	State& state = *get_state(uncapnc);
 
 	if (menu) {
-		state->menu = menu;
+		state.menu = menu;
 
 		MENUINFO mi{ sizeof(mi) };
 		mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS; //NOTE: important to also use "apply to submenus", cause the nc area is bigger than 1px and it will look very claustrophobic
 		//TODO(fran): MIM_MAXHEIGHT and other fMask params that we should set
-		mi.hbrBack = state->active ? colors.CaptionBk : colors.CaptionBk_Inactive;
+		mi.hbrBack = state.active ? colors.CaptionBk : colors.CaptionBk_Inactive;
 		SetMenuInfo(menu, &mi);
-
 	}
 	else {
-		//TODO(fran): implement menu removal in case we already have something on state->menu
-		state->menu = NULL;
+		//TODO(fran): set to NULL should clear the menu, implement menu removal in case we already have something on state.menu
+		state.menu = NULL;
 	}
-	RECT wndrc; GetWindowRect(state->wnd, &wndrc);
+	RECT wndrc; GetWindowRect(state.wnd, &wndrc);
 	//Update to accommodate for menu change
-	MoveWindow(state->wnd, wndrc.left, wndrc.top, RECTW(wndrc), RECTH(wndrc), FALSE);//NOTE: for some reason specifying TRUE for the last param doesnt force repainting
-	RedrawWindow(state->wnd, NULL, NULL, RDW_INVALIDATE);
-
+	MoveWindow(state.wnd, wndrc.left, wndrc.top, RECTW(wndrc), RECTH(wndrc), FALSE);//NOTE: for some reason specifying TRUE for the last param doesnt force repainting
+	ask_window_for_repaint(state.wnd);
 }
 
 //NOTE: this function request for a UINT since the top 32 bits of an HMENU are not used, if you have an HMENU simply cast down (UINT)hmenu
-bool is_on_menu_bar(State* state, UINT menuitem) {
-	int cnt = GetMenuItemCount(state->menu);
+bool is_on_menu_bar(State& state, UINT menuitem) {
+	int cnt = GetMenuItemCount(state.menu);
 	bool res = false;
 	for (int i = 0; i < cnt; i++) {
-		HMENU submenu = GetSubMenu(state->menu, i);
+		HMENU submenu = GetSubMenu(state.menu, i);
 
-		if (menuitem == (UINT)(UINT_PTR)submenu || menuitem == (UINT)(UINT_PTR)state->menu) {
+		if (menuitem == (UINT)(UINT_PTR)submenu || menuitem == (UINT)(UINT_PTR)state.menu) {
 			res = true;
 			break;
 		}
@@ -143,7 +139,7 @@ bool is_on_menu_bar(State* state, UINT menuitem) {
 }
 
 //Mouse in screen coords
-void show_rclickmenu(State* state, POINT mouse) {
+void show_rclickmenu(State& state, POINT mouse) {
 	HMENU m = CreateMenu();
 	HMENU subm = CreateMenu();//IMPORTANT: you need a MF_POPUP submenu for the menu wnd to be rendered properly, thanks https://www.codeproject.com/Questions/334598/Popup-Menu-Problem-is-not-working-properly
 	AppendMenuW(m, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)subm, (LPCWSTR)m);
@@ -168,14 +164,14 @@ void show_rclickmenu(State* state, POINT mouse) {
 	SetMenuInfo(m, &mi);
 
 	//NOTE: using tpm_returncmd would be a quick and simple cheat to get past msg collision problems and the like
-	//TrackPopupMenu(m, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, 0, state->wnd, 0);
-	TrackPopupMenuEx(subm, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, state->wnd, 0);
+	//TrackPopupMenu(m, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, 0, state.wnd, 0);
+	TrackPopupMenuEx(subm, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, state.wnd, 0);
 	DestroyMenu(m);
 }
 
-void manual_maximize(State* state) {//Maximize only works correctly for WM_OVERLAPPEDWINDOW, we gotta do it by hand
-	WINDOWPLACEMENT old_placement; GetWindowPlacement(state->wnd, &old_placement);
-	HMONITOR mon = MonitorFromWindow(state->wnd, MONITOR_DEFAULTTOPRIMARY);
+void manual_maximize(State& state) {//Maximize only works correctly for WM_OVERLAPPEDWINDOW, we gotta do it by hand
+	WINDOWPLACEMENT old_placement; GetWindowPlacement(state.wnd, &old_placement);
+	HMONITOR mon = MonitorFromWindow(state.wnd, MONITOR_DEFAULTTOPRIMARY);
 	MONITORINFO monnfo{ sizeof(monnfo) };
 	BOOL res = GetMonitorInfo(mon, &monnfo);
 	Assert(res);
@@ -183,102 +179,255 @@ void manual_maximize(State* state) {//Maximize only works correctly for WM_OVERL
 
 	//TODO(fran):we're gonna have to store our current size to be able to manually restore if the user tries to move us or presses maximize again. SetWindowPlacement?
 	//TODO(fran): gotta decide what we want to do with the resizing borders, the top and bottom ones are still user reachable, both visual studio and chrome dont allow resizing but chrome developers where a little lazy and didnt update the margins of the window, therefore on the bottom the mouse still changes to the resizing one even though they dont allow the resize
-	work_rc.left -= state->nc.cxLeftWidth;
-	work_rc.right += state->nc.cxRightWidth;
-	work_rc.top -= state->nc.cyTopHeight;
-	work_rc.bottom += state->nc.cyBottomHeight;
-	MoveWindow(state->wnd, work_rc.left, work_rc.top, RECTW(work_rc), RECTH(work_rc), TRUE);
+	work_rc.left -= state.nc.cxLeftWidth;
+	work_rc.right += state.nc.cxRightWidth;
+	work_rc.top -= state.nc.cyTopHeight;
+	work_rc.bottom += state.nc.cyBottomHeight;
+	MoveWindow(state.wnd, work_rc.left, work_rc.top, RECTW(work_rc), RECTH(work_rc), TRUE);
 	WINDOWPLACEMENT placement{ sizeof(placement) };
 	placement.showCmd = SW_MAXIMIZE;
 	placement.flags = WPF_ASYNCWINDOWPLACEMENT;
 	placement.ptMaxPosition.x = work_rc.left;
 	placement.ptMaxPosition.y = work_rc.top;
 	placement.rcNormalPosition = old_placement.rcNormalPosition;//TODO(fran): for non WS_EX_TOOLWINDOW windows all this should be in workspace coords
-	SetWindowPlacement(state->wnd, &placement);//TODO(fran): I just wanted to set the placement, not ask this guy to update my window too (maybe I can do some extra resizing to adjust the situation)
+	SetWindowPlacement(state.wnd, &placement);//TODO(fran): I just wanted to set the placement, not ask this guy to update my window too (maybe I can do some extra resizing to adjust the situation)
+}
+
+void resize_menu_backbuffer(State& state) {
+	if (state.menu) {
+		RECT rc = calc_menu_rc(state);
+		SIZE new_dim{ RECTW(rc), RECTH(rc) };
+		if (new_dim != state.menu_backbuffer_dim) {
+			state.menu_backbuffer_dim = new_dim;
+			if (state.menu_backbuffer) DeleteBitmap(state.menu_backbuffer);
+			// We need to get the window's dc because it contains the bitmap with the correct bitmap format, CreateCompatibleBitmap uses the currently selected bitmap to create a new one
+			HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd,dc); };
+			state.menu_backbuffer = CreateCompatibleBitmap(dc, 
+				state.menu_backbuffer_dim.cx, state.menu_backbuffer_dim.cy
+			);
+		}
+	}
+}
+
+void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
+	auto oldbmp = SelectBitmap(state.menu_offscreen_dc, state.menu_backbuffer); defer{ SelectBitmap(state.menu_offscreen_dc, oldbmp); };
+	Assert(state.menu);
+	{
+		HDC dc = state.menu_offscreen_dc;
+		SetViewportOrgEx(dc, -menurc.left, -menurc.top, nil); defer{ SetViewportOrgEx(dc, 0, 0, nil); };
+
+		MENUINFO mi{ sizeof(mi) };
+		mi.fMask = MIM_BACKGROUND;
+		//TODO(fran): MIM_MAXHEIGHT and other fMask params that we should set
+		GetMenuInfo(state.menu, &mi);
+
+		//Set font and colors
+		HBRUSH bkbr = mi.hbrBack;
+		HBRUSH txtbr = state.active ? colors.ControlTxt : colors.ControlTxt_Inactive;
+		SetTextColor(dc, ColorFromBrush(txtbr));
+		HFONT oldmenufont = (HFONT)SelectObject(dc, fonts.Menu); defer{ SelectObject(dc,oldmenufont); };
+
+		//Paint background
+		RECT bkrc = menurc;
+		if (menu_bottom_border) bkrc.bottom -= menu_bottom_border_thickness;
+		FillRect(dc, &bkrc, bkbr);
+
+		RECT menuitemrc = menurc;
+		int menu_xpad = 4;
+		menuitemrc.left += menu_xpad;
+
+		//Store current item count
+		state.menubar_itemcnt = GetMenuItemCount(state.menu);//NOTE: this guy returns -1 on errors, thats why the variable is i32
+		Assert(state.menubar_itemcnt < ARRAYSIZE(state.menubar_items));
+
+		//Find out what item, if any, is on mouse over
+		i32 menubar_mouseover_idx = state.menubar_mouseover_idx_from1 - 1;
+		SetBkMode(dc, TRANSPARENT);
+
+		//Set bk brush for drawing text
+		for (int i = 0; i < state.menubar_itemcnt; i++) {
+			bool on_mouseover = (i == menubar_mouseover_idx);
+			//Paint mouseover bk
+			if (on_mouseover) {
+				//TODO(fran): im having to cheat a little bit here by using the rc from the previous painting, it could be outdated
+				FillRect(dc, &state.menubar_items[i], colors.ControlBkMouseOver);
+			}
+
+			//Get text lenght
+			MENUITEMINFO mtxti{ sizeof(mtxti) };
+			mtxti.fMask = MIIM_STRING;
+			mtxti.dwTypeData = NULL;
+			GetMenuItemInfo(state.menu, i, TRUE, &mtxti);
+			//Get actual text
+			UINT menu_str_character_cnt = mtxti.cch + 1 + 2; //includes null terminator and 2 extra spaces
+			mtxti.cch = menu_str_character_cnt;
+			TCHAR* menu_str = (TCHAR*)malloc(menu_str_character_cnt * sizeof(TCHAR)); defer{ free(menu_str); };
+			menu_str[0] = TEXT(' ');//initial space
+			mtxti.dwTypeData = menu_str + 1; //Offset for initial space
+			GetMenuItemInfo(state.menu, i, TRUE, &mtxti);
+			menu_str[menu_str_character_cnt - 2] = TEXT(' ');//ending space
+
+			// Calculate vertical and horizontal position for the string so that it will be centered
+			//NOTE: TabbedTextOut doesnt care for alignment (SetTextAlign)
+			TEXTMETRIC mtm; GetTextMetrics(dc, &mtm);
+			//int yPos = menuitemrc.top + (RECTH(menuitemrc) - mtm.tmHeight) / 2;
+			int yPos = (menuitemrc.bottom + menuitemrc.top - mtm.tmHeight) / 2;
+			int xPos = menuitemrc.left;
+			LONG txtsz = TabbedTextOut(dc, xPos, yPos, menu_str, menu_str_character_cnt - 1, 0, 0, xPos);
+			WORD txtw = LOWORD(txtsz);
+
+			//Store menu item rc
+			state.menubar_items[i] = RECT{ 
+				.left = menuitemrc.left, .top = menuitemrc.top, 
+				.right = menuitemrc.left + txtw, .bottom = menuitemrc.bottom
+			};
+
+			menuitemrc.left += txtw;
+		}
+
+		if (menu_bottom_border) {
+			RECT menuborder = menurc; menuborder.top = menuborder.bottom - menu_bottom_border_thickness;
+			FillRect(dc, &menuborder, txtbr);//TODO(fran):parametric, not everyone might like this
+		}
+	}
+	BitBlt(target_dc, menurc.left, menurc.top, RECTW(menurc), RECTH(menurc),
+		state.menu_offscreen_dc, 0, 0, SRCCOPY);
+}
+
+static HMENU current_menu = nil;
+static POINT current_menu_pt{};
+//A little delay before allowing the user to select a new menu, this prevents problems, eg the user trying to close the menu by selecting it again in the menu bar
+constexpr auto menu_delay_ms = 50;
+constexpr auto menu_open_ms = 34;
+static auto menudelay = [](HWND wnd, UINT, UINT_PTR timer_id, DWORD) {
+	KillTimer(wnd, timer_id);
+	auto& state = *get_state(wnd);
+	state.menu_on_delay = false;
+};
+// Returns true if handled, false if should be sent to default handler
+// handle_mode_standard false means we are trying to open a menu because of a mouseover event while another menu is already open
+bool handle_nclbuttondown(State& state, POINT mouse, i32 hittest) {
+	POINT cl_mouse = mouse; ScreenToClient(state.wnd, &cl_mouse);
+	if (hittest == HTMENU || hittest == HTSYSMENU) {//The menu was clicked, NOTE: for menus we dont wait for buttonup
+		if (!state.menu_on_delay) {
+			for (int i = 0; i < state.menubar_itemcnt; i++) {
+				if (test_pt_rc(cl_mouse, state.menubar_items[i])) {
+					HMENU submenu = GetSubMenu(state.menu, i);
+					if (submenu) {
+						POINT menupt{ state.menubar_items[i].left,state.menubar_items[i].bottom - 1 }; ClientToScreen(state.wnd, &menupt);
+						// Try to get any currently open menu to close before opening the new one
+						if (current_menu && current_menu != submenu) {
+							DefWindowProc(state.wnd, WM_CANCELMODE, 0, 0);
+							SetForegroundWindow(state.wnd);
+						}
+						if (current_menu != submenu) {
+							current_menu_pt = menupt;
+							SetTimer(state.wnd, (UINT_PTR)submenu, menu_open_ms, [](HWND wnd, UINT, UINT_PTR timer_id, DWORD) {
+								KillTimer(wnd, timer_id);
+								auto& state = *get_state(wnd);
+								auto submenu = (HMENU)timer_id;
+								if (current_menu != submenu) {
+									auto oldcurrentmenu = current_menu;
+									current_menu = submenu;
+									printf("inside timer: current_menu = %p\n", current_menu);
+									auto res = TrackPopupMenu(submenu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, current_menu_pt.x, current_menu_pt.y, 0, state.wnd, 0);
+									//INFO: TrackPopupMenu stalls the thread until it completes! So we cannot do anything after it, if it returned true, meaning it didnt fail. We can only extract knowledge from it if it returns false, meaning it failed, meaning there's already a menu open
+									if (!res) {
+										current_menu = oldcurrentmenu;
+										printf("inside timer: UNDO, current_menu = %p\n", current_menu);
+									}
+								}
+							});
+						}
+						
+						//Set menu delay to stop possible reopening
+						state.menu_on_delay = true;
+						SetTimer(state.wnd, (UINT_PTR)&menudelay, menu_delay_ms, menudelay);
+						//TODO(fran): here we could pass our client wnd as the owner of the menu
+						//TODO(fran): TPM_RETURNCMD could be interesting
+						//TODO(fran): TPM_RECURSE ?
+						break;
+					}
+				}
+			}
+		}
+		return true;
+	}
+	else if (hittest == HTCAPTION) {
+		if (!state.menu_on_delay) {
+			if (test_pt_rc(cl_mouse, state.rc_icon)) {
+				POINT mpos{ state.rc_icon.left,state.rc_icon.bottom }; ClientToScreen(state.wnd, &mpos);
+				show_rclickmenu(state, mpos);
+				//Set menu delay to stop possible reopening
+				state.menu_on_delay = true;
+				SetTimer(state.wnd, (UINT_PTR)&menudelay, menu_delay_ms, menudelay);
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 //TODO(fran): add & at the beginning of menu string names, that's how you trigger them by pressing Alt+key https://stackoverflow.com/questions/38338426/meaning-of-ampersand-in-rc-files
-//TODO(fran): it'd also be interesting to see how it goes if we do SetMenu on the client
-//TODO(fran): UNDO support for comment removal
 //TODO(fran): DPI awareness
 //TODO(fran): it'd be nice to have a way to implement good subclassing, eg letting the user assign clip regions where they can draw and we dont, things like that, more communication
-LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
-{
-	//printf(msgToString(msg)); printf("\n");
-	State* state = get_state(hwnd);
+LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+	//printf("nonclient: %s\n", msgToString(msg));
+	State& state = *get_state(hwnd);
 
-	{
-#if 0
-		RECT rw; GetWindowRect(hwnd, &rw);
-		printf("left %d top %d right %d bottom %d width %d height %d\n", rw.left, rw.top, rw.right, rw.bottom, RECTW(rw), RECTH(rw));
-#endif
-	}
-
-	constexpr int menu_delay_ms = 100;
-
-	switch (msg)
-	{
-	case WM_UAHDESTROYWINDOW: //Only called when the window is being destroyed, wparam=lparam=0
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_UAHDRAWMENU: //Sent for NON MF_OWNERDRAW menus
-	case WM_UAHDRAWMENUITEM:
-	case WM_UAHMEASUREMENUITEM:
-	case WM_UAHNCPAINTMENUPOPUP:
-	case WM_UAHUPDATE:
-	{
-		printf(msgToString(msg)); printf("\n\n\n\n\n");
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_UAHINITMENU: //After a SetMenu: lParam=some system generated HMENU with your HMENU stored in the ""unused"" member ; wParam=0
-							//NOTE: this system HMENU uses the first byte from the top 32bits, no other HMENU does that
-	{
-		//NOTE: for some reason, after SetMenu, this msg gets sent more than once after different events, but always with the same params. This does not depend on the number of menus/submenus it has, but it seems like SetMenu checks that your HMENU has at least one submenu, otherwise this msg doesnt get sent
-		//NOTE: from tests I can say semi confidently that the menubar uses WM_SIZE for updating, at least sometimes
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
+	switch (msg) {
 	case WM_WINDOWPOSCHANGED: //TODO(fran): we can use this guy to replace WM_SIZE and WM_MOVE by not calling defwindowproc
 	{
 		calc_caption(state);
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
+	case WM_UNINITMENUPOPUP:
+	{
+		HMENU menu_destroyed = (HMENU)wparam;
+		if (menu_destroyed == current_menu) {
+			current_menu = nil;
+			//Set menu delay to stop possible reopening
+			state.menu_on_delay = true;
+			SetTimer(state.wnd, (UINT_PTR)&menudelay, menu_delay_ms, menudelay);
+			printf("inside uninit: current_menu = %p\n", current_menu);
+		}
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
 	case WM_PAINT://TODO(fran): we gotta offset the painting a few pixels down when maximized, the amount of things that will need an extra condition on calculation is pretty awful, maybe we should just handle maximizing ourselves
 	{
 		PAINTSTRUCT ps;
-		HDC dc = BeginPaint(state->wnd, &ps); defer{ EndPaint(state->wnd, &ps); };
+		HDC dc = BeginPaint(state.wnd, &ps); defer{ EndPaint(state.wnd, &ps); };
 
-		if (rcs_overlap(state->rc_caption, ps.rcPaint)) {
+		if (rcs_overlap(state.rc_caption, ps.rcPaint)) {
 			//We get system painted 1px borders on the left, right and bottom, but not on the top, for now until we find out why we just emulate it
-			auto top_border_rc = state->rc_caption; top_border_rc.bottom = top_border_rc.top + top_border_thickness;
+			auto top_border_rc = state.rc_caption; top_border_rc.bottom = top_border_rc.top + top_border_thickness;
 			FillRect(dc, &top_border_rc, colors.CaptionBk_Inactive); //TODO(fran): could not find a system default that matches to the brush used for the borders, used mine which matches prety well
 
-			auto bk_rc = state->rc_caption; bk_rc.top += top_border_thickness;
-			FillRect(dc, &bk_rc, state->active ? colors.CaptionBk : colors.CaptionBk_Inactive);
+			auto bk_rc = state.rc_caption; bk_rc.top += top_border_thickness;
+			FillRect(dc, &bk_rc, state.active ? colors.CaptionBk : colors.CaptionBk_Inactive);
 
 			SelectFont(dc, GetStockFont(DEFAULT_GUI_FONT));
-			TCHAR title[256]; int sz = GetWindowText(state->wnd, title, ARRAYSIZE(title));
+			TCHAR title[128]; int sz = GetWindowText(state.wnd, title, ARRAYSIZE(title));
 			TEXTMETRIC tm; GetTextMetrics(dc, &tm);
 
 
-			HICON icon = (HICON)GetClassLongPtr(state->wnd, GCLP_HICONSM);
+			HICON icon = (HICON)GetClassLongPtr(state.wnd, GCLP_HICONSM);
 			int icon_height = (int)((float)tm.tmHeight * 1.5f);
 			int icon_width = icon_height;
-			int icon_align_height = (RECTH(state->rc_caption) - icon_height) / 2;
+			int icon_align_height = (RECTH(state.rc_caption) - icon_height) / 2;
 			int icon_align_width = icon_align_height;
-			state->rc_icon = rectWH(icon_align_height, icon_align_width, icon_width, icon_height);
+			state.rc_icon = rectWH(icon_align_height, icon_align_width, icon_width, icon_height);
 			auto iconnfo = MyGetIconInfo(icon);
-			//TODO(fran): the last pixels from the circle dont seem to get rendered
 			urender::draw_icon(dc, icon_align_height, icon_align_width, icon_width, icon_height, icon, 0, 0, iconnfo.w, iconnfo.h);
 
-			int yPos = (state->rc_caption.bottom + state->rc_caption.top - tm.tmHeight) / 2;
-			HBRUSH txtbr = state->active ? colors.ControlTxt : colors.ControlTxt_Inactive;
+			int yPos = (state.rc_caption.bottom + state.rc_caption.top - tm.tmHeight) / 2;
+			HBRUSH txtbr = state.active ? colors.ControlTxt : colors.ControlTxt_Inactive;
 			SetTextColor(dc, ColorFromBrush(txtbr)); SetBkMode(dc, TRANSPARENT);
 
 			TextOut(dc, icon_align_width * 2 + icon_width, yPos, title, sz);
 
 			HBRUSH btn_border, btn_bk, btn_fore, btn_bk_push, btn_bk_mouseover;
-			if (state->active) {
+			if (state.active) {
 				btn_border = colors.CaptionBk;
 				btn_bk = colors.CaptionBk;
 				btn_fore = colors.Img;
@@ -300,95 +449,14 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				}
 			};
 			//TODO: we shouldnt be triggering a redraw while on wm_paint, this can be done elsewhere
-			button::set_theme(state->btn_close, btn);
-			button::set_theme(state->btn_min, btn);
-			if (state->btn_max) button::set_theme(state->btn_max, btn);
+			button::set_theme(state.btn_close, btn);
+			button::set_theme(state.btn_min, btn);
+			if (state.btn_max) button::set_theme(state.btn_max, btn);
 		}
 
-		//TODO(fran): move the menu up to get more screen real state, visual studio differentiates the menu items from the window title by rendering a darker square around the latter
-		if (RECT menurc = calc_menu_rc(state); state->menu && rcs_overlap(menurc, ps.rcPaint)) {
-
-			MENUINFO mi{ sizeof(mi) };
-			mi.fMask = MIM_BACKGROUND;
-			//TODO(fran): MIM_MAXHEIGHT and other fMask params that we should set
-			GetMenuInfo(state->menu, &mi);
-
-			//Set font and colors
-			HBRUSH bkbr = mi.hbrBack;
-			HBRUSH txtbr = state->active ? colors.ControlTxt : colors.ControlTxt_Inactive;
-			COLORREF oldbkclr = SetBkColor(dc, ColorFromBrush(bkbr)); defer{ if (oldbkclr != CLR_INVALID)SetBkColor(dc, oldbkclr); };
-			COLORREF oldtxtclr = SetTextColor(dc, ColorFromBrush(txtbr)); defer{ if (oldtxtclr != CLR_INVALID)SetTextColor(dc, oldtxtclr); };
-			HFONT oldmenufont = (HFONT)SelectObject(dc, fonts.Menu); defer{ SelectObject(dc,oldmenufont); };
-
-			constexpr bool bottom_border = true;
-			constexpr int bottom_border_thickness = 1;
-			//Paint background
-			if (bottom_border) menurc.bottom -= bottom_border_thickness;
-			FillRect(dc, &menurc, bkbr);
-			if (bottom_border) menurc.bottom += bottom_border_thickness;
-
-			RECT menuitemrc = menurc;
-			int menu_xpad = 4;
-			menuitemrc.left += menu_xpad;
-
-			//Store current item count
-			state->menubar_itemcnt = GetMenuItemCount(state->menu);//NOTE: this guy returns -1 on errors, thats why the variable is i32
-			Assert(state->menubar_itemcnt < ARRAYSIZE(state->menubar_items));//TODO(fran): linked list?
-
-			//Find out what item, if any, is on mouse over
-			i32 menubar_mouseover_idx = state->menubar_mouseover_idx_from1 - 1;
-
-			//Clip the drawing region //Thanks https://stackoverflow.com/questions/3478180/correct-usage-of-getcliprgn //WINDOWS THIS MAKES NO SENSE!!!!!!!!!
-			HRGN restoreRegion = CreateRectRgn(0, 0, 0, 0); if (GetClipRgn(dc, restoreRegion) != 1) { DeleteObject(restoreRegion); restoreRegion = NULL; }
-			IntersectClipRect(dc, menuitemrc.left, menuitemrc.top, menurc.right, menurc.bottom);
-
-			//Set bk brush for drawing text
-			for (int i = 0; i < state->menubar_itemcnt; i++) {
-				bool on_mouseover = (i == menubar_mouseover_idx);
-				if (on_mouseover) {
-					//Paint mouseover bk
-					FillRect(dc, &state->menubar_items[i], colors.ControlBkMouseOver);//TODO(fran): im having to cheat a little bit here by using the rc from a previous painting, it could be outdated
-					SetBkColor(dc, ColorFromBrush(colors.ControlBkMouseOver));
-				}
-				else {
-					SetBkColor(dc, ColorFromBrush(bkbr));
-				}
-
-				//Get text lenght
-				MENUITEMINFO mtxti{ sizeof(mtxti) };
-				mtxti.fMask = MIIM_STRING;
-				mtxti.dwTypeData = NULL;
-				GetMenuItemInfo(state->menu, i, TRUE, &mtxti);
-				//Get actual text
-				UINT menu_str_character_cnt = mtxti.cch + 1 + 2; //includes null terminator and 2 extra spaces
-				mtxti.cch = menu_str_character_cnt;
-				TCHAR* menu_str = (TCHAR*)malloc(menu_str_character_cnt * sizeof(TCHAR)); defer{ free(menu_str); };
-				menu_str[0] = TEXT(' ');//initial space
-				mtxti.dwTypeData = menu_str + 1; //Offset for initial space
-				GetMenuItemInfo(state->menu, i, TRUE, &mtxti);
-				menu_str[menu_str_character_cnt - 2] = TEXT(' ');//ending space
-
-				// Calculate vertical and horizontal position for the string so that it will be centered
-				//NOTE: TabbedTextOut doesnt care for alignment (SetTextAlign)
-				TEXTMETRIC mtm; GetTextMetrics(dc, &mtm);
-				//int yPos = menuitemrc.top + (RECTH(menuitemrc) - mtm.tmHeight) / 2;
-				int yPos = (menuitemrc.bottom + menuitemrc.top - mtm.tmHeight) / 2;
-				int xPos = menuitemrc.left;
-				LONG txtsz = TabbedTextOut(dc, xPos, yPos, menu_str, menu_str_character_cnt - 1, 0, 0, xPos);
-				WORD txtw = LOWORD(txtsz);
-
-				//Store menu item rc
-				state->menubar_items[i] = { menuitemrc.left,menuitemrc.top,menuitemrc.left + txtw,menuitemrc.bottom };
-
-				menuitemrc.left += txtw;
-			}
-			SelectClipRgn(dc, restoreRegion); if (restoreRegion != NULL) DeleteObject(restoreRegion); //Restore old region
-
-			if (bottom_border) {
-				RECT menuborder = menurc; menuborder.top = menuborder.bottom - bottom_border_thickness;
-				FillRect(dc, &menuborder, txtbr);//TODO(fran):parametric, not everyone might like this
-			}
-		}
+		//TODO(fran): allow moving the menu up next to the title to get more screen real state, visual studio differentiates the menu items from the window title by rendering a darker square around the latter
+		if (RECT menurc = calc_menu_rc(state); state.menu && rcs_overlap(menurc, ps.rcPaint))
+			render_menu_backbuffer(state, dc, menurc);
 		return 0;
 	} break;
 	case WM_CREATE:
@@ -397,48 +465,44 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 #if 1
 		//NOTE: we want WS_OVERLAPPEDWINDOW for the niceties on resizing, maximizing not obstructing the taskbar, scaling the window in the y axis when double clicking the top/bottom resizing border (unfortunately doesnt do the same for left and right <-TODO(fran): also it doesnt do it for top and bottom, is this done by hand by every program?), and similar. The one problem is that we'll need to draw differently when maximized, everything will have to be moved down a little
 		//TODO(fran): check no strange things happen now we re-enabled OVERLAPPEDWINDOW, at least it doesnt seem to be creating the horrible max/min etc buttons now we dont use WS_OVERLAPPEDWINDOW in CreateWindow
-		LONG_PTR  dwStyle = GetWindowLongPtr(state->wnd, GWL_STYLE);
-		SetWindowLongPtr(state->wnd, GWL_STYLE, dwStyle | WS_OVERLAPPEDWINDOW);
+		LONG_PTR  dwStyle = GetWindowLongPtr(state.wnd, GWL_STYLE);
+		SetWindowLongPtr(state.wnd, GWL_STYLE, dwStyle | WS_OVERLAPPEDWINDOW);
 #endif
 
 		CREATESTRUCT* createnfo = (CREATESTRUCT*)lparam;
 
-		LpParam* lpParam = (LpParam*)createnfo->lpCreateParams;
+		SetWindowText(state.wnd, createnfo->lpszName); //NOTE: for handmade classes you have to manually call setwindowtext
 
-		state->settings = lpParam;
+		RECT btn_min_rc = state.settings->can_maximize ? calc_btn_min_rc(state) : calc_btn_max_rc(state);
+		state.btn_min = CreateWindow(button::wndclass, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_min_rc.left, btn_min_rc.top, RECTW(btn_min_rc), RECTH(btn_min_rc), state.wnd, (HMENU)NC_MINIMIZE, 0, 0);
+		//UNCAPBTN_set_brushes(state.btn_min, TRUE, colors.CaptionBk, colors.CaptionBk, colors.ControlTxt, colors.ControlBkPush, colors.ControlBkMouseOver); //NOTE: now I do this on WM_PAINT, commenting this actually introduces a bug for the first ms of execution where the button might draw with no brushes first and then be asked to redraw with the brushes loaded, introducing at least one frame of flicker
 
-		SetWindowText(state->wnd, createnfo->lpszName); //NOTE: for handmade classes you have to manually call setwindowtext
-
-		RECT btn_min_rc = state->settings->can_maximize ? calc_btn_min_rc(state) : calc_btn_max_rc(state);
-		state->btn_min = CreateWindow(button::wndclass, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_min_rc.left, btn_min_rc.top, RECTW(btn_min_rc), RECTH(btn_min_rc), state->wnd, (HMENU)NC_MINIMIZE, 0, 0);
-		//UNCAPBTN_set_brushes(state->btn_min, TRUE, colors.CaptionBk, colors.CaptionBk, colors.ControlTxt, colors.ControlBkPush, colors.ControlBkMouseOver); //NOTE: now I do this on WM_PAINT, commenting this actually introduces a bug for the first ms of execution where the button might draw with no brushes first and then be asked to redraw with the brushes loaded, introducing at least one frame of flicker
-
-		if (state->settings->can_maximize) {
+		if (state.settings->can_maximize) {
 			RECT btn_max_rc = calc_btn_max_rc(state);
-			state->btn_max = CreateWindow(button::wndclass, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_max_rc.left, btn_max_rc.top, RECTW(btn_max_rc), RECTH(btn_max_rc), state->wnd, (HMENU)NC_MAXIMIZE, 0, 0);
-			//UNCAPBTN_set_brushes(state->btn_max, TRUE, colors.CaptionBk, colors.CaptionBk, colors.ControlTxt, colors.ControlBkPush, colors.ControlBkMouseOver);
+			state.btn_max = CreateWindow(button::wndclass, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_max_rc.left, btn_max_rc.top, RECTW(btn_max_rc), RECTH(btn_max_rc), state.wnd, (HMENU)NC_MAXIMIZE, 0, 0);
+			//UNCAPBTN_set_brushes(state.btn_max, TRUE, colors.CaptionBk, colors.CaptionBk, colors.ControlTxt, colors.ControlBkPush, colors.ControlBkMouseOver);
 		}
 
 		RECT btn_close_rc = calc_btn_close_rc(state);
-		state->btn_close = CreateWindow(button::wndclass, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_close_rc.left, btn_close_rc.top, RECTW(btn_close_rc), RECTH(btn_close_rc), state->wnd, (HMENU)NC_CLOSE, 0, 0);
-		//UNCAPBTN_set_brushes(state->btn_close, TRUE, colors.CaptionBk, colors.CaptionBk, colors.ControlTxt, colors.ControlBkPush, colors.ControlBkMouseOver);
+		state.btn_close = CreateWindow(button::wndclass, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_close_rc.left, btn_close_rc.top, RECTW(btn_close_rc), RECTH(btn_close_rc), state.wnd, (HMENU)NC_CLOSE, 0, 0);
+		//UNCAPBTN_set_brushes(state.btn_close, TRUE, colors.CaptionBk, colors.CaptionBk, colors.ControlTxt, colors.ControlBkPush, colors.ControlBkMouseOver);
 
 		//TODO(fran): let the user set the bitmaps, pass them in theme
-		SendMessage(state->btn_close, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.close);
-		if (state->btn_max) {
-			SendMessage(state->btn_max, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.maximize);
+		SendMessage(state.btn_close, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.close);
+		if (state.btn_max) {
+			SendMessage(state.btn_max, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.maximize);
 		}
-		SendMessage(state->btn_min, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.minimize);
+		SendMessage(state.btn_min, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.minimize);
 
 		//TODO(fran): create the icons, one idea is to ask windows to paint them in some dc, and then I can store the HBITMAP and re-use it all I want
 
-		if (lpParam->client_class_name) {
+		if (state.settings->client_class_name) {
 			RECT rc = calc_client_rc(state);
-			state->client = CreateWindowExW(WS_EX_COMPOSITED, lpParam->client_class_name, TEXT(""), WS_CHILD | WS_VISIBLE, rc.left, rc.top, RECTW(rc), RECTH(rc), state->wnd, 0, 0, lpParam->client_lp_param);
+			state.client = CreateWindowExW(WS_EX_COMPOSITED, state.settings->client_class_name, TEXT(""), WS_CHILD | WS_VISIBLE, rc.left, rc.top, RECTW(rc), RECTH(rc), state.wnd, 0, 0, state.settings->client_lp_param);
 		}
 
-		state->toast = create_window(state->client ? state->client : state->wnd, toast::wndclass, nil, WS_CHILD);
-		toast::set_theme(state->toast, themes.base_toast);
+		state.toast = create_window(state.client ? state.client : state.wnd, toast::wndclass, nil, WS_CHILD);
+		toast::set_theme(state.toast, themes.base_toast);
 
 		return 0;
 	} break;
@@ -448,21 +512,21 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 
 		if (hittest == HTCAPTION) {
 			POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
-			POINT cl_mouse = mouse; ScreenToClient(state->wnd, &cl_mouse);
+			POINT cl_mouse = mouse; ScreenToClient(state.wnd, &cl_mouse);
 
-			if (test_pt_rc(cl_mouse, state->rc_icon)) {
-				PostMessage(state->wnd, WM_COMMAND, (WPARAM)MAKELONG(NC_CLOSE, 0), (LPARAM)state->btn_close);//TODO(fran): should I use WM_CLOSE?
+			if (test_pt_rc(cl_mouse, state.rc_icon)) {
+				PostMessage(state.wnd, WM_COMMAND, (WPARAM)MAKELONG(NC_CLOSE, 0), (LPARAM)state.btn_close);//TODO(fran): should I use WM_CLOSE?
 				return 0;
 			}
 
-			WINDOWPLACEMENT p{ sizeof(p) }; GetWindowPlacement(state->wnd, &p);
+			WINDOWPLACEMENT p{ sizeof(p) }; GetWindowPlacement(state.wnd, &p);
 
-			if (p.showCmd == SW_SHOWMAXIMIZED) ShowWindow(state->wnd, SW_RESTORE);
+			if (p.showCmd == SW_SHOWMAXIMIZED) ShowWindow(state.wnd, SW_RESTORE);
 			else {
 #if 1
-				//LONG_PTR  dwStyle = GetWindowLongPtr(state->wnd, GWL_STYLE);
-				//SetWindowLongPtr(state->wnd, GWL_STYLE, dwStyle | WS_OVERLAPPEDWINDOW);//TODO(fran): now im REALLY confused, I had to specifically take out WS_OVERLAPPEDWINDOW so it wouldnt paint over me and now it doesnt seem to, test more thoroughly //still though sizing isnt perfect, the top is still cut off
-				ShowWindow(state->wnd, SW_MAXIMIZE);
+				//LONG_PTR  dwStyle = GetWindowLongPtr(state.wnd, GWL_STYLE);
+				//SetWindowLongPtr(state.wnd, GWL_STYLE, dwStyle | WS_OVERLAPPEDWINDOW);//TODO(fran): now im REALLY confused, I had to specifically take out WS_OVERLAPPEDWINDOW so it wouldnt paint over me and now it doesnt seem to, test more thoroughly //still though sizing isnt perfect, the top is still cut off
+				ShowWindow(state.wnd, SW_MAXIMIZE);
 #else
 				manual_maximize(state);
 #endif
@@ -485,14 +549,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			RECT rc_menu = calc_menu_rc(state);
 
 			if (test_pt_rc(mouse, rc_top)) res = HTTOP;
-			else if (test_pt_rc(mouse, rc_topleft)) res = HTTOPLEFT;
-			else if (test_pt_rc(mouse, rc_topright)) res = HTTOPRIGHT;
+			elif (test_pt_rc(mouse, rc_topleft)) res = HTTOPLEFT;
+			elif (test_pt_rc(mouse, rc_topright)) res = HTTOPRIGHT;
 			/*else if (test_pt_rc(mouse, close_btn)) res = HTCLOSE; //TODO(fran): request this buttons for their rc
 			else if (test_pt_rc(mouse, max_btn)) res = HTMAXBUTTON;
 			else if (test_pt_rc(mouse, min_btn)) res = HTMINBUTTON;*/
-			else if (test_pt_rc(mouse, rc_menu)) res = HTSYSMENU;//HTMENU also works, but it seems a little slower on clicking for some reason //IMPORTANT: this is crucial for the default menu to detect clicks, otherwise no mouse input goes to it
-			else if (test_pt_rc(mouse, state->rc_caption)) res = HTCAPTION;
-
+			elif (test_pt_rc(mouse, rc_menu)) res = HTSYSMENU;//HTMENU also works, but it seems a little slower on clicking for some reason //IMPORTANT: this is crucial for the default menu to detect clicks, otherwise no mouse input goes to it
+			elif (test_pt_rc(mouse, state.rc_caption)) res = HTCAPTION;
 		}
 
 		//printf("%s\n", hittestToString(res));
@@ -513,7 +576,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		margins.cyBottomHeight = distance(testrc.bottom, ncrc.bottom);
 		margins.cyTopHeight = 0;
 
-		state->nc = margins;
+		state.nc = margins;
 
 		if ((BOOL)wparam == TRUE) {
 			//IMPORTANT: absolutely _everything_ is in screen coords
@@ -548,15 +611,16 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	} break;
 	case WM_SIZE:
 	{
-		RECT rc = calc_client_rc(state); MoveWindow(state->client, rc.left, rc.top, RECTW(rc), RECTH(rc), TRUE);
+		RECT rc = calc_client_rc(state); MoveWindow(state.client, rc.left, rc.top, RECTW(rc), RECTH(rc), TRUE);
 
-		RECT btn_min_rc = state->settings->can_maximize ? calc_btn_min_rc(state) : calc_btn_max_rc(state);
-		MoveWindow(state->btn_min, btn_min_rc.left, btn_min_rc.top, RECTW(btn_min_rc), RECTH(btn_min_rc), TRUE);//TODO(fran): I dont really need to ask for repaint do I?
-		if (state->settings->can_maximize) {
-			RECT btn_max_rc = calc_btn_max_rc(state); MoveWindow(state->btn_max, btn_max_rc.left, btn_max_rc.top, RECTW(btn_max_rc), RECTH(btn_max_rc), TRUE);
+		RECT btn_min_rc = state.settings->can_maximize ? calc_btn_min_rc(state) : calc_btn_max_rc(state);
+		MoveWindow(state.btn_min, btn_min_rc.left, btn_min_rc.top, RECTW(btn_min_rc), RECTH(btn_min_rc), TRUE);//TODO(fran): I dont really need to ask for repaint do I?
+		if (state.settings->can_maximize) {
+			RECT btn_max_rc = calc_btn_max_rc(state); MoveWindow(state.btn_max, btn_max_rc.left, btn_max_rc.top, RECTW(btn_max_rc), RECTH(btn_max_rc), TRUE);
 		}
-		RECT btn_close_rc = calc_btn_close_rc(state); MoveWindow(state->btn_close, btn_close_rc.left, btn_close_rc.top, RECTW(btn_close_rc), RECTH(btn_close_rc), TRUE);
+		RECT btn_close_rc = calc_btn_close_rc(state); MoveWindow(state.btn_close, btn_close_rc.left, btn_close_rc.top, RECTW(btn_close_rc), RECTH(btn_close_rc), TRUE);
 
+		resize_menu_backbuffer(state);
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	case WM_SETTEXT:
@@ -581,9 +645,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	} break;
 	case WM_NCDESTROY:
 	{
-		if (state) {
-			free(state);
-			state = nullptr;
+		if (&state) {
+			if (state.menu_backbuffer) { DeleteBitmap(state.menu_backbuffer); state.menu_backbuffer = nil; }
+			DeleteDC(state.menu_offscreen_dc);
+			set_window_state(state.wnd, nil);
+			free(&state);
 		}
 	} break;
 	case WM_NCCREATE:
@@ -594,29 +660,31 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		Assert(st);
 		set_window_state(hwnd, st);
 		st->wnd = hwnd;
+		st->settings = (LpParam*)create_nfo->lpCreateParams;
+		Assert(st->settings);
+		HDC dc = GetDC(st->wnd); defer{ ReleaseDC(st->wnd, dc); };
+		st->menu_offscreen_dc = CreateCompatibleDC(dc);
 		return TRUE;
 	} break;
 	case WM_NCACTIVATE:
 	{
 		//So basically this guy is another WM_NCPAINT, just do exactly the same, but also here we have the option to paint slightly different if we are deactivated, so the user can see the change
 		BOOL active = (BOOL)wparam; //Indicates active or inactive state for a title bar or icon that needs to be changed
-		state->active = active;
+		state.active = active;
 		HRGN opt_upd_rgn = (HRGN)lparam; // handle to optional update region for the nonclient area. If set to -1, do nothing
-		if (state->menu) {
+		if (state.menu) {
 			MENUINFO mi{ sizeof(mi) };
 			mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS; //TODO(fran): MIM_APPLYTOSUBMENUS is garbage, it only goes one level down, just terrible, make my own
 			//TODO(fran): MIM_MAXHEIGHT and other fMask params that we should set
 
-			mi.hbrBack = state->active ? colors.CaptionBk : colors.CaptionBk_Inactive;
+			mi.hbrBack = state.active ? colors.CaptionBk : colors.CaptionBk_Inactive;
 
-			SetMenuInfo(state->menu, &mi);
+			SetMenuInfo(state.menu, &mi);
 		}
 
 		RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE);
 		return TRUE; //NOTE: it says we can return FALSE to "prevent the change"
 	} break;
-	//NOTE: WM_NCPAINT: check https://chromium.googlesource.com/chromium/chromium/+/5db69ae220c803e9c1675219b5cc5766ea3bb698/chrome/views/window.cc they block drawing so windows doesnt draw on top of them, cause the non client area is also painted in other msgs like settext
-	//also check https://social.msdn.microsoft.com/Forums/windows/en-US/a407591a-4b1e-4adc-ab0b-3c8b3aec3153/the-evil-wmncpaint?forum=windowsuidevelopment I took the implementation from there, but there's also two others I can try
 
 	case WM_MEASUREITEM: //NOTE: this is so stupid, this guy doesnt send hwndItem like WM_DRAWITEM does, so you have no way of knowing which type of menu you get, gotta do it manually
 		//TODO(fran): should this and wm_drawitem go in uncapcl?
@@ -665,7 +733,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				//printf("MEASURE: item->itemID=%#016x\n", item->itemID);
 				//if (item->itemID == ((UINT)HACK_toplevelmenu & 0xFFFFFFFF)) { //Check if we are a "top level" menu
 				//if (is_on_menu_bar(state, item->itemID)) { //Check if we are a "top level" menu
-				if ((HMENU)item->itemData == state->menu) { //Check if we are a "top level" menu
+				if ((HMENU)item->itemData == state.menu) { //Check if we are a "top level" menu
 					item->itemWidth = text_width + space_width * 2;
 				}
 				else {
@@ -689,7 +757,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
-	case WM_DRAWITEM: //TODO(fran): goes in uncapcl
+	case WM_DRAWITEM:
 	{
 		DRAWITEMSTRUCT* item = (DRAWITEMSTRUCT*)lparam;
 		switch (wparam) {//wparam specifies the identifier of the control that needs painting
@@ -733,9 +801,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 					txt_br = colors.ControlTxt;
 					Assert((UINT)(UINT_PTR)item->hwndItem);
 					//GetMenuInfo((HMENU)item->hwndItem, &mnfo); //We will not ask our "parent" hmenu since sometimes it decides it doesnt have the hbrush, we'll go straight to the menu bar, if there is one
-					if (state->menu) {
+					if (state.menu) {
 						MENUINFO mnfo{ sizeof(mnfo) }; mnfo.fMask = MIM_BACKGROUND;
-						GetMenuInfo(state->menu, &mnfo);
+						GetMenuInfo(state.menu, &mnfo);
 						bk_br = mnfo.hbrBack;
 					}
 					else bk_br = colors.CaptionBk;
@@ -753,10 +821,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				hfntPrev = (HFONT)SelectObject(item->hDC, fonts.Menu);//TODO(fran): parametric
 
 				WORD x_pad = LOWORD(GetTabbedTextExtent(item->hDC, TEXT(" "), 1, 0, NULL)); //an extra 1 space before drawing text (for not top level menus)
-				//printf("item->hwndItem=%#016x GetMenu(hwnd)=%#016x state->menu=%#016x\n",item->hwndItem,GetMenu(hwnd),state->menu);
+				//printf("item->hwndItem=%#016x GetMenu(hwnd)=%#016x state.menu=%#016x\n",item->hwndItem,GetMenu(hwnd),state.menu);
 				//if (item->hwndItem == (HWND)GetMenu(hwnd)) { //If we are a "top level" menu
-				if (item->hwndItem == (HWND)state->menu) { //If we are on the menu bar (then hwndItem, our parent, will be the same as state->menu)
-				//Assert(GetMenu(hwnd) == state->menu);
+				if (item->hwndItem == (HWND)state.menu) { //If we are on the menu bar (then hwndItem, our parent, will be the same as state.menu)
+				//Assert(GetMenu(hwnd) == state.menu);
 				//if (is_on_menu_bar(state, (UINT)item->hwndItem)) { //If we are a "top level" menu
 
 					//we just want to draw the text, nothing more
@@ -820,7 +888,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 
 							int img_max_x = GetSystemMetrics(SM_CXMENUCHECK);
 							int img_max_y = RECTH(item->rcItem);
-							int img_sz = roundNdown(bitmap.bmWidth, minimum(img_max_x, img_max_y));//HACK: instead use png + gdi+ + color matrices
+							//HACK: instead use png + gdi+ + color matrices
+							int img_sz = (bitmap.bmBitsPixel == 1) ? 
+								roundNdown(bitmap.bmWidth, minimum(img_max_x, img_max_y)) : 16;
 							if (!img_sz)img_sz = bitmap.bmWidth; //More HACKs
 							int bmp_height = img_sz;
 							int bmp_width = bmp_height;
@@ -908,9 +978,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				const int separator_x_padding = 3;
 
 				HBRUSH bk_br;
-				if (state->menu) {
+				if (state.menu) {
 					MENUINFO mnfo{ sizeof(mnfo) }; mnfo.fMask = MIM_BACKGROUND;
-					GetMenuInfo(state->menu, &mnfo);
+					GetMenuInfo(state.menu, &mnfo);
 					bk_br = mnfo.hbrBack; //TODO: unfinished trash
 				}
 				else bk_br = colors.CaptionBk;
@@ -934,38 +1004,36 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	} break;
 	case WM_COMMAND:
 	{
-		//TODO(fran): reserved msg range for UNCAPNC
-
 		// Msgs from my controls
 		switch (LOWORD(wparam))
 		{
 		case NC_RESTORE:
 		{
-			ShowWindow(state->wnd, SW_RESTORE);
+			ShowWindow(state.wnd, SW_RESTORE);
 			return 0;
 		} break;
 		case NC_MINIMIZE: //TODO(fran): move away from WM_COMMAND and start using WM_SYSCOMMAND, that probably means getting rid of the individual nc buttons and handling all myself like with the menubar
 		{
-			ShowWindow(state->wnd, SW_MINIMIZE);
+			ShowWindow(state.wnd, SW_MINIMIZE);
 			return 0;
 		} break;
 		case NC_MAXIMIZE:
 		{
-			WINDOWPLACEMENT p{ sizeof(p) }; GetWindowPlacement(state->wnd, &p);
+			WINDOWPLACEMENT p{ sizeof(p) }; GetWindowPlacement(state.wnd, &p);
 
-			if (p.showCmd == SW_SHOWMAXIMIZED) ShowWindow(state->wnd, SW_RESTORE);
-			else ShowWindow(state->wnd, SW_MAXIMIZE); //TODO(fran): maximize covers the whole screen, I dont want that, I want to leave the navbar visible. For this to be done automatically by windows we need the WS_MAXIMIZEBOX style, which decides to draw a maximize box when pressed, if we can hide that we are all set
+			if (p.showCmd == SW_SHOWMAXIMIZED) ShowWindow(state.wnd, SW_RESTORE);
+			else ShowWindow(state.wnd, SW_MAXIMIZE); //TODO(fran): maximize covers the whole screen, I dont want that, I want to leave the navbar visible. For this to be done automatically by windows we need the WS_MAXIMIZEBOX style, which decides to draw a maximize box when pressed, if we can hide that we are all set
 			return 0;
 		} break;
 		case NC_CLOSE:
 		{
-			bool client_handled = SendMessage(state->client, WM_CLOSE, 0, 0);
+			bool client_handled = SendMessage(state.client, WM_CLOSE, 0, 0);
 			if (!client_handled) {
-				DestroyWindow(state->wnd);
+				DestroyWindow(state.wnd);
 			}
 			return 0;
 		} break;
-		default: return SendMessage(state->client, msg, wparam, lparam);
+		default: return SendMessage(state.client, msg, wparam, lparam);
 		}
 	} break;
 	case WM_DESTROY:
@@ -1012,100 +1080,54 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	} break;
 	case WM_NCMOUSEMOVE:
 	{
-		POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) }; ScreenToClient(state->wnd, &mouse);
+		POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) }; ScreenToClient(state.wnd, &mouse);
 		RECT menurc = calc_menu_rc(state);
 		if (wparam == HTMENU || wparam == HTSYSMENU) {
 			//Trackmouse to know when it leaves the nc area
 			TRACKMOUSEEVENT trackmouse{ sizeof(trackmouse) };
 			trackmouse.dwFlags = TME_NONCLIENT | TME_LEAVE;
-			trackmouse.hwndTrack = state->wnd;
+			trackmouse.hwndTrack = state.wnd;
 			TrackMouseEvent(&trackmouse);
 
 			bool hit = false;
-			for (int i = 0; i < state->menubar_itemcnt; i++) {
-				if (test_pt_rc(mouse, state->menubar_items[i])) {
-					state->menubar_mouseover_idx_from1 = i + 1;
-					RedrawWindow(state->wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
+			for (int i = 0; i < state.menubar_itemcnt; i++) {
+				if (test_pt_rc(mouse, state.menubar_items[i])) {
+					state.menubar_mouseover_idx_from1 = i + 1;
+					RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
 					hit = true;
 					break;
 				}
 			}
-			if (!hit && state->menubar_mouseover_idx_from1) {
-				state->menubar_mouseover_idx_from1 = 0;
-				RedrawWindow(state->wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
+			if (!hit && state.menubar_mouseover_idx_from1) {
+				state.menubar_mouseover_idx_from1 = 0;
+				RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
 			}
 			return 0;
 		}
 		else {
 			//check whether the menu has some item drawn as on mousehover, in which case we need to redraw without it
-			if (state->menubar_mouseover_idx_from1) {
-				state->menubar_mouseover_idx_from1 = 0;
-				RedrawWindow(state->wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
+			if (state.menubar_mouseover_idx_from1) {
+				state.menubar_mouseover_idx_from1 = 0;
+				RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
 			}
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	case WM_NCMOUSELEAVE:
 	{
-		if (state->menubar_mouseover_idx_from1) {
-			state->menubar_mouseover_idx_from1 = 0;
+		if (state.menubar_mouseover_idx_from1) {
+			state.menubar_mouseover_idx_from1 = 0;
 			RECT menurc = calc_menu_rc(state);
-			RedrawWindow(state->wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
+			RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_TIMER:
-	{
-		WPARAM timerID = wparam;
-		switch (timerID) {
-		case NC_TIMER_MENUDELAY:
-		{
-			state->menu_on_delay = false;
-			KillTimer(state->wnd, timerID);
-			return 0;
-		} break;
-		default: return DefWindowProc(hwnd, msg, wparam, lparam);
-		}
 	} break;
 	case WM_NCLBUTTONDOWN:
 	{
+		//printf("nonclient: %s\n", msgToString(msg));
 		POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
-		POINT cl_mouse = mouse; ScreenToClient(state->wnd, &cl_mouse);
-		if (wparam == HTMENU || wparam == HTSYSMENU) {//The menu was clicked, NOTE: for menus we dont wait for buttonup
-			if (!state->menu_on_delay) {
-				for (int i = 0; i < state->menubar_itemcnt; i++) {
-
-					if (test_pt_rc(cl_mouse, state->menubar_items[i])) {
-						HMENU submenu = GetSubMenu(state->menu, i);
-						if (submenu) {
-							POINT menupt{ state->menubar_items[i].left,state->menubar_items[i].bottom - 1 }; ClientToScreen(state->wnd, &menupt);
-							TrackPopupMenu(submenu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, menupt.x, menupt.y, 0, state->wnd, 0);
-							//Set menu delay to stop possible reopening
-							state->menu_on_delay = true;
-							SetTimer(state->wnd, NC_TIMER_MENUDELAY, menu_delay_ms, NULL);
-							//TODO(fran): here we could pass our client wnd as the owner of the menu
-							//TODO(fran): TPM_RETURNCMD could be interesting
-							//TODO(fran): TPM_RECURSE ?
-							break;
-						}
-					}
-				}
-			}
-			return 0;
-		}
-		else if (wparam == HTCAPTION) {
-			if (!state->menu_on_delay) {
-				if (test_pt_rc(cl_mouse, state->rc_icon)) {
-					POINT mpos{ state->rc_icon.left,state->rc_icon.bottom }; ClientToScreen(state->wnd, &mpos);
-					show_rclickmenu(state, mpos);
-					//Set menu delay to stop possible reopening
-					state->menu_on_delay = true;
-					SetTimer(state->wnd, NC_TIMER_MENUDELAY, menu_delay_ms, NULL);
-					return 0;
-				}
-			}
-		}
-		return DefWindowProc(hwnd, msg, wparam, lparam);
+		if (handle_nclbuttondown(state, mouse, wparam)) return 0;
+		else return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	case WM_NCRBUTTONUP:
 	{
@@ -1122,14 +1144,41 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		case VK_F4:
 		{
 			if (!vk_was_down && alt_is_down) {
-				PostMessage(state->wnd, WM_COMMAND, (WPARAM)MAKELONG(NC_CLOSE, 0), (LPARAM)state->btn_close);//TODO(fran): should I use WM_CLOSE?
+				PostMessage(state.wnd, WM_COMMAND, (WPARAM)MAKELONG(NC_CLOSE, 0), (LPARAM)state.btn_close);//TODO(fran): should I use WM_CLOSE?
 			}
 			return 0;
 		} break;
 		default:return DefWindowProc(hwnd, msg, wparam, lparam);
 		}
 	} break;
+	case WM_ENTERIDLE:
+	{
+		auto type = wparam;
+		if (type == MSGF_MENU) {
+			// We are currently in menu selection mode, a menu item from our menu bar is open
+			// We should check if the mouse is hovering over any other menu items from our menu bar, in which case we should close the current menu and open that one
+			POINT mouse; GetCursorPos(&mouse);
+			//printf("nonclient: %s\n", msgToString(msg));
+			handle_nclbuttondown(state, mouse, HTMENU);
+		}
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
 	#ifdef _DEBUG_HWND_MESSAGES
+	case WM_UAHDESTROYWINDOW: //Only called when the window is being destroyed, wparam=lparam=0
+	case WM_UAHINITMENU: //After a SetMenu: lParam=some system generated HMENU with your HMENU stored in the ""unused"" member ; wParam=0 (this system HMENU uses the first byte from the top 32bits, no other HMENU does that)
+	{
+		//NOTE: for some reason, after SetMenu, this msg gets sent more than once after different events, but always with the same params. This does not depend on the number of menus/submenus it has, but it seems like SetMenu checks that your HMENU has at least one submenu, otherwise this msg doesnt get sent
+		//NOTE: from tests I can say semi confidently that the menubar uses WM_SIZE for updating, at least sometimes
+	}
+	case WM_UAHDRAWMENU: //Sent for NON MF_OWNERDRAW menus
+	case WM_UAHDRAWMENUITEM:
+	case WM_UAHMEASUREMENUITEM:
+	case WM_UAHNCPAINTMENUPOPUP:
+	case WM_UAHUPDATE:
+	{
+		printf(msgToString(msg)); printf("\n\n\n\n\n");
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
 	case WM_NCLBUTTONUP:
 	case WM_SYSCOMMAND://Menu and nc buttons related //TODO(fran): maybe I should use this for sending max,min,close
 	case WM_CAPTURECHANGED://just a notif

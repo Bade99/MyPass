@@ -273,5 +273,8 @@
     <Image Include="..\Icons\Circle_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="..\Icons\Language_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

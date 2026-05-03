@@ -207,7 +207,7 @@ void resize_controls(State& state) {
 	};
 	MoveWindow(controls.search, search);
 	
-	i32 sort_w = search.w * .85f;
+	i32 sort_w = search.w * .9f;
 	rect_i32 sort{ 
 		.x = sort_on_next_line ? search.x : (i32)(w * (1 - pad_percent) - sort_w),
 		.y = sort_on_next_line ? search.bottom() + spacing : search.y,
@@ -540,9 +540,7 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 #undef _language_appendtomenu
 	CheckMenuItem(menu_file_lang, LANGUAGE_MANAGER::Instance().GetCurrentLanguage(), MF_BYCOMMAND | MF_CHECKED);
 
-	HBITMAP bEarth = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(BMP_EARTH));
-
-	SetMenuItemBitmaps(menu_file, (UINT)(UINT_PTR)menu_file_lang, MF_BYCOMMAND, bEarth, bEarth);
+	SetMenuItemBitmaps(menu_file, (UINT)(UINT_PTR)menu_file_lang, MF_BYCOMMAND, bmps.language, bmps.language);
 
 	AppendMenuW(menu, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_edit, (LPCWSTR)menu);
 	AMT(menu, (UINT_PTR)menu_edit, LANG_MENU_EDIT);
