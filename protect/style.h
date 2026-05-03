@@ -8,6 +8,7 @@
 struct Themes {
 	button::Theme base_btn;
 	button::Theme login_btn;
+	button::Theme login_btn_cancel;
 	button::Theme editor_add_btn;
 	button::Theme password_editor_card_btn;
 	button::Theme password_editor_toolbar_btn;
@@ -28,6 +29,8 @@ struct Themes {
 	edit_oneline::Theme base_editoneline;
 	edit_oneline::Theme clear_editoneline;
 	edit_oneline::Theme login_editoneline;
+	edit_oneline::Theme login_text_static_error;
+	edit_oneline::Theme login_text_static_signup;
 	//static edit_oneline::Theme hiragana_editoneline_theme;
 	//static edit_oneline::Theme kanji_editoneline_theme;
 	//static edit_oneline::Theme meaning_editoneline_theme;
@@ -134,12 +137,41 @@ void load_styles() {
 		return login_editoneline;
 	}();
 
+	themes.login_text_static_signup = [&]()->auto {
+		auto t = themes.login_editoneline;
+		t.brushes.foreground.disabled = t.brushes.foreground.normal;
+		return t;
+	}();
+
+	themes.login_text_static_error = [&]()->auto {
+		auto login_text_static_error = themes.login_text_static_error;
+		for (auto& b : login_text_static_error.brushes.border.all) b = hollow_brush;
+		for (auto& b : login_text_static_error.brushes.bk.all) b = hollow_brush;
+		for (auto& b : login_text_static_error.brushes.foreground.all) b = colors.Toast_Failure;
+		login_text_static_error.font = fonts.SmallBold;
+		return login_text_static_error;
+	}();
+
 	themes.login_btn = [&]()->auto {
 		auto login_btn = themes.base_btn;
 		login_btn.brushes.bk.normal = colors.ControlBkPush;
 		login_btn.dimensions.border_thickness = 0;
 		login_btn.dimensions.border_radius = {.type = UINumber::type::percent, .value = 50};
 		return login_btn;
+	}();
+
+	themes.login_btn_cancel = [&]()->auto {
+		auto t = themes.login_btn_cancel;
+		for (auto& b : t.brushes.bk.all) b = hollow_brush;
+		for (auto& b : t.brushes.border.all) b = hollow_brush;
+		t.brushes.foreground = {
+			.normal = themes.login_btn.brushes.bk.normal,
+			.disabled = themes.password_editor_toolbar_btn.brushes.foreground.disabled,
+			.mouseover = themes.login_btn.brushes.bk.mouseover,
+			.clicked = themes.login_btn.brushes.bk.clicked,
+		};
+		t.cursor = hand_cursor;
+		return t;
 	}();
 
 	themes.editor_add_btn = [&]()->auto {

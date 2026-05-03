@@ -38,7 +38,6 @@
 #define IDB_BITMAP1                     146
 #define BMP_CIRCLE_A                    146
 #define LANG_LOGIN_PASSWORD_EMPTY       147
-#define IDB_BITMAP2                     147
 #define BMP_LANGUAGE                    147
 #define LANG_ERROR_PASSWORD             148
 #define LANG_ERROR                      149
@@ -75,6 +74,8 @@
 #define LANG_EDITOR_SORT_DATE_CREATED_OLDEST 179
 #define LANG_EDITOR_SORT                180
 #define LANG_PWD_ED_DATES               181
+#define LANG_CONTROL_SIGNUP             182
+#define LANG_CONTROL_CANCEL             183
 
 // Next default values for new objects
 // 

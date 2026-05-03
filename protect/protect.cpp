@@ -15,6 +15,7 @@
 #define WM_NEXT (WM_USER+5000) //proceed to the next window in the state machine
 #define WM_RESET (WM_USER+5001) //clear critical information
 #define WM_START (WM_USER+5002) //you are all set up, start whatever it is you do, this is always a SendMessage, you must use all the init data right there, it's not guaranteed to be there after this msg finishes (return 1 if sucessfully started, 0 otherwise to go back to the prior wnd)
+#define WM_START_ATTEMPT (WM_USER+5003) //login was attempted but failed, this is always a PostMessage. wparam = login::AttemptResult failure mode
 
 
 #include "resource.h"
@@ -109,9 +110,12 @@ void setup_fonts() {
 
 
     lf.lfHeight = (LONG)((float)GetSystemMetrics(SM_CYMENU) * .85f);
-
     fonts.Menu = CreateFontIndirectW(&lf);
     Assert(fonts.Menu);
+
+    lf.lfWeight = FW_BOLD;
+    fonts.SmallBold = CreateFontIndirectW(&lf);
+    Assert(fonts.SmallBold);
 
     atexit([]() { for (auto& f : fonts.all) if (f) { DeleteObject(f); f = nil; } });
 }
@@ -193,15 +197,15 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
         .can_maximize = false,
     };
 
-    editor::Start show_start{0};
-    editor::Data show_data{
+    editor::Start editor_start{0};
+    editor::Data editor_data{
         .settings = &editor_cl,
-        .start = &show_start,
+        .start = &editor_start,
     };
 
     nonclient::LpParam show_nclpparam{
         .client_class_name = editor::wndclass,
-        .client_lp_param = &show_data,
+        .client_lp_param = &editor_data,
     };
 
     HWND login_wnd = create_root_window(
@@ -267,13 +271,14 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
             case wnd_task::show_passwords:
             {
                 SetCursor(loading_cursor); defer{ SetCursor(arrow_cursor); };
-                sha256(login_results.password.str, login_results.password.sz_chars * sizeof(*login_results.password.str), show_start.key);
-                show_data.start->username = login_results.username;
+                sha256(login_results.password.str, login_results.password.sz_chars * sizeof(*login_results.password.str), editor_start.key);
+                editor_data.start->username = login_results.username;
+                editor_data.start->signup = login_results.signup;
 
                 // Attempt to start the next state
-                auto successful_start = SendMessage(nonclient::get_state(new_state.wnd)->client, WM_START, 0, 0);
+                auto start_attempt = (login::AttemptResult)SendMessage(nonclient::get_state(new_state.wnd)->client, WM_START, 0, 0);
 
-                if (successful_start) {
+                if (start_attempt == login::AttemptResult::success) {
                     PostMessage(nonclient::get_state(old_state.wnd)->client, WM_RESET, 0, 0);
                     ShowWindow(old_state.wnd, SW_HIDE);
                     ShowWindow(new_state.wnd, SW_SHOW);
@@ -283,7 +288,9 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
                 }
                 else {
                     // Rollback to previous state
-                    state_idx = prev_state(state_idx); 
+                    state_idx = prev_state(state_idx);
+                    auto wnd = nonclient::get_state(state_machine[state_idx].wnd)->client;
+                    PostMessage(wnd, WM_START_ATTEMPT, (WPARAM)start_attempt, 0);
                 }
             } break;
             }

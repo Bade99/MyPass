@@ -315,8 +315,8 @@ bool handle_nclbuttondown(State& state, POINT mouse, i32 hittest) {
 					HMENU submenu = GetSubMenu(state.menu, i);
 					if (submenu) {
 						POINT menupt{ state.menubar_items[i].left,state.menubar_items[i].bottom - 1 }; ClientToScreen(state.wnd, &menupt);
-						// Try to get any currently open menu to close before opening the new one
 						if (current_menu && current_menu != submenu) {
+							// Try to get any currently open menu of ours to close before opening the new one
 							DefWindowProc(state.wnd, WM_CANCELMODE, 0, 0);
 							SetForegroundWindow(state.wnd);
 						}
@@ -329,12 +329,10 @@ bool handle_nclbuttondown(State& state, POINT mouse, i32 hittest) {
 								if (current_menu != submenu) {
 									auto oldcurrentmenu = current_menu;
 									current_menu = submenu;
-									printf("inside timer: current_menu = %p\n", current_menu);
 									auto res = TrackPopupMenu(submenu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, current_menu_pt.x, current_menu_pt.y, 0, state.wnd, 0);
 									//INFO: TrackPopupMenu stalls the thread until it completes! So we cannot do anything after it, if it returned true, meaning it didnt fail. We can only extract knowledge from it if it returns false, meaning it failed, meaning there's already a menu open
 									if (!res) {
 										current_menu = oldcurrentmenu;
-										printf("inside timer: UNDO, current_menu = %p\n", current_menu);
 									}
 								}
 							});
@@ -389,7 +387,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//Set menu delay to stop possible reopening
 			state.menu_on_delay = true;
 			SetTimer(state.wnd, (UINT_PTR)&menudelay, menu_delay_ms, menudelay);
-			printf("inside uninit: current_menu = %p\n", current_menu);
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
@@ -812,21 +809,14 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				clrPrevText = SetTextColor(item->hDC, ColorFromBrush(txt_br));//TODO(fran): separate menu brushes
 				clrPrevBkgnd = SetBkColor(item->hDC, ColorFromBrush(bk_br));
 
-				if (item->itemAction & ODA_DRAWENTIRE || item->itemAction & ODA_SELECT) { //Draw background
+				if (item->itemAction & ODA_DRAWENTIRE || item->itemAction & ODA_SELECT) //Draw background
 					FillRect(item->hDC, &item->rcItem, bk_br);
-					//printf("PAINTED BK: %#08X\n", ColorFromBrush(bk_br));
-				}
 
 				// Select the font and draw the text. 
 				hfntPrev = (HFONT)SelectObject(item->hDC, fonts.Menu);//TODO(fran): parametric
 
 				WORD x_pad = LOWORD(GetTabbedTextExtent(item->hDC, TEXT(" "), 1, 0, NULL)); //an extra 1 space before drawing text (for not top level menus)
-				//printf("item->hwndItem=%#016x GetMenu(hwnd)=%#016x state.menu=%#016x\n",item->hwndItem,GetMenu(hwnd),state.menu);
-				//if (item->hwndItem == (HWND)GetMenu(hwnd)) { //If we are a "top level" menu
 				if (item->hwndItem == (HWND)state.menu) { //If we are on the menu bar (then hwndItem, our parent, will be the same as state.menu)
-				//Assert(GetMenu(hwnd) == state.menu);
-				//if (is_on_menu_bar(state, (UINT)item->hwndItem)) { //If we are a "top level" menu
-
 					//we just want to draw the text, nothing more
 					//TODO(fran): clean this huge if-else, very bug prone with things being set/initialized in different parts
 
@@ -1124,7 +1114,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_NCLBUTTONDOWN:
 	{
-		//printf("nonclient: %s\n", msgToString(msg));
 		POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
 		if (handle_nclbuttondown(state, mouse, wparam)) return 0;
 		else return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -1158,7 +1147,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			// We are currently in menu selection mode, a menu item from our menu bar is open
 			// We should check if the mouse is hovering over any other menu items from our menu bar, in which case we should close the current menu and open that one
 			POINT mouse; GetCursorPos(&mouse);
-			//printf("nonclient: %s\n", msgToString(msg));
 			handle_nclbuttondown(state, mouse, HTMENU);
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);

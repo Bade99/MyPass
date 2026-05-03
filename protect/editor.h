@@ -38,6 +38,7 @@ struct Settings {
 struct Start {
 	u32 key[8];//32 bytes
 	text username;
+	bool signup;
 };
 
 struct Data {
@@ -761,7 +762,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_START:
 	{
-		bool successful_start = false;
+		login::AttemptResult start_attempt;
 		twofish_setkey(state.start->key, sizeof(state.start->key));
 		ZeroMemory(state.start->key, sizeof(state.start->key));
 
@@ -780,22 +781,19 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				SetWindowTextW(state.controls.edit_passwords, ((cstr*)file_read.mem) + state.start->username.sz_chars); //TODO(fran): what did I decide for the data's encoding?
 				//TODO(fran): set keyboard focus to the edit control, SetFocus doesnt work here, maybe cause we arent visible yet?
 				create_password_editors(state, ((cstr*)file_read.mem) + state.start->username.sz_chars);
-				successful_start = true;
+				start_attempt = login::AttemptResult::success;
 			}
 			else { //Invalid password
-				MessageBoxW(0, RCS(LANG_ERROR_PASSWORD), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);//IMPORTANT INFO: I have NO IDEA why but if you PostMessage first and then MessageBox the msg will get lost and the WM_NEXT never gets posted
+				start_attempt = login::AttemptResult::fail_password;
 			}
-		}
-		else {
+		} else {
 			//NOTE: if the user previously created an account but didnt save then it will not count as a created account and next time they will be prompted to create the account again, this is a limitation of the fact that we dont save anything inside the user folder till the first time they save what they wrote, therefore we cannot currently do this any other way since there's no information inside the folder to allow us to check whether the second time the user input the same password as the first time
-			utf16 tmp[100];
-			_snwprintf_s(tmp, ARRAYSIZE(tmp)-(state.start->username.sz_chars+1), RCS(LANG_CREATEACCOUNT), state.current_user);
-			auto ret = MessageBox(0, tmp, RCS(LANG_SIGNUP), MB_YESNOCANCEL | MB_ICONQUESTION | MB_SETFOREGROUND);
-			bool signup = ret == IDYES;
-			successful_start = passwords_need_save = signup;
+			bool signup = state.start->signup;
+			start_attempt = signup ? login::AttemptResult::success : login::AttemptResult::fail_username;
+			passwords_need_save = signup;
 		}
 		set_passwords_need_save(state, passwords_need_save);
-		return successful_start;
+		return (LRESULT)start_attempt;
 	} break;
 	case WM_RESET:
 	{

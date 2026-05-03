@@ -73,8 +73,9 @@ union known_fonts {
 		HFONT General;
 		HFONT GeneralBold;
 		HFONT Menu;
+		HFONT SmallBold;
 	};
-	HFONT all[3];
+	HFONT all[4];
 	private: void _() { static_assert(sizeof(*this) == sizeof(all)); }
 } static fonts{};
 
