@@ -53,4 +53,16 @@ namespace password_editor {
 
 		void* user_data;
 	};
+
+	struct ValueCellFlag {
+		using type = u32;
+		static const type lock = 1 << 0; // field hidden by default
+	};
+
+	struct ValueCell {
+		const utf16* text;
+		multiflag<ValueCellFlag> flags;
+	};
+
+	static constexpr auto empty_value_cell = ValueCell{ .text = L"", .flags = 0 };
 }

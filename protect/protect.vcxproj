@@ -213,7 +213,6 @@
     <Image Include="..\Icons\Circle_A.bmp" />
     <Image Include="..\Icons\Clipboard32.bmp" />
     <Image Include="..\Icons\Close16.bmp" />
-    <Image Include="..\Icons\Earth16.bmp" />
     <Image Include="..\Icons\Edit32.bmp" />
     <Image Include="..\Icons\EyeClosed32.bmp" />
     <Image Include="..\Icons\EyeOpen32.bmp" />

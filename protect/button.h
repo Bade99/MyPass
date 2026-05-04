@@ -356,21 +356,25 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 		}
 		else if (style & BS_BITMAP) {
 			BITMAP bitmap; GetObject(state.theme.bmp, sizeof(bitmap), &bitmap);
+			int max_sz = (int)((float)min_dim * .8f);
 			if (bitmap.bmBitsPixel == 1) {
 				//TODO(fran):unify rect calculation with icon
-				int max_sz = roundNdown(bitmap.bmWidth, (int)((float)min_dim * .8f)); //HACK: instead use png + gdi+ + color matrices
+				max_sz = roundNdown(bitmap.bmWidth, max_sz); //HACK: instead use png + gdi+ + color matrices
 				if (!max_sz) {
 					if ((bitmap.bmWidth % 2) == 0) max_sz = bitmap.bmWidth / 2;
 					else max_sz = bitmap.bmWidth; //More HACKs
 				}
 				if (max_sz > bitmap.bmWidth) max_sz = bitmap.bmWidth;//TODO(fran): HACK nº 1000, for this specific program (MyPass) some if we scale some icons bigger than their original size they look terrible (specially the close button), therefore we dont allow it. Solution: stop using 1 bit images for icons and use 8 bit grayscale
-
-				int bmp_height = max_sz;
-				int bmp_width = bmp_height;
-				int bmp_align_height = (h - bmp_height) / 2;
-				int bmp_align_width = (w - bmp_width) / 2;
-				urender::draw_mask(dc, bmp_align_width, bmp_align_height, bmp_width, bmp_height, state.theme.bmp, 0, 0, bitmap.bmWidth, bitmap.bmHeight, forebr);
 			}
+			int bmp_height = max_sz;
+			int bmp_width = bmp_height;
+			int bmp_align_height = (h - bmp_height) / 2;
+			int bmp_align_width = (w - bmp_width) / 2;
+
+			if (bitmap.bmBitsPixel == 1)
+				urender::draw_mask(dc, bmp_align_width, bmp_align_height, bmp_width, bmp_height, state.theme.bmp, 0, 0, bitmap.bmWidth, bitmap.bmHeight, forebr);
+			elif(bitmap.bmBitsPixel == 8)
+				urender::draw_menu_mask8(dc, bmp_align_width, bmp_align_height, bmp_width, bmp_height, state.theme.bmp, forebr);
 		}
 		else { //Here will go buttons that only have text
 			HFONT font = state.theme.font;

@@ -149,36 +149,14 @@ password_editor::State& add_password_editor(State& state, const props& propertie
 	return res;
 }
 
-void add_password_editor_row(password_editor::State& editor, const utf16* description, const utf16* value) {
-	auto& tbl = *table::get_state(editor.controls.tbl_values);
-	table::add_row(tbl, description, value);
-}
-
 void add_preset_password_editor(State& state, size_t at_idx) {
 	props properties{ .title = L"", .date_created = std::time(nil), .date_modified = properties.date_created };
 	auto& password_editor = add_password_editor(state, properties, at_idx);
-	add_password_editor_row(password_editor, RCS(LANG_PWD_ED_TBL_USER), L"");
-	add_password_editor_row(password_editor, RCS(LANG_PWD_ED_TBL_PASSWORD), L"");
+	password_editor::table_add_row(password_editor, RCS(LANG_PWD_ED_TBL_USER), &password_editor::empty_value_cell);
+	password_editor::table_add_row(password_editor, RCS(LANG_PWD_ED_TBL_PASSWORD), &password_editor::empty_value_cell);
 	password_editor::set_is_open(password_editor, true);
 	ask_window_for_resize(state.wnd);
 	ask_window_for_repaint(state.wnd);
-}
-
-void setup_combobox_sorting_options(State& state, HWND combo) {
-	auto controls = combobox::get_controls(combo);
-	Assert(controls.listbox);
-	sort_combo_item items[] = {
-		{.value = sort_option::date_modified_newest, .label_id = LANG_EDITOR_SORT_DATE_MODIFIED_NEWEST },
-		{.value = sort_option::date_modified_oldest, .label_id = LANG_EDITOR_SORT_DATE_MODIFIED_OLDEST },
-		{.value = sort_option::alphabetic_az, .label_id = LANG_EDITOR_SORT_ALPHABETIC_AZ },
-		{.value = sort_option::alphabetic_za, .label_id = LANG_EDITOR_SORT_ALPHABETIC_ZA },
-		{.value = sort_option::date_created_newest, .label_id = LANG_EDITOR_SORT_DATE_CREATED_NEWEST },
-		{.value = sort_option::date_created_oldest, .label_id = LANG_EDITOR_SORT_DATE_CREATED_OLDEST },
-	};
-	listbox::add_elements_by_value(controls.listbox, (void**)items, ARRAYSIZE(items));
-
-	combobox::set_cur_sel(combo, (size_t)state.sorting);
-	ask_window_for_repaint(combo);
 }
 
 void resize_controls(State& state) {
@@ -367,6 +345,22 @@ void add_controls(State& state) {
 	auto combo_sort_controls = combobox::get_controls(state.controls.combo_sort);
 	AWDYN(combo_sort_controls.button, WM_PAINT);
 	AWDYN(combo_sort_controls.listbox, WM_SIZE); // triggers a full backbuffer redraw of all its items
+	auto setup_combobox_sorting_options = [](State& state, HWND combo) {
+		auto controls = combobox::get_controls(combo);
+		Assert(controls.listbox);
+		sort_combo_item items[] = {
+			{.value = sort_option::date_modified_newest, .label_id = LANG_EDITOR_SORT_DATE_MODIFIED_NEWEST },
+			{.value = sort_option::date_modified_oldest, .label_id = LANG_EDITOR_SORT_DATE_MODIFIED_OLDEST },
+			{.value = sort_option::alphabetic_az, .label_id = LANG_EDITOR_SORT_ALPHABETIC_AZ },
+			{.value = sort_option::alphabetic_za, .label_id = LANG_EDITOR_SORT_ALPHABETIC_ZA },
+			{.value = sort_option::date_created_newest, .label_id = LANG_EDITOR_SORT_DATE_CREATED_NEWEST },
+			{.value = sort_option::date_created_oldest, .label_id = LANG_EDITOR_SORT_DATE_CREATED_OLDEST },
+		};
+		listbox::add_elements_by_value(controls.listbox, (void**)items, ARRAYSIZE(items));
+
+		//combobox::set_cur_sel(combo, (size_t)state.sorting); // we wont apply sorting on startup
+		//ask_window_for_repaint(combo);
+	};
 	setup_combobox_sorting_options(state, controls.combo_sort);
 	//button::set_theme(combobox::get_controls(state.controls.combo_sort).button, themes.base_btn);
 	combobox::set_user_extra(controls.combo_sort, &state);
@@ -607,7 +601,58 @@ static read_entire_file_res load_file_user(std::wstring username /*functions as 
 	return res;
 }
 
+std::wstring get_controls_data_for_saving(State& state) {
+	//TODO(fran): implement a real robust data format where we dont depend on the ':' token, since it can be used by the user
+	std::wstring res;
+
+	auto append_control_text = [](std::wstring& s, HWND wnd) {
+		auto old_len = s.size();
+		auto added_len = GetWindowTextLength(wnd) + 1;
+		//INFO: note that this does not ever reduce the size of the string array below its capacity, so we are not wastefully having to actually resize the memory every time, it still follows the normal way std::string resizes. 
+		// Even still: //TODO(fran): verify behaviour when the string s has become large: will a request to resize just resize the array a little bit more than requested, eg going from 512 to 530, or will it be more efficient and go from 512 to 768 or more, for a small resize request of lets say 10 characters?
+		s.resize_and_overwrite(old_len + added_len,
+			[&](utf16* buf, size_t buf_size) { return old_len + GetWindowText(wnd, buf + old_len, added_len); }
+		);
+	};
+
+	for (auto& e : state.controls.password_editors) {
+		//TODO(fran): we may want to move the data extraction logic inside password_editor. Though that would mean that either it would also need to be aware of the data format we expect; or we would need to create an intermediate data format that we would then parse into the final output
+		auto& ed = *password_editor::get_state(e);
+		auto title = ed.controls.edo_title;
+		append_control_text(res, title);
+		//TODO: im just using \r\n for compatibility with the text format, remove the stupid \r later if I end up actually using a text based encoding format with line jumps
+		res += std::format(L":{}:{}\r\n", ed.properties.date_created, ed.properties.date_modified);
+		auto& tbl = *table::get_state(ed.controls.tbl_values);
+		for (auto& r : tbl.rows) {
+			auto& description_cell = r[0];
+			append_control_text(res, description_cell);
+			res += L":";
+			auto& value_cell = *password_editor::value_cell::get_state(r[1]);
+			append_control_text(res, value_cell.controls.text);
+			res += L":";
+			multiflag<password_editor::ValueCellFlag> flags = 0;
+			bool lock_selected = button::get_state(value_cell.controls.btn_lock)->selected;
+			static_assert(std::is_unsigned_v<password_editor::ValueCellFlag::type>, 
+				"Flag value type needs to be unsigned for the bit trick we do for branchless assignment"
+			);
+			using cellflagtype = password_editor::ValueCellFlag::type;
+			using signedtype = std::make_signed_t<cellflagtype>;
+			flags |= password_editor::ValueCellFlag::lock & (cellflagtype)(-(signedtype)lock_selected);
+			res += to_str(flags);
+			res += L"\r\n";
+		}
+		res += L"\r\n";
+	}
+	res.pop_back(); res.pop_back(); res.pop_back(); res.pop_back(); //remove the extra \r\n from the end
+	return res;
+}
+
 void save_passwords(State& state) {
+	auto data = get_controls_data_for_saving(state);
+	if constexpr (debug_text_view) {
+		SetWindowText(state.controls.edit_passwords, data.c_str());
+	} else return; //TODO(fran): complete save with new data without intermediating with the old text control
+
 	int user_len_chars = (int)wcslen(state.current_user);
 	int len_chars = user_len_chars + GetWindowTextLength(state.controls.edit_passwords) + 1;
 	int len_bytes = next_multiple_of_16(len_chars * sizeof(cstr)); //we pad with extra garbage bytes to get blocks of 16 bytes for encryption
@@ -659,14 +704,19 @@ void create_password_editors(State& state, utf16* data) {
 			const auto row_separator = title_separator;
 			for (const auto& row : std::views::split(std::wstring_view(title_end), row_separator)) {
 				const auto col_separator = title_prop_separator;
-				strtype desc_value[2]{0};
+				strtype description_cell{ 0 };
+				auto value_cell = password_editor::empty_value_cell;
 				for (const auto& [i, col] : std::views::split(row, col_separator) | std::views::enumerate) {
-					if (i >= 2) break;
-					desc_value[i] = const_cast<strtype>(col.data());
+					auto val = const_cast<strtype>(col.data());
 					terminate_string_view(col);
-					desc_value[i] = strip(desc_value[i]);
+					switch (i) {
+					case 0: description_cell = strip(val); continue;
+					case 1: value_cell.text = val; continue; //TODO(fran): not sure if we want to stript characters from a potential password or not, idk if it is common for apps to allow them (either really using them or ignoring them)
+					case 2: value_cell.flags = wcstol(val, nil, 10); continue;
+					}
+					break;
 				}
-				add_password_editor_row(password_editor, desc_value[0], desc_value[1]);
+				password_editor::table_add_row(password_editor, description_cell, &value_cell);
 			}
 		}
 	}

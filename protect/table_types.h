@@ -63,16 +63,13 @@ namespace table {
 		Functions functions;
 		std::vector<std::array<HWND, MAX_COLUMNS>> rows;
 		u32 column_cnt;
-		std::vector<void*> row_data; // TODO: we may actually not use this and just pass everything to the HWND control itself, since we are kinda forced to do it anyways given how this text editors work
 
 		void init() {
 			rows = decltype(rows)();
-			row_data = decltype(row_data)();
 		}
 
 		void uninit() {
 			rows.~vector();
-			row_data.~vector();
 		}
 	};
 }

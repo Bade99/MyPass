@@ -157,7 +157,7 @@ namespace table {
 		ask_window_for_resize(state.wnd);
 	}
 
-	template<std::same_as<const utf16*>... Args>
+	template<typename... Args>
 	void add_row(State& state, Args... column_values) {
 		static_assert(sizeof...(column_values) <= MAX_COLUMNS);
 		u32 idx = 0;

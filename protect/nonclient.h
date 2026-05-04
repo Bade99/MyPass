@@ -887,13 +887,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 							int bmp_align_width = item->rcItem.left + (img_max_x + x_pad - bmp_width) / 2;
 							int bmp_align_height = item->rcItem.top + (img_max_y - bmp_height) / 2;
 
-							if (bitmap.bmBitsPixel == 1) {
+							//TODO(fran): clipping
+							if (bitmap.bmBitsPixel == 1)
 								urender::draw_menu_mask(item->hDC, bmp_align_width, bmp_align_height, bmp_width, bmp_height, hbmp, 0, 0, bitmap.bmWidth, bitmap.bmHeight, colors.Img);//TODO(fran): parametric brush
-								//TODO(fran): clipping
-							}
-							elif (bitmap.bmBitsPixel == 8) {
+							elif (bitmap.bmBitsPixel == 8)
 								urender::draw_menu_mask8(item->hDC, bmp_align_width, bmp_align_height, bmp_width, bmp_height, hbmp, colors.Img);
-							}
 						}
 					}
 
@@ -1238,14 +1236,16 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 void init_wndclass(HINSTANCE inst) {
 	WNDCLASSEXW wcex{ sizeof(WNDCLASSEX) };
 	auto icon = LoadIcon(inst, MAKEINTRESOURCE(ICO_LOGO));
+	auto a = GetSystemMetrics(SM_CXSMICON);
+	auto b = GetSystemMetrics(SM_CYSMICON);
 	wcex.style = CS_HREDRAW | CS_VREDRAW;
 	wcex.lpfnWndProc = proc;
 	wcex.cbWndExtra = sizeof(void*);
 	wcex.hInstance = inst;
-	wcex.hIcon = icon; //TODO(fran): LoadImage to choose the best size
+	wcex.hIcon = icon;
 	wcex.hCursor = LoadCursor(nil, IDC_ARROW);
 	wcex.lpszClassName = wndclass;
-	wcex.hIconSm = icon; //TODO(fran): LoadImage to choose the best size
+	wcex.hIconSm = icon;
 
 	ATOM class_atom = RegisterClassExW(&wcex); Assert(class_atom);
 }

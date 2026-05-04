@@ -14,7 +14,100 @@
  * Allow to search by title (exact string match, lets not go crazy): we should hide items that dont match, and maybe we should sort the remaining items by the best match?
  * 
  */
+
+ //TODO(fran): virtual window manager, hwnd that handles other hwnds, so we can do scrolling, have the virtual manager be passed a way to generate my windows, in this case the password editor. It will only generate a few windows to cover the visible space, and on demand switch the state of the windows when scrolling to simulate going over the whole list of passwords
+
 namespace password_editor {
+
+	namespace value_cell {
+		constexpr auto& wndclass = wndclass_name("password_editor_value_cell");
+
+		struct State : WindowState {
+			union Controls {
+				struct {
+					HWND text, btn_show, btn_copy, btn_lock, btn_del;
+				};
+				HWND all[5];
+			private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
+			} controls;
+
+			bool default_hidden;
+
+			void set_default_hidden(bool new_default_hidden) {
+				auto& state = *this;
+				state.default_hidden = new_default_hidden;
+
+				auto& controls = state.controls;
+
+				LONG_PTR style = GetWindowLongPtr(controls.text, GWL_STYLE);
+				if (state.default_hidden) style |= ES_PASSWORD;
+				else style &= ~ES_PASSWORD;
+				SetWindowLongPtr(controls.text, GWL_STYLE, style);
+				ask_window_for_repaint(controls.text);
+
+				button::set_selected(controls.btn_lock, state.default_hidden);
+
+				ShowWindow(controls.btn_show, state.default_hidden ? SW_SHOW : SW_HIDE);
+				SendMessage(controls.btn_show, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)(state.default_hidden ? bmps.eye_open : bmps.eye_closed));
+			}
+		};
+
+		auto get_state(HWND wnd) { _control_create_function__get_state }
+
+		LRESULT proc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+			auto& state = *get_state(wnd);
+			if (!&state) return DefWindowProc(wnd, msg, wparam, lparam);
+			switch (msg) {
+			case WM_SIZE: {
+				//TODO(fran): make into reusable function for placing objects horizontally on a toolbar
+				auto& controls = state.controls;
+				RECT wnd_r; GetClientRect(state.wnd, &wnd_r);
+				auto w = RECTW(wnd_r), h = RECTH(wnd_r);
+				i32 title_w = w * .75f * .75f;
+				i32 toolbar_w = w - title_w;
+				i32 pad = DPI(8);
+
+				RECT title_r{
+					.left = 0, .top = 0,
+					.right = title_r.left + title_w, .bottom = title_r.top + h
+				};
+				move_window(controls.text, title_r);
+
+				auto tools = { controls.btn_show, controls.btn_copy, controls.btn_lock, controls.btn_del };
+				const auto tool_cnt = tools.size();
+				auto total_tool_pad = (tool_cnt - 1) * pad;
+				auto toolbar_usable_w = toolbar_w - total_tool_pad;
+				auto tool_h = RECTH(title_r);
+				auto max_tool_w = tool_h;
+				auto tool_w = (i32)minimum(toolbar_usable_w / tool_cnt, max_tool_w);
+				auto tool_x = w - total_tool_pad - tool_cnt * tool_w;
+				for (const auto& c : tools) {
+					RECT tool_r;
+					tool_r.left = tool_x;
+					tool_r.top = title_r.top;
+					tool_r.right = tool_x + tool_w;
+					tool_r.bottom = title_r.bottom;
+					move_window(c, tool_r);
+					tool_x = tool_r.right + pad;
+				}
+			} break;
+			case WM_ENABLE_REQUEST: {
+				BOOL should_enable = wparam;
+				EnableWindow(state.controls.text, should_enable);
+			} break;
+			case WM_NCDESTROY: {
+				if (&state) {
+					set_window_state(state.wnd, nil);
+					free(&state);
+				}
+				goto defproc;
+			} break;
+			default: defproc: return DefWindowProc(wnd, msg, wparam, lparam);
+			}
+			return 0;
+		};
+		_init_wndclass_at_startup;
+	}
 
 void on_internal_state_change(State& state) {
 	auto& controls = state.controls;
@@ -69,6 +162,11 @@ void on_properties_changed(State& state) {
 	SendMessage(state.controls.tooltip_btn_dates, TTM_UPDATETIPTEXT, 0, (LPARAM)&toolInfo);
 }
 
+void table_add_row(State& state, const utf16* description, const password_editor::ValueCell* value) {
+	auto& tbl = *table::get_state(state.controls.tbl_values);
+	table::add_row(tbl, description, value);
+}
+
 void create_controls(State& state) {
 	//TODO(fran): this is an interesting case where I would not want password_editor itself to be and hwnd at all, just a manager for this btn_card which should be the main hwnd from which others are created inside of. Can I just have this object not exist and be just a handler, or maybe a worse solution would be have it be a subclass of button?
 	auto& controls = state.controls;
@@ -117,7 +215,7 @@ void create_controls(State& state) {
 		.on_click = [](void* data) {
 			auto& state = *(State*)data;
 			auto& tbl = *table::get_state(state.controls.tbl_values);
-			table::add_row(tbl, L"", L"");
+			table_add_row(state, L"", &empty_value_cell);
 			// When a row is added we go into editing mode to allow the user to edit directly
 			state.is_editing = true;
 			on_internal_state_change(state);
@@ -139,8 +237,9 @@ void create_controls(State& state) {
 	controls.tbl_values = create_window(controls.btn_card, table::wndclass);
 	set_window_manager_parent(controls.tbl_values, state.manager_parent); //TODO: this does not look like a good solution, again depends on the parent properly managing the resizing, meaning that we again are inverting the responsibility, the control shouldnt know who resizes it. On the other hand, if we expand the manager_parent all the way through the window stack then it would be ok, here we would do: table::set_manager_parent(controls.tbl_values, state.manager_parent);
 	table::Functions tbl_values_functions{
-		.create_control = [](u32 column_idx, HWND parent, const void* data = nullptr) -> HWND {
+		.create_control = [](u32 column_idx, HWND parent, const void* data) -> HWND {
 			//TODO: first hurdle with this architecture, I dont have an initialization stage, where I can tell the table that I actually want the first two cells in the first column to, by default have title 'username', and the second one 'password' (we can though fix this not via initialization but by passing extra info to this function like row_idx, or the complete table state, or a pointer to some additional setup parameters)
+			Assert(data);
 			auto tbl_font = fonts.General;
 			auto hollow_brush = (HBRUSH)GetStockObject(HOLLOW_BRUSH);
 			switch (column_idx) {
@@ -156,99 +255,17 @@ void create_controls(State& state) {
 				}
 				case 1: 
 				{
-					auto text = (const utf16*)data;
+					auto cell = (const ValueCell*)data;
 
-					struct State : custom::State {
-						union Controls {
-							struct {
-								HWND text, btn_show, btn_copy, btn_lock, btn_del;
-							};
-							HWND all[5];
-						private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
-						} controls;
-
-						bool default_hidden;
-
-						void set_default_hidden(bool new_default_hidden) {
-							auto& state = *this;
-							state.default_hidden = new_default_hidden;
-
-							auto& controls = state.controls;
-							bool is_editing = IsWindowEnabled(controls.text);
-							if (!is_editing) {
-								LONG_PTR style = GetWindowLongPtr(controls.text, GWL_STYLE);
-								if (state.default_hidden) {
-									style |= ES_PASSWORD;
-								}
-								else {
-									style &= ~ES_PASSWORD;
-								}
-								SetWindowLongPtr(controls.text, GWL_STYLE, style);
-								ask_window_for_repaint(controls.text);
-							}
-							button::set_selected(controls.btn_lock, state.default_hidden);
-							ShowWindow(controls.btn_show, state.default_hidden ? SW_SHOW : SW_HIDE);
-							SendMessage(controls.btn_show, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)(state.default_hidden ? bmps.eye_open : bmps.eye_closed));
-						}
-					};
-					auto& state = *(State*)calloc(1, sizeof(State));
+					auto& state = *(value_cell::State*)calloc(1, sizeof(value_cell::State));
 					state.parent = parent;
-					state.wnd = create_window(parent, custom::wndclass);
-					state.proc = [](HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) -> LRESULT {
-						auto& state = *(State*)custom::get_state(wnd);
-						switch (msg) {
-						case WM_SIZE: {
-							//TODO(fran): make into reusable function for placing objects horizontally on a toolbar
-							auto& controls = state.controls;
-							RECT wnd_r; GetClientRect(state.wnd, &wnd_r);
-							auto w = RECTW(wnd_r), h = RECTH(wnd_r);
-							i32 title_w = w * .75f * .75f;
-							i32 toolbar_w = w - title_w;
-							i32 pad = DPI(8);
-
-							RECT title_r {
-								.left = 0, .top = 0,
-								.right = title_r.left + title_w, .bottom = title_r.top + h 
-							};
-							move_window(controls.text, title_r);
-
-							auto tools = { controls.btn_show, controls.btn_copy, controls.btn_lock, controls.btn_del };
-							const auto tool_cnt = tools.size();
-							auto total_tool_pad = (tool_cnt - 1) * pad;
-							auto toolbar_usable_w = toolbar_w - total_tool_pad;
-							auto tool_h = RECTH(title_r);
-							auto max_tool_w = tool_h;
-							auto tool_w = (i32)minimum(toolbar_usable_w / tool_cnt, max_tool_w);
-							auto tool_x = w - total_tool_pad - tool_cnt * tool_w;
-							for (const auto& c : tools) {
-								RECT tool_r;
-								tool_r.left = tool_x;
-								tool_r.top = title_r.top;
-								tool_r.right = tool_x + tool_w;
-								tool_r.bottom = title_r.bottom;
-								move_window(c, tool_r);
-								tool_x = tool_r.right + pad;
-							}
-						} break;
-						case WM_ENABLE_REQUEST: {
-							BOOL should_enable = wparam;
-							EnableWindow(state.controls.text, should_enable);
-						} break;
-						case WM_NCDESTROY: {
-							set_window_state(state.wnd, nullptr);
-							free(&state);
-							goto defproc;
-						} break;
-						default: defproc: return DefWindowProc(wnd, msg, wparam, lparam);
-						}
-						return 0;
-					};
-						
+					state.wnd = create_window(parent, value_cell::wndclass);
+					
 					auto& controls = state.controls;
 
 					controls.text = create_window(state.wnd, edit_oneline::wndclass);
 					AWDT(controls.text, LANG_PWD_ED_TBL_VALUE);
-					SetWindowTextW(controls.text, text);
+					SetWindowTextW(controls.text, cell->text);
 					edit_oneline::set_theme(controls.text, themes.clear_editoneline);
 
 					controls.btn_show = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
@@ -257,7 +274,7 @@ void create_controls(State& state) {
 					button::set_user_data(controls.btn_show, &state);
 					button::set_functions(controls.btn_show, {
 						.on_click = [](void* data) {
-							State& state = *(State*)data;
+							value_cell::State& state = *(value_cell::State*)data;
 							auto& controls = state.controls;
 							LONG_PTR style = GetWindowLongPtr(controls.text, GWL_STYLE) ^ ES_PASSWORD;
 							SetWindowLongPtr(controls.text, GWL_STYLE, style);
@@ -273,7 +290,7 @@ void create_controls(State& state) {
 					button::set_user_data(controls.btn_copy, &state);
 					button::set_functions(controls.btn_copy, {
 						.on_click = [](void* data) {
-							State& state = *(State*)data;
+							value_cell::State& state = *(value_cell::State*)data;
 							auto& text = state.controls.text;
 							auto& text_state = *edit_oneline::get_state(text);
 							auto res = copy_text_to_clipboard(text_state.char_text.c_str(), text_state.char_text.length());
@@ -291,11 +308,10 @@ void create_controls(State& state) {
 					button::set_user_data(controls.btn_lock, &state);
 					button::set_functions(controls.btn_lock, {
 						.on_click = [](void* data) {
-							State& state = *(State*)data;
+							value_cell::State& state = *(value_cell::State*)data;
 							state.set_default_hidden(!state.default_hidden);
 						}
 					});
-
 
 					controls.btn_del = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
 					SendMessage(controls.btn_del, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.bin);
@@ -303,7 +319,7 @@ void create_controls(State& state) {
 					button::set_user_data(controls.btn_del, &state);
 					button::set_functions(controls.btn_del, {
 						.on_click = [](void* data) {
-							State& state = *(State*)data;
+							value_cell::State& state = *(value_cell::State*)data;
 							auto& tbl_state = *table::get_state(state.parent);
 							table::delete_row(tbl_state, state.wnd);
 						}
@@ -317,7 +333,7 @@ void create_controls(State& state) {
 
 					set_window_state(state.wnd, &state);
 
-					state.set_default_hidden(false);
+					state.set_default_hidden(cell->flags & ValueCellFlag::lock);
 
 					return state.wnd;
 				}
@@ -501,4 +517,3 @@ void set_properties(HWND wnd, const Properties& properties) {
 }
 
 }
-//TODO(fran): virtual window manager, hwnd that handles other hwnds, so we can do scrolling, have the virtual manager be passed a way to generate my windows, in this case the password editor. It will only generate a few windows to cover the visible space, and on demand switch the state of the windows when scrolling to simulate going over the whole list of passwords

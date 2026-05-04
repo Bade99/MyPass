@@ -240,9 +240,6 @@
     <Image Include="..\Icons\RightArrow16.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Earth16.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
     <Image Include="..\Icons\Add16.bmp">
       <Filter>Resource Files</Filter>
     </Image>

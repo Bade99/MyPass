@@ -2,7 +2,7 @@
 #include "win_sdk.h"
 #include "helpers.h"
 
-namespace custom {
+namespace custom { //TODO(fran): remove, good idea, but we can do even better now
 
 	constexpr auto& wndclass = wndclass_name("custom");
 
@@ -20,5 +20,5 @@ namespace custom {
 		if (&state && state.proc) return state.proc(wnd, msg, wparam, lparam);
 		else return DefWindowProc(wnd, msg, wparam, lparam);
 	}
-	_init_wndclass_at_startup;
+	//_init_wndclass_at_startup;
 }

@@ -16,7 +16,6 @@
 #define LANG_MENU_FILE                  134
 #define BMP_RIGHTARROW                  134
 #define LANG_MENU_SAVE                  135
-#define BMP_EARTH                       135
 #define LANG_MENU_LANGUAGE              136
 #define LANG_MENU_EDIT                  137
 #define BMP_ADD                         137

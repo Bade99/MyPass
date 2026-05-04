@@ -33,8 +33,9 @@ namespace debug {
 				b = create_window(wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD);
 				for (auto& br : t.brushes.bk.all) br = c;
 				button::set_theme(b, t);
-				add_mouseover_tooltip(b, (u64)(void*)(known_colors_names[i]), { .delay_ms = 100 });
-				
+				auto col = ColorFromBrush(c);
+				auto msg = std::format(L"{}\nRGB({}, {}, {})", known_colors_names[i], GetRValue(col), GetGValue(col), GetBValue(col));
+				add_mouseover_tooltip(b, (u64)(void*)msg.c_str(), {.multiline = true, .delay_ms = 100});
 			}
 		}
 

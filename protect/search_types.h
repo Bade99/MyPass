@@ -19,9 +19,9 @@ namespace search {
 	  * Defines the type of control that will be searched through
 	  */
 	struct ParentType {
-		static const u32 edit = (1 << 1);
-		static const u32 richedit = (1 << 2);
-		static const u32 custom = (1 << 3);
+		static const u32 edit = 1 << 1;
+		static const u32 richedit = 1 << 2;
+		static const u32 custom = 1 << 3;
 	};
 
 	struct Placement

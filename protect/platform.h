@@ -103,4 +103,4 @@ static utf16_str to_utf_str(std::wstring& s) { return { const_cast<decltype(&s[0
 
 
 template <typename T>
-using multiflag = int;
+using multiflag = u32;
