@@ -456,7 +456,7 @@ namespace urender {
 		AlphaBlend(destDC, xDest, yDest, wDest, hDest, 
 			memdc, 0, 0, bmpnfo.bmWidth, bmpnfo.bmHeight, bf); 
 		// We allow AlphaBlend to do the scaling 
-		// TODO: check if it scales nicely or it looks like trash and we gotta do it ourselves with bilinear sampling
+		// TODO: check if it scales nicely or it looks like trash and we gotta do it ourselves with bilinear sampling. Initial impressions, downscaling looks like absolute trash, we gotta do it right ourselves
 	}
 
 	void draw_round_rectangle(HDC dest, RECT r, float radius, HBRUSH color_br) {

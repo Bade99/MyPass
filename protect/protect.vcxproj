@@ -209,13 +209,15 @@
   <ItemGroup>
     <Image Include="..\Icons\Add16.bmp" />
     <Image Include="..\Icons\Calendar32.bmp" />
-    <Image Include="..\Icons\Cancel32.bmp" />
+    <Image Include="..\Icons\Cancel_A.bmp" />
     <Image Include="..\Icons\Circle_A.bmp" />
     <Image Include="..\Icons\Clipboard32.bmp" />
     <Image Include="..\Icons\Close16.bmp" />
     <Image Include="..\Icons\Edit32.bmp" />
     <Image Include="..\Icons\EyeClosed32.bmp" />
+    <Image Include="..\Icons\EyeClosed_A.bmp" />
     <Image Include="..\Icons\EyeOpen32.bmp" />
+    <Image Include="..\Icons\EyeOpen_A.bmp" />
     <Image Include="..\Icons\Language_A.bmp" />
     <Image Include="..\Icons\logo.ico" />
     <Image Include="..\Icons\Max16.bmp" />
@@ -223,6 +225,7 @@
     <Image Include="..\Icons\Padlock32.bmp" />
     <Image Include="..\Icons\RightArrow16.bmp" />
     <Image Include="..\Icons\Search32.bmp" />
+    <Image Include="..\Icons\Search_A.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -252,9 +252,6 @@
     <Image Include="..\Icons\Padlock32.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Cancel32.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
     <Image Include="..\Icons\EyeOpen32.bmp">
       <Filter>Resource Files</Filter>
     </Image>
@@ -271,6 +268,18 @@
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="..\Icons\Language_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\Cancel_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\EyeOpen_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\EyeClosed_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\Search_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>

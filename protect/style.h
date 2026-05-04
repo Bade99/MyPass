@@ -53,13 +53,13 @@ void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 	bmps.close = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CLOSE));
 	bmps.maximize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MAX));
 	bmps.minimize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MIN));
-	bmps.cancel = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CANCEL));
-	bmps.eye_open = LoadBitmap(instance, MAKEINTRESOURCE(BMP_EYE_OPEN));
-	bmps.eye_closed = LoadBitmap(instance, MAKEINTRESOURCE(BMP_EYE_CLOSED));
-	bmps.search = LoadBitmap(instance, MAKEINTRESOURCE(BMP_SEARCH));
 	bmps.calendar = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CALENDAR));
-	bmps.circle = load_bitmap8(instance, BMP_CIRCLE_A);
+	bmps.circle = load_bitmap8(instance, BMP_CIRCLE);
 	bmps.language = load_bitmap8(instance, BMP_LANGUAGE);
+	bmps.cancel = load_bitmap8(instance, BMP_CANCEL);
+	bmps.eye_open = load_bitmap8(instance, BMP_EYE_OPEN);
+	bmps.eye_closed = load_bitmap8(instance, BMP_EYE_CLOSED);
+	bmps.search = load_bitmap8(instance, BMP_SEARCH);
 
 
 #define create_global_bmps(bmp) bmps.bmp = CreateBitmap(bmp.w, bmp.h,1,bmp.bpp,bmp.mem); Assert(bmps.bmp);

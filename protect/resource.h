@@ -35,7 +35,7 @@
 #define LANG_LOGIN_USERNAME_ENDDOT      145
 #define LANG_LOGIN_USERNAME_EMPTY       146
 #define IDB_BITMAP1                     146
-#define BMP_CIRCLE_A                    146
+#define BMP_CIRCLE                      146
 #define LANG_LOGIN_PASSWORD_EMPTY       147
 #define BMP_LANGUAGE                    147
 #define LANG_ERROR_PASSWORD             148

@@ -355,6 +355,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 			urender::draw_icon(dc, icon_align_height, icon_align_width, icon_width, icon_height, icon, 0, 0, iconnfo.w, iconnfo.h);
 		}
 		else if (style & BS_BITMAP) {
+			constexpr auto min_sz = 12; //anything below 12px is commonly just a hodgepodge of random pixels
 			BITMAP bitmap; GetObject(state.theme.bmp, sizeof(bitmap), &bitmap);
 			int max_sz = (int)((float)min_dim * .8f);
 			if (bitmap.bmBitsPixel == 1) {
@@ -365,7 +366,14 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 					else max_sz = bitmap.bmWidth; //More HACKs
 				}
 				if (max_sz > bitmap.bmWidth) max_sz = bitmap.bmWidth;//TODO(fran): HACK nº 1000, for this specific program (MyPass) some if we scale some icons bigger than their original size they look terrible (specially the close button), therefore we dont allow it. Solution: stop using 1 bit images for icons and use 8 bit grayscale
+			} elif(bitmap.bmBitsPixel == 8) {
+				if (max_sz < bitmap.bmWidth) {
+					auto test_w = bitmap.bmWidth;
+					while (test_w && test_w > max_sz) test_w /= 2;
+					max_sz = test_w;
+				}
 			}
+			max_sz = maximum(max_sz, min_sz);
 			int bmp_height = max_sz;
 			int bmp_width = bmp_height;
 			int bmp_align_height = (h - bmp_height) / 2;
