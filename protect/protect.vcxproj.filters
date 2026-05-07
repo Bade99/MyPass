@@ -195,9 +195,6 @@
     <ClInclude Include="twofish.h">
       <Filter>Header Files\Core\Security</Filter>
     </ClInclude>
-    <ClInclude Include="img.h">
-      <Filter>Header Files\Core\Design</Filter>
-    </ClInclude>
     <ClInclude Include="style.h">
       <Filter>Header Files\Core\Design</Filter>
     </ClInclude>
@@ -280,6 +277,21 @@
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="..\Icons\Search_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\bitmap2.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\Dropdown16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\DropdownUp16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\SolidArrowRight16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Icons\Bin32.bmp">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>

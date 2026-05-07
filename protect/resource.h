@@ -14,7 +14,7 @@
 #define LANG_NC_CLOSE                   133
 #define BMP_MIN                         133
 #define LANG_MENU_FILE                  134
-#define BMP_RIGHTARROW                  134
+#define BMP_SOLID_ARROW_RIGHT           134
 #define LANG_MENU_SAVE                  135
 #define LANG_MENU_LANGUAGE              136
 #define LANG_MENU_EDIT                  137
@@ -40,8 +40,12 @@
 #define BMP_LANGUAGE                    147
 #define LANG_ERROR_PASSWORD             148
 #define LANG_ERROR                      149
+#define BMP_DROPDOWN                    149
 #define LANG_SEARCH_FINDPREV            150
+#define BMP_DROPDOWN_UP                 150
 #define LANG_SEARCH_FINDNEXT            151
+#define IDB_BITMAP2                     151
+#define BMP_BIN                         151
 #define LANG_MENU_EDIT_FIND             152
 #define LANG_UNSAVEDCHANGES_TITLE       153
 #define LANG_UNSAVEDCHANGES_TXT         154
@@ -81,7 +85,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        148
+#define _APS_NEXT_RESOURCE_VALUE        152
 #define _APS_NEXT_COMMAND_VALUE         32771
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           110

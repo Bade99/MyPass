@@ -84,16 +84,13 @@ union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 		HBITMAP close;
 		HBITMAP maximize;
 		HBITMAP minimize;
-		HBITMAP arrow_right;
-		HBITMAP tick;
+		HBITMAP solid_arrow_right;
 		HBITMAP dropdown;
+		HBITMAP dropdown_up;
 		HBITMAP circle;
 		HBITMAP bin;
-		HBITMAP arrowLine_left;
-		HBITMAP arrowSimple_right;
 		HBITMAP eye_open;
 		HBITMAP eye_closed;
-		HBITMAP threeLines;
 		HBITMAP add;
 		HBITMAP edit;
 		HBITMAP clipboard;
@@ -103,7 +100,7 @@ union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 		HBITMAP calendar;
 		HBITMAP language;
 	};
-	HBITMAP all[21];
+	HBITMAP all[18];
 
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 } static bmps{};

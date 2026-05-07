@@ -36,7 +36,6 @@
 #include "search_types.h"
 #include "password_editor_types.h"
 
-#include "img.h"
 #include "style.h"
 
 #include "page.h"

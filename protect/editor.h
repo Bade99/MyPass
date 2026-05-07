@@ -451,7 +451,8 @@ void add_controls(State& state) {
 
 		urender::draw_background(dc, r.to_RECT(), bk_br, border_br, theme.dimensions);
 		
-		int icon_x = urender::draw_bitmap_1bpp_right(bmps.dropdown, dc, r, x_pad, theme.brushes.foreground.normal);
+		auto bmp = flags.isListboxOpen ? bmps.dropdown_up : bmps.dropdown;
+		int icon_x = urender::draw_bitmap_1bpp_right(bmp, dc, r, x_pad, theme.brushes.foreground.normal);
 
 		std::wstring txt;
 		if (element) {

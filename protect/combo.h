@@ -298,6 +298,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 		state.controls.button = CreateWindowW(button::wndclass, NULL, WS_CHILD | WS_VISIBLE
 			, 0, 0, 0, 0, state.wnd, 0, NULL, NULL);
+		auto hand_cursor = LoadCursor(nil, IDC_HAND);
+		button::Theme btn{}; btn.cursor = hand_cursor;
+		button::set_theme(state.controls.button, btn);
 
 		SetWindowSubclass(state.controls.button, ButtonPaintProc, 0, 0);
 

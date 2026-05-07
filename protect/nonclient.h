@@ -781,9 +781,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				//NOTE: MFT_BITMAP, MFT_SEPARATOR, and MFT_STRING cannot be combined with one another, so we know those are separate types
 			case MFT_STRING: //Text menu
 			{//NOTE: we render the bitmaps inverted, cause I find it easier to edit on external programs, this may change later, not a hard change
-
-				COLORREF clrPrevText, clrPrevBkgnd;
-				HFONT hfntPrev;
 				int x, y;
 
 				// Set the appropriate foreground and background colors. 
@@ -806,14 +803,15 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 					else bk_br = colors.CaptionBk;
 
 				}
-				clrPrevText = SetTextColor(item->hDC, ColorFromBrush(txt_br));//TODO(fran): separate menu brushes
-				clrPrevBkgnd = SetBkColor(item->hDC, ColorFromBrush(bk_br));
+				//TODO(fran): separate menu brushes
+				auto oldtxtcol = SetTextColor(item->hDC, ColorFromBrush(txt_br)); defer{ SetTextColor(item->hDC, oldtxtcol); };
+				auto oldbkcol = SetBkColor(item->hDC, ColorFromBrush(bk_br)); defer{ SetBkColor(item->hDC, oldbkcol); };
 
 				if (item->itemAction & ODA_DRAWENTIRE || item->itemAction & ODA_SELECT) //Draw background
 					FillRect(item->hDC, &item->rcItem, bk_br);
 
-				// Select the font and draw the text. 
-				hfntPrev = (HFONT)SelectObject(item->hDC, fonts.Menu);//TODO(fran): parametric
+				// Select the font and draw the text. //TODO(fran): parametric font
+				auto oldfont = (HFONT)SelectObject(item->hDC, fonts.Menu); defer{ SelectObject(item->hDC, oldfont); };
 
 				WORD x_pad = LOWORD(GetTabbedTextExtent(item->hDC, TEXT(" "), 1, 0, NULL)); //an extra 1 space before drawing text (for not top level menus)
 				if (item->hwndItem == (HWND)state.menu) { //If we are on the menu bar (then hwndItem, our parent, will be the same as state.menu)
@@ -937,7 +935,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 					}
 
 					if (menu_type.hSubMenu) { //Draw the submenu arrow
-						HBITMAP mask = bmps.arrow_right; //TODO(fran): parametric
+						HBITMAP mask = bmps.solid_arrow_right; //TODO(fran): parametric
 						BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo); 
 						Assert(bmpnfo.bmBitsPixel == 1);
 						int img_max_x = GetSystemMetrics(SM_CXMENUCHECK);
@@ -956,10 +954,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 						ExcludeClipRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom);
 					}
 				}
-				// Restore the original font and colors. 
-				SelectObject(item->hDC, hfntPrev);
-				SetTextColor(item->hDC, clrPrevText);
-				SetBkColor(item->hDC, clrPrevBkgnd);
 			} break;
 			case MFT_SEPARATOR:
 			{

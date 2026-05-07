@@ -157,7 +157,6 @@
     <ClInclude Include="combo.h" />
     <ClInclude Include="custom.h" />
     <ClInclude Include="debug.h" />
-    <ClInclude Include="img.h" />
     <ClInclude Include="language_manager.h" />
     <ClInclude Include="list.h" />
     <ClInclude Include="macros.h" />
@@ -208,11 +207,15 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="..\Icons\Add16.bmp" />
+    <Image Include="..\Icons\Bin32.bmp" />
+    <Image Include="..\icons\bitmap2.bmp" />
     <Image Include="..\Icons\Calendar32.bmp" />
     <Image Include="..\Icons\Cancel_A.bmp" />
     <Image Include="..\Icons\Circle_A.bmp" />
     <Image Include="..\Icons\Clipboard32.bmp" />
     <Image Include="..\Icons\Close16.bmp" />
+    <Image Include="..\Icons\Dropdown16.bmp" />
+    <Image Include="..\Icons\DropdownUp16.bmp" />
     <Image Include="..\Icons\Edit32.bmp" />
     <Image Include="..\Icons\EyeClosed32.bmp" />
     <Image Include="..\Icons\EyeClosed_A.bmp" />
@@ -226,6 +229,7 @@
     <Image Include="..\Icons\RightArrow16.bmp" />
     <Image Include="..\Icons\Search32.bmp" />
     <Image Include="..\Icons\Search_A.bmp" />
+    <Image Include="..\Icons\SolidArrowRight16.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -19,7 +19,6 @@ struct Themes {
 	//static button::Theme img_btn_theme;
 	//static button::Theme accent_btn_theme;
 	//static static_oneline::Theme base_static_theme;
-	//static static_oneline::Theme kanji_static_theme;
 	//static navbar::Theme nav_theme;
 	//static navbar::Theme sidebar_theme;
 	//static button::Theme navbar_btn_theme;
@@ -31,9 +30,6 @@ struct Themes {
 	edit_oneline::Theme login_editoneline;
 	edit_oneline::Theme login_text_static_error;
 	edit_oneline::Theme login_text_static_signup;
-	//static edit_oneline::Theme hiragana_editoneline_theme;
-	//static edit_oneline::Theme kanji_editoneline_theme;
-	//static edit_oneline::Theme meaning_editoneline_theme;
 	//static page::Theme base_page_theme;
 	table::Theme base_table;
 	search::Theme base_search;
@@ -49,23 +45,21 @@ void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 	bmps.edit = LoadBitmap(instance, MAKEINTRESOURCE(BMP_EDIT));
 	bmps.clipboard = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CLIPBOARD));
 	bmps.padlock = LoadBitmap(instance, MAKEINTRESOURCE(BMP_PADLOCK));
-	bmps.arrow_right = LoadBitmap(instance, MAKEINTRESOURCE(BMP_RIGHTARROW));
+	bmps.solid_arrow_right = LoadBitmap(instance, MAKEINTRESOURCE(BMP_SOLID_ARROW_RIGHT));
 	bmps.close = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CLOSE));
 	bmps.maximize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MAX));
 	bmps.minimize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MIN));
 	bmps.calendar = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CALENDAR));
+	bmps.dropdown = LoadBitmap(instance, MAKEINTRESOURCE(BMP_DROPDOWN));
+	bmps.dropdown_up = LoadBitmap(instance, MAKEINTRESOURCE(BMP_DROPDOWN_UP));
+	bmps.bin = LoadBitmap(instance, MAKEINTRESOURCE(BMP_BIN));
+
 	bmps.circle = load_bitmap8(instance, BMP_CIRCLE);
 	bmps.language = load_bitmap8(instance, BMP_LANGUAGE);
 	bmps.cancel = load_bitmap8(instance, BMP_CANCEL);
 	bmps.eye_open = load_bitmap8(instance, BMP_EYE_OPEN);
 	bmps.eye_closed = load_bitmap8(instance, BMP_EYE_CLOSED);
 	bmps.search = load_bitmap8(instance, BMP_SEARCH);
-
-
-#define create_global_bmps(bmp) bmps.bmp = CreateBitmap(bmp.w, bmp.h,1,bmp.bpp,bmp.mem); Assert(bmps.bmp);
-
-	create_global_bmps(bin);
-	create_global_bmps(dropdown);
 
 	atexit([]() { for (auto& bmp : bmps.all) if (bmp) { DeleteObject(bmp); bmp = nil; } });
 }
@@ -75,8 +69,8 @@ void load_styles() {
 	setup_bmps();
 
 	auto hollow_brush = (HBRUSH)GetStockObject(HOLLOW_BRUSH);
-	auto arrow_cursor = LoadCursor(nullptr, (TCHAR*)IDC_ARROW);
-	auto hand_cursor = LoadCursor(nullptr, (TCHAR*)IDC_HAND);
+	auto arrow_cursor = LoadCursor(nil, IDC_ARROW);
+	auto hand_cursor = LoadCursor(nil, IDC_HAND);
 
 	themes.base_table = [&]()->auto {
 		table::Theme base_table{};
