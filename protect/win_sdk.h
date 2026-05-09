@@ -52,7 +52,6 @@
 #include <Shlwapi.h>
 #include <CommCtrl.h>
 #include "win_msg_mapper.h"
-#include "win_msg_common_handler.h"
 
 /**
   * Linker Configuration

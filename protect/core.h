@@ -17,20 +17,16 @@ static std::wstring get_general_save_folder() { //NOTE: this folder is guarantee
 	return folder;
 }
 
-u32 next_multiple_of(u32 multiple, u32 n) {
+u64 next_multiple_of(u64 multiple, u64 n) {
 	//TODO(fran): faster!
-	u32 res;
-	if (n % multiple == 0) {
-		res = n == 0 ? multiple : n;
-	}
-	else {
-		res = ((n / multiple) + 1) * multiple;
-	}
+	u64 res;
+	if (n % multiple == 0) res = (n == 0) ? multiple : n;
+	else res = ((n / multiple) + 1) * multiple;
 	return res;
 }
 
-u32 next_multiple_of_16(u32 n) {
-	u32 res = next_multiple_of(16, n);
+u64 next_multiple_of_16(u64 n) {
+	u64 res = next_multiple_of(16, n);
 	return res;
 }
 
@@ -53,7 +49,7 @@ void twofish_setkey(u32 in_key[], u32 len_bytes /*16, 24 or 32 bytes*/) {
 //TODO(fran): check that output has correct size
 
 //INFO: input and output size will be the same. input and output can point to the same memory
-void twofish_encrypt(void* input, size_t len_bytes /*must be a multiple of 16 bytes*/, void* output) {
+void twofish_encrypt(const void* input, size_t len_bytes /*must be a multiple of 16 bytes*/, void* output) {
 	Assert(len_bytes % 16 == 0);
 
 	for (size_t i = 0, t = len_bytes / 16; i < t; i++) {

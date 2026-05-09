@@ -602,10 +602,8 @@ static read_entire_file_res load_file_user(std::wstring username /*functions as 
 	return res;
 }
 
-std::wstring get_controls_data_for_saving(State& state) {
+void get_controls_data_for_saving(State& state, str& res) {
 	//TODO(fran): implement a real robust data format where we dont depend on the ':' token, since it can be used by the user
-	std::wstring res;
-
 	auto append_control_text = [](std::wstring& s, HWND wnd) {
 		auto old_len = s.size();
 		auto added_len = GetWindowTextLength(wnd) + 1;
@@ -616,6 +614,7 @@ std::wstring get_controls_data_for_saving(State& state) {
 		);
 	};
 
+	bool has_content = state.controls.password_editors.size();
 	for (auto& e : state.controls.password_editors) {
 		//TODO(fran): we may want to move the data extraction logic inside password_editor. Though that would mean that either it would also need to be aware of the data format we expect; or we would need to create an intermediate data format that we would then parse into the final output
 		auto& ed = *password_editor::get_state(e);
@@ -644,26 +643,30 @@ std::wstring get_controls_data_for_saving(State& state) {
 		}
 		res += L"\r\n";
 	}
-	res.pop_back(); res.pop_back(); res.pop_back(); res.pop_back(); //remove the extra \r\n from the end
-	return res;
+	if (has_content) {
+		res.pop_back(); res.pop_back(); res.pop_back(); res.pop_back(); //remove the extra \r\n\r\n from the end
+	}
+	else res += L'\0'; //Adding an empty content character just in case //TODO(fran): review if this is necessary
 }
 
 void save_passwords(State& state) {
-	auto data = get_controls_data_for_saving(state);
+	// Append username so we can check against it in later logins (another idea is to append the key structure that twofish stores ) //TODO(fran): this aint the most clever, there could be collisions, but it's at least a line of defense for now
+	str data = state.current_user;
+	get_controls_data_for_saving(state, data);
 	if constexpr (debug_text_view) {
-		SetWindowText(state.controls.edit_passwords, data.c_str());
-	} else return; //TODO(fran): complete save with new data without intermediating with the old text control
+		int user_len_chars = (int)wcslen(state.current_user);
+		SetWindowText(state.controls.edit_passwords, data.c_str() + user_len_chars);
+	}
 
-	int user_len_chars = (int)wcslen(state.current_user);
-	int len_chars = user_len_chars + GetWindowTextLength(state.controls.edit_passwords) + 1;
-	int len_bytes = next_multiple_of_16(len_chars * sizeof(cstr)); //we pad with extra garbage bytes to get blocks of 16 bytes for encryption
-	void* mem = malloc(len_bytes); defer{ free(mem); };
-	Assert(sizeof(cstr) > 1); //TODO(fran): what to do with ansi?
-	wcscpy_s((cstr*)mem, user_len_chars + 1, state.current_user); //append username so we can check against it in later logins (another idea is to append the key structure that twofish stores ) //TODO(fran): this aint the most clever, there could be collisions, but it's at least a line of defense for now
-	GetWindowText(state.controls.edit_passwords, ((cstr*)mem) + user_len_chars, len_chars - user_len_chars);
-	twofish_encrypt(mem, len_bytes, mem);
+	// Pad with extra garbage bytes to get blocks of 16 bytes for encryption
+	auto size_for_encryption = next_multiple_of_16(data.size() * sizeof(cstr)) / sizeof(cstr);
+	data.reserve(size_for_encryption);
 	
-	bool res = save_to_file_user(state.current_user, mem, len_bytes);
+	auto data_ptr = &data[0];
+	auto data_cnt_bytes = size_for_encryption * sizeof(cstr);
+	twofish_encrypt(data.c_str(), data_cnt_bytes, data_ptr);
+	
+	bool res = save_to_file_user(state.current_user, data_ptr, data_cnt_bytes);
 	set_passwords_need_save(state, !res);
 	if (!res) MessageBox(state.wnd, RCS(LANG_ERROR_SAVEFILE_PASSWORDS), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
 }

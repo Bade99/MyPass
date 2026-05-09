@@ -5,73 +5,13 @@
 #include "button.h"
 #include "list.h"
 
-//NOTE: no ASCII support, always utf16
-
-//------------------"API"------------------:
-//combobox::wndclass identifies the window class to be used when calling CreateWindow()
-
-//combobox::insert_element()
-//combobox::set_function_free_elements() to free the content of N elements in the listbox, this is called when we need to clear the listbox, for example when it's hidden or when the search options change
-//combobox::set_function_on_selection_accepted() operation to perform when the user has confirmed a new selection
-//combobox::set_function_render_listbox_element()
-//combobox::set_function_measure_combobox()
-//combobox::set_function_measure_listbox_element() //TODO(fran)
-//combobox::set_function_render_combobox()
-//combobox::set_user_extra() extra user-defined data to be sent on each function call
-
-//IMPORTANT: everything related to drawing will be left to be decided by the user, we will store nothing at all
-
-//-------------"API" (Additional Messages)-------------:
-#define combobox_base_msg_addr (WM_USER + 3300)
-#define CBM_CLKOUTSIDE (combobox_base_msg_addr + 20) //do not use, internal msg
-
-
 //TODO(fran): I could provide default functionality for some things via always having all the functions set to my defaults, when the user changes them we use theirs, if they removed it we use ours, this also removes the branching inefficiency of having to check for valid function pointers before every call
 //TODO(fran): provide element index in rendering functions
 //TODO(fran): provide a way to store the default text, maybe a user definable function that receives the str provided by wm_setdefaulttext and decides how to store and free it. we could use index ((size_t)-1) to let the user know when it's the default text
 
 namespace combobox {
-
-constexpr auto& wndclass = wndclass_name("combobox");
-
-struct render_flags {
-	bool isEnabled, onMouseover, onClicked, isListboxOpen;
-	//INFO: additional hidden state, the user could have pressed the button and while still holding it pressed have moved the mouse outside it, in this case onMouseover==false and onClicked==true
-};
-
-//typedef void(*func_free_elements)(ptr<void*> elements, void* user_extra);
-typedef void(*func_on_selection_accepted)(void* element, void* user_extra);
-typedef void(*func_on_listbox_opening)(HWND combo, HWND listbox, void* user_extra);
-typedef void(*func_render_combobox)(HDC dc, rect_i32 r, render_flags flags, void* element, void* user_extra);
-//For Handling WM_DESIRED_SIZE
-typedef int(*func_desired_size_combobox)(SIZE* min, SIZE* max, HDC dc, void* element, void* user_extra);//NOTE: the dc is simply to be used for functions such as GetTextExtentPoint32 that need a dc
-
-
-struct State {
-	HWND wnd;
-	HWND parent;
-
-	struct {
-		HWND button;
-		HWND listbox;
-		//HWND button; //TODO(fran): replace manual handling of combobox to a button with custom rendering, the only thing is we would need to setfocus to the button and intercept vk_up and vk_down to scroll the cb when the listbox isnt open
-	}controls;
-
-	void* user_extra;
-
-	//func_free_elements free_elements;
-	func_render_combobox render_combobox;
-	func_desired_size_combobox desired_size_combobox;
-	func_on_selection_accepted on_selection_accepted;
-	func_on_listbox_opening on_listbox_opening;
-
-	struct {
-		HHOOK hookmouseclick;
-	}impl;
-
-	bool reject_button;//do not open listbox on the next button press if the listbox is already open and the button is clicked
-};
-
+constexpr auto combobox_base_msg_addr = WM_USER + 3300;
+constexpr auto CBM_CLKOUTSIDE = combobox_base_msg_addr + 20; //do not use, internal msg
 
 auto get_state(HWND wnd) { _control_create_function__get_state }
 
@@ -389,22 +329,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		}
 		return 0;
 	}break;
-	case WM_NCHITTEST://When the mouse goes over us this is 1st msg received
+	case WM_NCHITTEST:
 	{
-		//Received when the mouse goes over the window, on mouse press or release, and on WindowFromPoint
-
-		// Get the point coordinates for the hit test.
-		POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };//Screen coords, relative to upper-left corner
-
-		// Get the window rectangle.
-		RECT rw; GetWindowRect(state.wnd, &rw);
-
-		LRESULT hittest = HTNOWHERE;
-
-		// Determine if the point is inside the window
-		if (test_pt_rc(mouse, rw))hittest = HTCLIENT;
-
-		return hittest;
+		return handle_wm_nchittest(state.wnd, lparam);
 	} break;
 	case WM_SETCURSOR://When the mouse goes over us this is 2nd msg received
 	{

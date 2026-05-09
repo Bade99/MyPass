@@ -49,11 +49,13 @@ typedef char32_t utf32;
 constexpr f32 F32INFINITY = std::numeric_limits<f32>::infinity();
 constexpr f32 F64INFINITY = std::numeric_limits<f64>::infinity();
 
+
 #ifndef UNICODE
 #error "Must use Unicode (UTF16 in Windows)"
 #endif
 
 static_assert(sizeof(long long) == 8, "We expect external functions that use ll to be 64bits");
+
 
 typedef std::wstring str;
 typedef wchar_t cstr;

@@ -1,6 +1,6 @@
 #pragma once
 
-static LRESULT handle_wm_setcursor(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, HCURSOR cursor) {
+static LRESULT handle_wm_setcursor(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam, HCURSOR cursor) {
 	//DefWindowProc passes this to its parent to see if it wants to change the cursor settings, we'll make a decision, setting the mouse cursor, and halting proccessing so it stays like that
 	//WM_SETCURSOR is sent after getting the result of WM_NCHITTEST, mouse is inside our window and mouse input is not being captured
 
@@ -15,5 +15,12 @@ static LRESULT handle_wm_setcursor(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		SetCursor(cursor);
 		return TRUE;
 	}
-	else return DefWindowProc(hwnd, msg, wparam, lparam);
+	else return DefWindowProc(wnd, msg, wparam, lparam);
+}
+
+static LRESULT handle_wm_nchittest(HWND wnd, LPARAM lparam) {
+	POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
+	RECT r; GetWindowRect(wnd, &r);
+	auto hittest = test_pt_rc(mouse, r) ? HTCLIENT : HTNOWHERE;
+	return hittest;
 }

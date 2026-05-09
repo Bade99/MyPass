@@ -40,9 +40,6 @@
     <Filter Include="Header Files\Utils">
       <UniqueIdentifier>{ee09af53-455c-4f21-aa2c-ba98b2f33cec}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\Controls\Custom">
-      <UniqueIdentifier>{43975c72-c59f-4f22-b0ad-3876d9e06e20}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\Complex Controls\Search">
       <UniqueIdentifier>{914b21f5-a4f3-44f9-b9ad-6f257d5e5914}</UniqueIdentifier>
     </Filter>
@@ -147,9 +144,6 @@
     <ClInclude Include="edit_subclass.h">
       <Filter>Header Files\Controls\Text</Filter>
     </ClInclude>
-    <ClInclude Include="custom.h">
-      <Filter>Header Files\Controls\Custom</Filter>
-    </ClInclude>
     <ClInclude Include="win_info.h">
       <Filter>Header Files\Windows Core</Filter>
     </ClInclude>
@@ -209,6 +203,15 @@
     </ClInclude>
     <ClInclude Include="debug.h">
       <Filter>Header Files\Screens\Debug</Filter>
+    </ClInclude>
+    <ClInclude Include="combo_types.h">
+      <Filter>Header Files\Complex Controls\Combo</Filter>
+    </ClInclude>
+    <ClInclude Include="page_types.h">
+      <Filter>Header Files\Controls\Page</Filter>
+    </ClInclude>
+    <ClInclude Include="list_types.h">
+      <Filter>Header Files\Controls\List</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

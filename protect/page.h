@@ -6,64 +6,6 @@
 #include "math.h"
 
 namespace page {
-constexpr auto& wndclass = wndclass_name("page");
-
-struct Theme {
-	union {
-		struct {
-			brush_group bk, border;
-		};
-		brush_group all[2];
-	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
-	} brushes;
-	struct {
-		u32 border_thickness = U32MAX;
-	}dimensions;
-
-	bool copy_from(const Theme& src) {
-		bool repaint = false;
-		_theme_copy_all_brushes(src.brushes, this->brushes);
-
-		_theme_copy_u32(src.dimensions.border_thickness, this->dimensions.border_thickness);
-
-		return repaint;
-	}
-};
-
-struct State {
-	HWND wnd;
-	HWND parent;
-	Theme theme;
-
-	bool does_scrolling;
-
-	struct {
-		bool active; //currently performing animation
-		int current_frame; //starts at
-		f32 dt;
-		int total_frames;
-		i64 _time_between; //internal
-		f32 time_between_last_two_scroll_events; //ms
-	} scroll_anim;
-	std::deque<int> scroll_tasks;
-
-	f32 scroll;//vertical scrolling of page //@int NOTE(fran): given the limitations of MoveWindow we must interpret this value as an integer (cast), the float precision is only used for animations
-
-	//anim //@old @delete
-	int scroll_frame; //@delete
-	f32 scroll_dt;
-	f32 scroll_v;
-	f32 scroll_a;
-	bool scroll_on_anim; //@delete
-
-	void init() {
-		scroll_tasks = decltype(scroll_tasks)();
-	}
-
-	void uninit() {
-		scroll_tasks.~deque();
-	}
-};
 
 auto get_state(HWND wnd) { _control_create_function__get_state }
 
@@ -71,9 +13,7 @@ void set_theme(HWND wnd, const Theme& src) { _control_create_function__set_theme
 
 void set_scrolling(HWND wnd, bool does_scrolling) {
 	State& state = *get_state(wnd);
-	if (&state) {
-		state.does_scrolling = does_scrolling;//TODO(fran): reset current scrolling?
-	}
+	if (&state) state.does_scrolling = does_scrolling;
 }
 
 void set_wnd_size(HWND wnd, HWND parent_page_space, i32 h) {
@@ -212,10 +152,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	}break;
 	case WM_NCHITTEST:
 	{
-		POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
-		RECT r; GetWindowRect(state.wnd, &r);
-		auto hittest = test_pt_rc(mouse, r) ? HTCLIENT : HTNOWHERE;
-		return hittest;
+		return handle_wm_nchittest(state.wnd, lparam);
 	} break;
 	case WM_PAINT://NOTE: we could also do this on WM_ERASEBACKGROUND and return defwindowproc on WM_PAINT
 	{

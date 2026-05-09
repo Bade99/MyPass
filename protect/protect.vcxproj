@@ -155,15 +155,17 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="combo.h" />
-    <ClInclude Include="custom.h" />
+    <ClInclude Include="combo_types.h" />
     <ClInclude Include="debug.h" />
     <ClInclude Include="language_manager.h" />
     <ClInclude Include="list.h" />
+    <ClInclude Include="list_types.h" />
     <ClInclude Include="macros.h" />
     <ClInclude Include="core.h" />
     <ClInclude Include="login.h" />
     <ClInclude Include="nonclient_types.h" />
     <ClInclude Include="page.h" />
+    <ClInclude Include="page_types.h" />
     <ClInclude Include="password_editor.h" />
     <ClInclude Include="password_editor_types.h" />
     <ClInclude Include="rect.h" />

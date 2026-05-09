@@ -470,13 +470,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 	} break;
 	case WM_NCHITTEST:
 	{
-		POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
-
-		RECT rcWindow; GetWindowRect(state.wnd, &rcWindow);
-
-		LRESULT hittest = test_pt_rc(mouse, rcWindow) ? HTCLIENT : HTNOWHERE;
-
-		return hittest;
+		return handle_wm_nchittest(state.wnd, lparam);
 	}
 	case WM_MOUSEACTIVATE:
 	{

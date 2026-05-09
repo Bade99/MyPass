@@ -1297,22 +1297,9 @@ namespace edit_oneline {
 			//Sent, for example, when the window gets disabled
 			return DefWindowProc(hwnd, msg, wparam, lparam);
 		} break;
-		case WM_NCHITTEST://When the mouse goes over us this is 1st msg received
+		case WM_NCHITTEST:
 		{
-			//Received when the mouse goes over the window, on mouse press or release, and on WindowFromPoint
-
-			// Get the point coordinates for the hit test.
-			POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };//Screen coords, relative to upper-left corner
-
-			// Get the window rectangle.
-			RECT rw; GetWindowRect(state.wnd, &rw);
-
-			LRESULT hittest = HTNOWHERE;
-
-			// Determine if the point is inside the window
-			if (test_pt_rc(mouse, rw))hittest = HTCLIENT;
-
-			return hittest;
+			return handle_wm_nchittest(state.wnd, lparam);
 		} break;
 		case WM_SETCURSOR://When the mouse goes over us this is 2nd msg received
 		{
