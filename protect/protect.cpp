@@ -1,10 +1,5 @@
 ﻿
-//TODO(fran): add a note about password breaches, eg visit this page "" or a similar one to make sure non of your passwords on different pages have been breached
-
-//IDEA: file manager, podés crear multiples archivos con una contra, y distintos tipos de archivos (editor de texto, grilla)
-
-
-#include "win_sdk.h" //include first before anything so we don't run the risk of breaking anything with our macros
+//TODO(fran): add a note tip about password breaches, eg check https://haveibeenpwned.com/ or similar to make sure non of your accounts have been breached
 
 
 //----------------------Warnings-----------------------:
@@ -12,12 +7,12 @@
 #pragma warning (disable: 4312) // C4312 : 'type cast' : conversion from 'int' to 'HMENU' of greater size
 
 
-#define WM_NEXT (WM_USER+5000) //proceed to the next window in the state machine
-#define WM_RESET (WM_USER+5001) //clear critical information
-#define WM_START (WM_USER+5002) //you are all set up, start whatever it is you do, this is always a SendMessage, you must use all the init data right there, it's not guaranteed to be there after this msg finishes (return 1 if sucessfully started, 0 otherwise to go back to the prior wnd)
-#define WM_START_ATTEMPT (WM_USER+5003) //login was attempted but failed, this is always a PostMessage. wparam = login::AttemptResult failure mode
+#define WM_STATE_NEXT (WM_USER+5000) //proceed to the next window in the state machine
+#define WM_STATE_RESET (WM_USER+5001) //clear critical information
+#define WM_STATE_START (WM_USER+5002) //you are all set up, start whatever it is you do, this is always a SendMessage, you must use all the init data right there, it's not guaranteed to be there after this msg finishes (return 1 if sucessfully started, 0 otherwise to go back to the prior wnd)
+#define WM_STATE_START_ATTEMPT (WM_USER+5003) //login was attempted but failed, this is always a PostMessage. wparam = login::AttemptResult failure mode
 
-
+#include "win_sdk.h"
 #include "resource.h"
 #include "platform.h"
 #include "macros.h"
@@ -222,7 +217,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
         &show_nclpparam
     );
     
-    PostMessage(0, WM_NEXT, 0, 0); //start the state machine
+    PostMessage(0, WM_STATE_NEXT, 0, 0); //start the state machine
 
     enum class wnd_task { login, show_passwords };
     struct wnd_state { HWND wnd; wnd_task task; };
@@ -255,7 +250,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
     {
         Assert(bRet != -1);// There was an error
         switch (msg.message) {
-        case WM_NEXT:
+        case WM_STATE_NEXT:
         {
             state_idx = next_state(state_idx);
             wnd_state new_state = state_machine[state_idx];
@@ -263,7 +258,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
             switch (new_state.task) {
             case wnd_task::login:
             {
-                PostMessage(nonclient::get_state(old_state.wnd)->client, WM_RESET, 0, 0);
+                PostMessage(nonclient::get_state(old_state.wnd)->client, WM_STATE_RESET, 0, 0);
                 ShowWindow(old_state.wnd, SW_HIDE);
                 ShowWindow(new_state.wnd, SW_SHOW);
                 #ifdef _DEBUG
@@ -278,10 +273,10 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
                 editor_data.start->signup = login_results.signup;
 
                 // Attempt to start the next state
-                auto start_attempt = (login::AttemptResult)SendMessage(nonclient::get_state(new_state.wnd)->client, WM_START, 0, 0);
+                auto start_attempt = (login::AttemptResult)SendMessage(nonclient::get_state(new_state.wnd)->client, WM_STATE_START, 0, 0);
 
                 if (start_attempt == login::AttemptResult::success) {
-                    PostMessage(nonclient::get_state(old_state.wnd)->client, WM_RESET, 0, 0);
+                    PostMessage(nonclient::get_state(old_state.wnd)->client, WM_STATE_RESET, 0, 0);
                     ShowWindow(old_state.wnd, SW_HIDE);
                     ShowWindow(new_state.wnd, SW_SHOW);
                     #ifdef _DEBUG
@@ -292,7 +287,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
                     // Rollback to previous state
                     state_idx = prev_state(state_idx);
                     auto wnd = nonclient::get_state(state_machine[state_idx].wnd)->client;
-                    PostMessage(wnd, WM_START_ATTEMPT, (WPARAM)start_attempt, 0);
+                    PostMessage(wnd, WM_STATE_START_ATTEMPT, (WPARAM)start_attempt, 0);
                 }
             } break;
             }

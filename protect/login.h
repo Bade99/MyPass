@@ -387,7 +387,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 					state.results->signup = state.signup_mode;
 					success = true;
 				}
-				if(success) PostMessage(0, WM_NEXT, 0, 0);//TODO(fran): maybe storing the results in WM_NEXT is better?
+				if(success) PostMessage(0, WM_STATE_NEXT, 0, 0);//TODO(fran): maybe storing the results in WM_STATE_NEXT is better?
 			}
 			else {
 				if(username_len==1) edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_EMPTY), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
@@ -409,7 +409,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		SetFocus(state.wnd);
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
-	case WM_START_ATTEMPT:
+	case WM_STATE_START_ATTEMPT:
 	{
 		auto start_attempt = (AttemptResult)wparam;
 		switch (start_attempt) {
@@ -438,7 +438,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		} break;
 		}
 	} break;
-	case WM_RESET:
+	case WM_STATE_RESET:
 	{
 		if (state.results->password.str) {
 			ZeroMemory(state.results->password.str, state.results->password.sz_chars * sizeof(*state.results->password.str));

@@ -653,10 +653,8 @@ void save_passwords(State& state) {
 	// Append username so we can check against it in later logins (another idea is to append the key structure that twofish stores ) //TODO(fran): this aint the most clever, there could be collisions, but it's at least a line of defense for now
 	str data = state.current_user;
 	get_controls_data_for_saving(state, data);
-	if constexpr (debug_text_view) {
-		int user_len_chars = (int)wcslen(state.current_user);
-		SetWindowText(state.controls.edit_passwords, data.c_str() + user_len_chars);
-	}
+
+	if constexpr (debug_text_view) SetWindowText(state.controls.edit_passwords, data.c_str() + wcslen(state.current_user));
 
 	// Pad with extra garbage bytes to get blocks of 16 bytes for encryption
 	auto size_for_encryption = next_multiple_of_16(data.size() * sizeof(cstr)) / sizeof(cstr);
@@ -814,8 +812,18 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		}
 		return 0;
 	} break;
-	case WM_START:
+	case WM_STATE_START:
 	{
+		/**
+		  * Data Formats:
+		  * V0:
+		  *  - file structure: [username | data + null terminator | padding] 
+		  *  - file encryption: twofish (whole file encrypted)
+		  *  - password hashing: sha256
+		  *  - integrity/authorization check: username retrieved from file is compared against the username entered by the user
+		  * V1:
+		  *  - TODO(fran)
+		  */
 		login::AttemptResult start_attempt;
 		twofish_setkey(state.start->key, sizeof(state.start->key));
 		ZeroMemory(state.start->key, sizeof(state.start->key));
@@ -849,7 +857,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		set_passwords_need_save(state, passwords_need_save);
 		return (LRESULT)start_attempt;
 	} break;
-	case WM_RESET:
+	case WM_STATE_RESET:
 	{
 		if (state.current_user) {
 			free(state.current_user);//No real need to zero the memory before freeing
