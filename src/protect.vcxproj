@@ -202,37 +202,37 @@
     <ClInclude Include="win_msg_common_handler.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="protect.cpp" />
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="protect.rc" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="..\Icons\Add16.bmp" />
-    <Image Include="..\Icons\Bin32.bmp" />
+    <Image Include="..\icons\Add16.bmp" />
+    <Image Include="..\icons\Bin32.bmp" />
     <Image Include="..\icons\bitmap2.bmp" />
-    <Image Include="..\Icons\Calendar32.bmp" />
-    <Image Include="..\Icons\Cancel_A.bmp" />
-    <Image Include="..\Icons\Circle_A.bmp" />
-    <Image Include="..\Icons\Clipboard32.bmp" />
-    <Image Include="..\Icons\Close16.bmp" />
-    <Image Include="..\Icons\Dropdown16.bmp" />
-    <Image Include="..\Icons\DropdownUp16.bmp" />
-    <Image Include="..\Icons\Edit32.bmp" />
-    <Image Include="..\Icons\EyeClosed32.bmp" />
-    <Image Include="..\Icons\EyeClosed_A.bmp" />
-    <Image Include="..\Icons\EyeOpen32.bmp" />
-    <Image Include="..\Icons\EyeOpen_A.bmp" />
-    <Image Include="..\Icons\Language_A.bmp" />
-    <Image Include="..\Icons\logo.ico" />
-    <Image Include="..\Icons\Max16.bmp" />
-    <Image Include="..\Icons\Min16.bmp" />
-    <Image Include="..\Icons\Padlock32.bmp" />
-    <Image Include="..\Icons\Pin_A.bmp" />
-    <Image Include="..\Icons\RightArrow16.bmp" />
-    <Image Include="..\Icons\Search32.bmp" />
-    <Image Include="..\Icons\Search_A.bmp" />
-    <Image Include="..\Icons\SolidArrowRight16.bmp" />
+    <Image Include="..\icons\Calendar32.bmp" />
+    <Image Include="..\icons\Cancel_A.bmp" />
+    <Image Include="..\icons\Circle_A.bmp" />
+    <Image Include="..\icons\Clipboard32.bmp" />
+    <Image Include="..\icons\Close16.bmp" />
+    <Image Include="..\icons\Dropdown16.bmp" />
+    <Image Include="..\icons\DropdownUp16.bmp" />
+    <Image Include="..\icons\Edit32.bmp" />
+    <Image Include="..\icons\EyeClosed32.bmp" />
+    <Image Include="..\icons\EyeClosed_A.bmp" />
+    <Image Include="..\icons\EyeOpen32.bmp" />
+    <Image Include="..\icons\EyeOpen_A.bmp" />
+    <Image Include="..\icons\Language_A.bmp" />
+    <Image Include="..\icons\logo.ico" />
+    <Image Include="..\icons\Max16.bmp" />
+    <Image Include="..\icons\Min16.bmp" />
+    <Image Include="..\icons\Padlock32.bmp" />
+    <Image Include="..\icons\Pin_A.bmp" />
+    <Image Include="..\icons\RightArrow16.bmp" />
+    <Image Include="..\icons\Search32.bmp" />
+    <Image Include="..\icons\Search_A.bmp" />
+    <Image Include="..\icons\SolidArrowRight16.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

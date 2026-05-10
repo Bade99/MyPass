@@ -215,7 +215,7 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="protect.cpp">
+    <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -225,79 +225,79 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="..\Icons\logo.ico">
+    <Image Include="..\icons\logo.ico">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Close16.bmp">
+    <Image Include="..\icons\Close16.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Max16.bmp">
+    <Image Include="..\icons\Max16.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Min16.bmp">
+    <Image Include="..\icons\Min16.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\RightArrow16.bmp">
+    <Image Include="..\icons\RightArrow16.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Add16.bmp">
+    <Image Include="..\icons\Add16.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Edit32.bmp">
+    <Image Include="..\icons\Edit32.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Clipboard32.bmp">
+    <Image Include="..\icons\Clipboard32.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Padlock32.bmp">
+    <Image Include="..\icons\Padlock32.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\EyeOpen32.bmp">
+    <Image Include="..\icons\EyeOpen32.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\EyeClosed32.bmp">
+    <Image Include="..\icons\EyeClosed32.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Search32.bmp">
+    <Image Include="..\icons\Search32.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Calendar32.bmp">
+    <Image Include="..\icons\Calendar32.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Circle_A.bmp">
+    <Image Include="..\icons\Circle_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Language_A.bmp">
+    <Image Include="..\icons\Language_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Cancel_A.bmp">
+    <Image Include="..\icons\Cancel_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\EyeOpen_A.bmp">
+    <Image Include="..\icons\EyeOpen_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\EyeClosed_A.bmp">
+    <Image Include="..\icons\EyeClosed_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Search_A.bmp">
+    <Image Include="..\icons\Search_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="..\icons\bitmap2.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Dropdown16.bmp">
+    <Image Include="..\icons\Dropdown16.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\DropdownUp16.bmp">
+    <Image Include="..\icons\DropdownUp16.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\SolidArrowRight16.bmp">
+    <Image Include="..\icons\SolidArrowRight16.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Bin32.bmp">
+    <Image Include="..\icons\Bin32.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="..\Icons\Pin_A.bmp">
+    <Image Include="..\icons\Pin_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>
