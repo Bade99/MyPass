@@ -35,6 +35,9 @@
 #include "search_types.h"
 #include "password_editor_types.h"
 
+#include "login_types.h"
+#include "editor_types.h"
+
 #include "style.h"
 
 #include "page.h"
@@ -155,7 +158,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 
     const str to_deserialize = load_file_serialized(serialization_folder);
 
-    LANGUAGE_MANAGER& lang_mgr = LANGUAGE_MANAGER::Instance(); lang_mgr.SetHInstance(hInstance);
+    LanguageManager& lang_mgr = LanguageManager::Instance(); lang_mgr.SetHInstance(hInstance);
     login::Settings login_cl;
     editor::Settings editor_cl;
 
@@ -306,8 +309,10 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 #endif
         default:
         {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
+            if (!(app_shortcuts.table && TranslateAccelerator(app_shortcuts.listener_wnd ? app_shortcuts.listener_wnd : msg.hwnd, app_shortcuts.table, &msg))) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
         } break;
         }
     }

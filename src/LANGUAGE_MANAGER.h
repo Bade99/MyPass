@@ -7,29 +7,29 @@
 #include "serialization.h"
 
 //Request string
-#define RS(stringID) LANGUAGE_MANAGER::Instance().RequestString(stringID)
+#define RS(stringID) LanguageManager::Instance().RequestString(stringID)
 
 //Request c-string
-#define RCS(stringID) LANGUAGE_MANAGER::Instance().RequestString(stringID).c_str()
+#define RCS(stringID) LanguageManager::Instance().RequestString(stringID).c_str()
 
 //Add window string
-#define AWT(hwnd,stringID) LANGUAGE_MANAGER::Instance().AddWindowText(hwnd, stringID)
+#define AWT(hwnd,stringID) LanguageManager::Instance().AddWindowText(hwnd, stringID)
 
 //Add window default string
-#define AWDT(hwnd,stringID) LANGUAGE_MANAGER::Instance().AddWindowDefaultText(hwnd, stringID)
+#define AWDT(hwnd,stringID) LanguageManager::Instance().AddWindowDefaultText(hwnd, stringID)
 
 //Add combobox string in specific ID (Nth element of the list)
-#define ACT(hwnd,ID,stringID) LANGUAGE_MANAGER::Instance().AddComboboxText(hwnd, ID, stringID);
+#define ACT(hwnd,ID,stringID) LanguageManager::Instance().AddComboboxText(hwnd, ID, stringID);
 
 //Add menu string
-#define AMT(hmenu,ID,stringID) LANGUAGE_MANAGER::Instance().AddMenuText(hmenu,ID,stringID);
+#define AMT(hmenu,ID,stringID) LanguageManager::Instance().AddMenuText(hmenu,ID,stringID);
 
 //Add dynamic window (gets notified with this message when the language changes)
 //One common use case could be using a WM_SIZE message to trigger a full re-render
 //Or WM_PAINT: which the manager reinterprets into a call to ask_window_for_repaint
-#define AWDYN(hwnd,msgID) LANGUAGE_MANAGER::Instance().AddDynamicText(hwnd, msgID);
+#define AWDYN(hwnd,msgID) LanguageManager::Instance().AddDynamicText(hwnd, msgID);
 
-enum LANGUAGE
+enum Language
 {
 #define _foreach_language(op) \
 				op(English,=1)  \
@@ -40,13 +40,13 @@ enum LANGUAGE
 
 
 namespace userial {
-	static str serialize(LANGUAGE v) {
+	static str serialize(Language v) {
 		switch (v) {
 			_foreach_language(_string_enum_case);
 		default: return L"";
 		}
 	}
-	static bool deserialize(LANGUAGE& var, str name, const str& content) {
+	static bool deserialize(Language& var, str name, const str& content) {
 		str start = name + _keyvaluesepartor;
 		size_t s = find_identifier(content, 0, start);
 		if (str_found(s)) {
@@ -62,18 +62,18 @@ namespace userial {
 	}
 }
 
-class LANGUAGE_MANAGER
+class LanguageManager
 {
 private:
 
 #define _foreach_LANGUAGE_MANAGER_member(op) \
-		op(LANGUAGE,language,LANGUAGE::English) \
+		op(Language,language,Language::English) \
 
 	_foreach_LANGUAGE_MANAGER_member(_generate_member)
 
 public:
 
-	static int GetLanguageStringIndex(LANGUAGE lang) {
+	static int GetLanguageStringIndex(Language lang) {
 		int idx = 0;
 #define _language_add_or_return(member,value) if(lang==member)return idx;else ++idx;
 		_foreach_language(_language_add_or_return);
@@ -81,7 +81,7 @@ public:
 		return 0;
 	}
 
-	static bool IsValidLanguage(LANGUAGE lang) {
+	static bool IsValidLanguage(Language lang) {
 
 		switch (lang) {
 			_foreach_language(_isvalid_enum_case)
@@ -89,14 +89,14 @@ public:
 		}
 	}
 
-	static LANGUAGE_MANAGER& Instance()
+	static LanguageManager& Instance()
 	{
-		static LANGUAGE_MANAGER instance;
+		static LanguageManager instance;
 
 		return instance;
 	}
-	LANGUAGE_MANAGER(LANGUAGE_MANAGER const&) = delete;
-	void operator=(LANGUAGE_MANAGER const&) = delete;
+	LanguageManager(LanguageManager const&) = delete;
+	void operator=(LanguageManager const&) = delete;
 
 	//INFO: all Add... functions send the text update message when called, for dynamic hwnds you should create everything first and only then add it
 
@@ -134,7 +134,7 @@ public:
 	//·Updates all managed objects to the new language, all the ones added after this call will also use the new language
 	//·On success returns the new LANGID (language) //TODO(fran): should I return the previous langid? it feels more useful
 	//·On failure returns (LANGID)-2 if the language is invalid, (LANGID)-3 if failed to change the language
-	LANGID ChangeLanguage(LANGUAGE newLang)
+	LANGID ChangeLanguage(Language newLang)
 	{
 		//if (newLang == this->CurrentLanguage) return -1;//TODO: negative values wrap around to huge values, I assume not all lcid values are valid, find out if these arent
 		BOOL res = this->IsValidLanguage(newLang);
@@ -237,7 +237,7 @@ public:
 		return res;
 	}
 
-	LANGUAGE GetCurrentLanguage()
+	Language GetCurrentLanguage()
 	{
 		return this->language;
 	}
@@ -260,8 +260,8 @@ public:
 	}
 
 private:
-	LANGUAGE_MANAGER() {}
-	~LANGUAGE_MANAGER() {}
+	LanguageManager() {}
+	~LanguageManager() {}
 
 	HINSTANCE hInstance = NULL;
 
@@ -325,25 +325,25 @@ private:
 		return res;
 	}
 
-	LCID GetLCID(LANGUAGE lang)
+	LCID GetLCID(Language lang)
 	{
 		switch (lang) {
-		case LANGUAGE::English:
+		case Language::English:
 			return MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), SORT_DEFAULT); //TODO(fran):this is deprecated and not great for macros, unless we set each enum to this values
-		case LANGUAGE::Español:
+		case Language::Español:
 			return MAKELCID(MAKELANGID(LANG_SPANISH, SUBLANG_SPANISH), SORT_DEFAULT);
 		default:
 			return NULL;
 		}
 	}
 
-	LANGID GetLANGID(LANGUAGE lang)
+	LANGID GetLANGID(Language lang)
 	{
 		//INFO: https://docs.microsoft.com/en-us/windows/win32/intl/language-identifier-constants-and-strings
 		switch (lang) {
-		case LANGUAGE::English:
+		case Language::English:
 			return MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US);//TODO(fran): same as GetLCID
-		case LANGUAGE::Español:
+		case Language::Español:
 			return MAKELANGID(LANG_SPANISH, SUBLANG_SPANISH);
 		default:
 			return NULL;
@@ -352,10 +352,10 @@ private:
 };
 
 namespace userial {
-	static str serialize(LANGUAGE_MANAGER& var) {//NOTE: we gotta add this manually cause when need a reference since the lang mgr is a singleton and doesnt allow for instancing
+	static str serialize(LanguageManager& var) {//NOTE: we gotta add this manually cause when need a reference since the lang mgr is a singleton and doesnt allow for instancing
 		return var.serialize();
 	}
-	static bool deserialize(LANGUAGE_MANAGER& var, str name, const str& content) {
+	static bool deserialize(LanguageManager& var, str name, const str& content) {
 		return var.deserialize(name, content);
 	}
 }

@@ -50,6 +50,7 @@
 #define LANG_UNSAVEDCHANGES_TITLE       153
 #define LANG_UNSAVEDCHANGES_TXT         154
 #define LANG_SIGNUP                     155
+#define ED_SHORTCUTS                    155
 #define LANG_CREATEACCOUNT              156
 #define LANG_ERROR_SAVEFILE             157
 #define LANG_ERROR_SAVEFILE_PASSWORDS   157
@@ -80,14 +81,16 @@
 #define LANG_CONTROL_SIGNUP             182
 #define LANG_CONTROL_CANCEL             183
 #define LANG_PWD_ED_PIN                 184
+#define WMN_FIND                        32774
+#define WMN_SAVE                        32776
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        153
-#define _APS_NEXT_COMMAND_VALUE         32771
+#define _APS_NEXT_RESOURCE_VALUE        156
+#define _APS_NEXT_COMMAND_VALUE         32778
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           110
 #endif

@@ -106,3 +106,18 @@ union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 } static bmps{};
+
+struct known_shortcuts {
+	//Accelerator memory is cleared by the system on close, no need to deallocate
+	HACCEL table; 
+	HWND listener_wnd;
+} static app_shortcuts{};
+
+static void set_app_shortcuts(HWND listener_wnd, u32 accelerator_table_id, HINSTANCE inst = GetModuleHandle(nil)) {
+	if (app_shortcuts.table) {
+		DestroyAcceleratorTable(app_shortcuts.table);
+		app_shortcuts.table = nil;
+	}
+	app_shortcuts.table = LoadAccelerators(inst, MAKEINTRESOURCE(accelerator_table_id));
+	app_shortcuts.listener_wnd = listener_wnd;
+}

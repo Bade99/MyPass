@@ -73,6 +73,12 @@
     <Filter Include="Header Files\Screens\Debug">
       <UniqueIdentifier>{0885ab99-898b-4309-95c6-7aa91ea505cb}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Screens\Editor">
+      <UniqueIdentifier>{5a8c481d-6cdd-4235-bfad-2c5328d11f6f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Screens\Login">
+      <UniqueIdentifier>{d1e43aa3-275f-49d9-9a5d-1d42fa431e76}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="language_manager.h">
@@ -86,12 +92,6 @@
     </ClInclude>
     <ClInclude Include="helpers.h">
       <Filter>Header Files\Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="login.h">
-      <Filter>Header Files\Screens</Filter>
-    </ClInclude>
-    <ClInclude Include="editor.h">
-      <Filter>Header Files\Screens</Filter>
     </ClInclude>
     <ClInclude Include="math.h">
       <Filter>Header Files\Utils</Filter>
@@ -212,6 +212,18 @@
     </ClInclude>
     <ClInclude Include="list_types.h">
       <Filter>Header Files\Controls\List</Filter>
+    </ClInclude>
+    <ClInclude Include="editor.h">
+      <Filter>Header Files\Screens\Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="login.h">
+      <Filter>Header Files\Screens\Login</Filter>
+    </ClInclude>
+    <ClInclude Include="editor_types.h">
+      <Filter>Header Files\Screens\Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="login_types.h">
+      <Filter>Header Files\Screens\Login</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -8,100 +8,6 @@
 
 namespace editor {
 
-constexpr auto& wndclass = wndclass_name("editor");
-
-constexpr auto pad_percent = .05f;
-
-#ifdef _DEBUG
-constexpr auto debug_text_view = true;
-#else
-constexpr auto debug_text_view = false;
-#endif
-
-struct Settings {
-
-#define foreach_editor_member(op) \
-		op(RECT, rc,200,200,700,800 ) \
-
-	foreach_editor_member(_generate_member);
-
-	_generate_default_struct_serialize(foreach_editor_member);
-
-	_generate_default_struct_deserialize(foreach_editor_member);
-
-	void validate() {
-		std::remove_reference<decltype(*this)>::type defaults;
-		validate_rect_in_screen(rc, defaults.rc);
-	}
-};
-
-struct Start {
-	u32 key[8];//32 bytes
-	text username;
-	bool signup;
-};
-
-struct Data {
-	Settings* settings;
-	Start* start;
-};
-
-enum class sort_option {
-	date_modified_newest = 0, date_modified_oldest,
-	alphabetic_az, alphabetic_za,
-	date_created_newest, date_created_oldest,
-
-	__last
-};
-
-struct sort_combo_item { 
-	sort_option value; 
-	u32 label_id; 
-	private: void _(){ static_assert(sizeof(*this) == sizeof(void*)); }
-};
-
-struct State {
-	HWND wnd;
-	HWND nc_parent;
-	struct { //menus
-		HMENU menu;
-		HMENU menu_file;
-		HMENU menu_file_lang;
-		HMENU menu_edit;
-	};
-	struct Controls {
-		using type = HWND;
-		union {
-			struct {
-				type edit_passwords;
-				type btn_add_start, btn_add_end;
-				type search;
-				type combo_sort;
-				type page_space;
-				type page;
-			};
-			type all_fixed[7];
-		};
-		std::vector<HWND> password_editors;
-	private: void _() { static_assert(sizeof(all_fixed) == (sizeof(*this) - sizeof(password_editors))); }
-	} controls;
-	Settings* settings;
-	Start* start;
-
-	wchar_t* current_user;
-	bool passwords_need_save;
-
-	sort_option sorting;
-
-	void init() {
-		controls.password_editors = decltype(controls.password_editors)();
-	}
-
-	void uninit() {
-		controls.password_editors.~vector();
-	}
-};
-
 auto get_state(HWND wnd) { return get_window_state<State>(wnd); }
 
 void set_passwords_need_save(State& state, bool new_val) {
@@ -363,20 +269,7 @@ void add_controls(State& state) {
 		//ask_window_for_repaint(combo);
 	};
 	setup_combobox_sorting_options(state, controls.combo_sort);
-	//button::set_theme(combobox::get_controls(state.controls.combo_sort).button, themes.base_btn);
 	combobox::set_user_extra(controls.combo_sort, &state);
-	//combobox::set_function_render_combobox(controls.combo_sort, [](HDC dc, rect_i32 r, combobox::render_flags flags, void* element, void* user_extra) {
-	//	auto item = std::bit_cast<sort_combo_item>(element);
-	//	auto& state = *(State*)user_extra;
-	//	auto btn = combobox::get_controls(state.controls.combo_sort).button;
-	//	auto new_title = RCS(item.label_id);
-	//	utf16 current_title[50]; current_title[0] = 0;
-	//	GetWindowText(btn, current_title, ARRAYSIZE(current_title));
-	//	if (!wcscmp(current_title, new_title)) SetWindowText(btn, new_title); //Hacky way of updating the text also on language change just on redraw, otherwise we would have to explicitly tell the control to change its text on language change
-	//	button::set_theme(btn, themes.base_btn);
-	//	button::proc(btn, WM_PAINT, 0, 0); //TODO(fran): hack to trigger default button rendering, add support for doing this from the combobox
-	//});
-	//combobox::set_function_on_listbox_opening(controls.combo_sort, langbox_func_on_listbox_opening);
 	//combobox::set_function_desired_size_combobox(controls.combo_sort, langbox_func_desired_size);
 	combobox::set_function_on_selection_accepted(controls.combo_sort, [](void* element, void* user_extra) {
 		auto& state = *(State*)user_extra;
@@ -529,7 +422,7 @@ void add_controls(State& state) {
 
 void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), toolbars are kinda stupid, just useful till you learn shortcuts https://docs.microsoft.com/en-us/windows/win32/controls/create-toolbars
 	//NOTE: each menu gets its parent HMENU stored in the itemData part of the struct
-	LANGUAGE_MANAGER::Instance().AddMenuDrawingHwnd(state.wnd);
+	LanguageManager::Instance().AddMenuDrawingHwnd(state.wnd);
 
 	//INFO: the top 32 bits of an HMENU are random each execution, in a way, they can actually get set to FFFFFFFF or to 00000000, so if you're gonna check two of those you better make sure you cut the top part in BOTH
 
@@ -547,16 +440,16 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 
 	AppendMenuW(menu_file, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_file_lang, (LPCWSTR)menu_file);
 	AMT(menu_file, (UINT_PTR)menu_file_lang, LANG_MENU_LANGUAGE);
-	//TODO(fran): SetMenuItemInfo only accepts UINT, not the UINT_PTR of MF_POPUP, plz dont tell me I have to redo all of it a different way (LANGUAGE_MANAGER just does it normally not caring for the extra 32 bits)
+	//TODO(fran): SetMenuItemInfo only accepts UINT, not the UINT_PTR of MF_POPUP, plz dont tell me I have to redo all of it a different way (LanguageManager just does it normally not caring for the extra 32 bits)
 
 #define _language_appendtomenu(member,value_expr) \
-		AppendMenuW(menu_file_lang, MF_STRING | MF_OWNERDRAW, LANGUAGE::member, (LPCWSTR)menu_file_lang); \
-		SetMenuItemString(menu_file_lang, LANGUAGE::member, FALSE, _t(#member)); \
-		SetMenuItemBitmaps(menu_file_lang, LANGUAGE::member, MF_BYCOMMAND, NULL, bmps.circle); \
+		AppendMenuW(menu_file_lang, MF_STRING | MF_OWNERDRAW, Language::member, (LPCWSTR)menu_file_lang); \
+		SetMenuItemString(menu_file_lang, Language::member, FALSE, _t(#member)); \
+		SetMenuItemBitmaps(menu_file_lang, Language::member, MF_BYCOMMAND, NULL, bmps.circle); \
 
 	_foreach_language(_language_appendtomenu)
 #undef _language_appendtomenu
-	CheckMenuItem(menu_file_lang, LANGUAGE_MANAGER::Instance().GetCurrentLanguage(), MF_BYCOMMAND | MF_CHECKED);
+	CheckMenuItem(menu_file_lang, LanguageManager::Instance().GetCurrentLanguage(), MF_BYCOMMAND | MF_CHECKED);
 
 	SetMenuItemBitmaps(menu_file, (UINT)(UINT_PTR)menu_file_lang, MF_BYCOMMAND, bmps.language, bmps.language);
 
@@ -799,14 +692,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		resize_controls(state);
 		return res;
 	} break;
-	case WM_SAVE:
-	{
-		HWND ctl = (HWND)wparam;
-		if (ctl == state.controls.edit_passwords) {
-			save_passwords(state);
-			return 0;
-		}
-	} break;
 	case WM_COMMAND:
 	{
 		HWND child = (HWND)lparam;
@@ -822,19 +707,21 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			}
 		}
 		else {
-			switch (LOWORD(wparam)) { // Menu notifications
+			switch (LOWORD(wparam)) { // Menu & App Shortcut Notifications
+			case WMN_SAVE:
 			case SHOWPASSWORDS_MENU_SAVE:
 			{
 				save_passwords(state);
 				return 0;
 			} break;
-#define _generate_enum_cases_language(member,value_expr) case LANGUAGE::member:
+#define _generate_enum_cases_language(member,value_expr) case Language::member:
 			_foreach_language(_generate_enum_cases_language)
 			{
-				LANGUAGE_MANAGER::Instance().ChangeLanguage((LANGUAGE)LOWORD(wparam));
+				LanguageManager::Instance().ChangeLanguage((Language)LOWORD(wparam));
 				HMENU old_menu = GetMenu(state.nc_parent);
 				add_menus(state);
 				DestroyMenu(old_menu);
+				set_app_shortcuts(state.wnd, ED_SHORTCUTS);
 				return 0;
 			} break;
 			case SHOWPASSWORDS_MENU_UNDO:
@@ -845,9 +732,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			{
 
 			} break;
+			case WMN_FIND:
 			case SHOWPASSWORDS_MENU_FIND:
 			{
-				SendMessage(state.controls.edit_passwords, EM_SHOWSEARCHWND, TRUE, 0);
+				//SendMessage(state.controls.edit_passwords, EM_SHOWSEARCHWND, TRUE, 0);
+				auto& text = *edit_oneline::get_state(search::get_state(state.controls.search)->controls.edit_match);
+				SetFocus(text.wnd);
+				edit_oneline::select_all(text);
 				return 0;
 			} break;
 			default: return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -864,6 +755,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		  *  - file encryption: twofish (whole file encrypted)
 		  *  - password hashing: sha256
 		  *  - integrity/authorization check: username retrieved from file is compared against the username entered by the user
+		  *  - data format: plain text, retrieved from a single edit control
 		  * V1:
 		  *  - TODO(fran)
 		  */
@@ -898,6 +790,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			passwords_need_save = signup;
 		}
 		set_passwords_need_save(state, passwords_need_save);
+		if (start_attempt == login::AttemptResult::success) set_app_shortcuts(state.wnd, ED_SHORTCUTS);
 		return (LRESULT)start_attempt;
 	} break;
 	case WM_STATE_RESET:
@@ -995,6 +888,12 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		urender::draw_round_rectangle(dc, card, card_extent, colors.Card_Bk_Soft);
 		return 1;
 	} break;
+	case WM_LBUTTONDOWN:
+	{
+		auto res = DefWindowProc(hwnd, msg, wparam, lparam);
+		SetFocus(nil);
+		return res;
+	}
 	default: return DefWindowProc(hwnd, msg, wparam, lparam); break;
 	}
 	return 0;

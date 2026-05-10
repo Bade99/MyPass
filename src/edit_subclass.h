@@ -13,7 +13,7 @@
 #define EM_SETVSCROLL (edit_base_msg_addr+2) /*Sets the vertical scrollbar that is to be used. wParam=HWND of the scrollbar control*/
 //#define EM_SETHSCROLL (WM_USER+202) /*Sets the horizontal scrollbar that is to be used. wParam=HWND of the scrollbar control*/
 //#define EM_GET_MAX_VISIBLE_CHARS_PER_LINE (WM_USER+203) /*Retrieves a count for the max number of characters that can be displayed in one line at once in the current window. return=int*/
-#define WM_SAVE (edit_base_msg_addr+13) /*A control has asked to save its contents wParam=HWND ; lParam=unused*/
+//#define WM_SAVE (edit_base_msg_addr+13) /*A control has asked to save its contents wParam=HWND ; lParam=unused*/
 #define EM_SETSEARCHWND (edit_base_msg_addr+14) /*Sets the search wnd that is used, wParam=HWND of the search control ; lParam=unused*/
 #define EM_SHOWSEARCHWND (edit_base_msg_addr+15) /*wparam=BOOL if TRUE show if FALSE hide*/
 
@@ -72,7 +72,7 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 		case _t('S')://Save
 		{
 			if (ctrl_is_down) {
-				PostMessage(state->parent, WM_SAVE, (WPARAM)state->wnd, 0);
+				PostMessage(state->parent, WMN_SAVE, (WPARAM)state->wnd, 0);
 			}
 		} break;
 		case _t('F')://Find

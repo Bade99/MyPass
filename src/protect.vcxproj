@@ -157,9 +157,11 @@
     <ClInclude Include="combo.h" />
     <ClInclude Include="combo_types.h" />
     <ClInclude Include="debug.h" />
+    <ClInclude Include="editor_types.h" />
     <ClInclude Include="language_manager.h" />
     <ClInclude Include="list.h" />
     <ClInclude Include="list_types.h" />
+    <ClInclude Include="login_types.h" />
     <ClInclude Include="macros.h" />
     <ClInclude Include="core.h" />
     <ClInclude Include="login.h" />
