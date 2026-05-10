@@ -60,6 +60,7 @@ void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 	bmps.eye_open = load_bitmap8(instance, BMP_EYE_OPEN);
 	bmps.eye_closed = load_bitmap8(instance, BMP_EYE_CLOSED);
 	bmps.search = load_bitmap8(instance, BMP_SEARCH);
+	bmps.pin = load_bitmap8(instance, BMP_PIN);
 
 	atexit([]() { for (auto& bmp : bmps.all) if (bmp) { DeleteObject(bmp); bmp = nil; } });
 }

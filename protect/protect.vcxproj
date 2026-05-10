@@ -228,6 +228,7 @@
     <Image Include="..\Icons\Max16.bmp" />
     <Image Include="..\Icons\Min16.bmp" />
     <Image Include="..\Icons\Padlock32.bmp" />
+    <Image Include="..\Icons\Pin_A.bmp" />
     <Image Include="..\Icons\RightArrow16.bmp" />
     <Image Include="..\Icons\Search32.bmp" />
     <Image Include="..\Icons\Search_A.bmp" />

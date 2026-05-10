@@ -297,5 +297,8 @@
     <Image Include="..\Icons\Bin32.bmp">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="..\Icons\Pin_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

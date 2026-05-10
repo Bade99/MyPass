@@ -44,9 +44,9 @@
 #define LANG_SEARCH_FINDPREV            150
 #define BMP_DROPDOWN_UP                 150
 #define LANG_SEARCH_FINDNEXT            151
-#define IDB_BITMAP2                     151
 #define BMP_BIN                         151
 #define LANG_MENU_EDIT_FIND             152
+#define BMP_PIN                         152
 #define LANG_UNSAVEDCHANGES_TITLE       153
 #define LANG_UNSAVEDCHANGES_TXT         154
 #define LANG_SIGNUP                     155
@@ -79,13 +79,14 @@
 #define LANG_PWD_ED_DATES               181
 #define LANG_CONTROL_SIGNUP             182
 #define LANG_CONTROL_CANCEL             183
+#define LANG_PWD_ED_PIN                 184
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        152
+#define _APS_NEXT_RESOURCE_VALUE        153
 #define _APS_NEXT_COMMAND_VALUE         32771
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           110

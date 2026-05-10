@@ -23,12 +23,13 @@ namespace password_editor {
 			HWND btn_card;
 			HWND edo_title;
 			HWND btn_edit, btn_add, btn_del;
-			HWND btn_dates, tooltip_btn_dates;
+			HWND btn_dates, tooltip_btn_dates, btn_pin;
 			HWND tbl_values;
 		};
-		HWND all[8];
+		HWND all[9];
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 	};
+	#define _password_editor_tool_list(...) { controls.btn_dates, controls.btn_pin, controls.btn_edit, controls.btn_add, controls.btn_del, __VA_ARGS__ }
 
 	union Functions {
 		struct {
@@ -38,8 +39,14 @@ namespace password_editor {
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 	};
 
+	struct ItemFlag {
+		using type = u32;
+		static const type pin = 1 << 0; // Password Editor Element is always pinned to the top of the list
+	};
+
 	struct Properties {
 		time_t date_created, date_modified;
+		multiflag<ItemFlag> flags;
 	};
 
 	struct State : WindowState {

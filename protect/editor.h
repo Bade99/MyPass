@@ -116,11 +116,11 @@ void on_password_editors_cnt_changed(State& state) {
 	ShowWindow(state.controls.btn_add_end, state.controls.password_editors.size() ? SW_SHOW : SW_HIDE);
 }
 
-struct props { const utf16* title = nil; time_t date_created = 0, date_modified = 0; };
+struct props { const utf16* title = nil; time_t date_created = 0, date_modified = 0; multiflag<password_editor::ItemFlag> flags = 0; };
 password_editor::State& add_password_editor(State& state, const props& properties, size_t at_idx) {
 	auto wnd = create_window(state.controls.page, password_editor::wndclass, nil, WS_VISIBLE | WS_CHILD, 0, 0, state.wnd);
 	password_editor::set_user_data(wnd, &state);
-	password_editor::set_properties(wnd, {.date_created = properties.date_created, .date_modified = properties.date_modified});
+	password_editor::set_properties(wnd, {.date_created = properties.date_created, .date_modified = properties.date_modified, .flags = properties.flags});
 	auto& res = *password_editor::get_state(wnd);
 	AWDT(res.controls.edo_title, LANG_PWD_ED_TITLE);
 	password_editor::set_functions(wnd, {
@@ -155,6 +155,7 @@ void add_preset_password_editor(State& state, size_t at_idx) {
 	password_editor::table_add_row(password_editor, RCS(LANG_PWD_ED_TBL_USER), &password_editor::empty_value_cell);
 	password_editor::table_add_row(password_editor, RCS(LANG_PWD_ED_TBL_PASSWORD), &password_editor::empty_value_cell);
 	password_editor::set_is_open(password_editor, true);
+	password_editor::set_is_editing(password_editor, true);
 	ask_window_for_resize(state.wnd);
 	ask_window_for_repaint(state.wnd);
 }
@@ -392,15 +393,19 @@ void add_controls(State& state) {
 		case sort_option::alphabetic_az:
 		case sort_option::alphabetic_za:
 		{
+			std::vector<sort_alphabetic> to_sort_pinned;
 			std::vector<sort_alphabetic> to_sort; to_sort.reserve(vec.size());
 			for (auto p : vec) {
-				auto title = password_editor::get_state(p)->controls.edo_title;
+				auto& controls = password_editor::get_state(p)->controls;
+				bool pin = button::get_state(controls.btn_pin)->selected;
+				auto title = controls.edo_title;
 				auto len = GetWindowTextLength(title) + 1;
 				sort_alphabetic element;
 				element.wnd = p;
 				element.title.resize_and_overwrite(len,
 					[=](utf16* buf, size_t buf_size) { return GetWindowText(title, buf, buf_size); });
-				to_sort.push_back(std::move(element));
+				if (pin) to_sort_pinned.push_back(std::move(element));
+				else to_sort.push_back(std::move(element));
 			}
 			auto sorting_function = (item.value == sort_option::alphabetic_az) ?
 				[](const sort_alphabetic& a, const sort_alphabetic& b) {
@@ -409,30 +414,47 @@ void add_controls(State& state) {
 				[](const sort_alphabetic& a, const sort_alphabetic& b) {
 					return _wcsicmp(a.title.c_str(), b.title.c_str()) > 0;
 				};
+			std::sort(to_sort_pinned.begin(), to_sort_pinned.end(), sorting_function);
 			std::sort(to_sort.begin(), to_sort.end(), sorting_function);
-			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i] = value.wnd;
+			for (const auto& [i, value] : to_sort_pinned | std::views::enumerate) vec[i] = value.wnd;
+			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i + to_sort_pinned.size()] = value.wnd;
 		} break;
 		case sort_option::date_modified_newest:
 		case sort_option::date_modified_oldest:
 		{
+			std::vector<sort_date> to_sort_pinned;
 			std::vector<sort_date> to_sort; to_sort.reserve(vec.size());
-			for (auto p : vec) to_sort.emplace_back(p, password_editor::get_state(p)->properties.date_modified);
+			for (auto p : vec) {
+				auto& state = *password_editor::get_state(p);
+				bool pin = button::get_state(state.controls.btn_pin)->selected;
+				if (pin) to_sort_pinned.emplace_back(p, state.properties.date_modified);
+				else to_sort.emplace_back(p, state.properties.date_modified);
+			}
 			auto sorting_function = (item.value == sort_option::date_modified_newest) ?
 				[](sort_date a, sort_date b) { return a.date > b.date; } :
 				[](sort_date a, sort_date b) { return a.date < b.date; };
+			std::sort(to_sort_pinned.begin(), to_sort_pinned.end(), sorting_function);
 			std::sort(to_sort.begin(), to_sort.end(), sorting_function);
-			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i] = value.wnd;
+			for (const auto& [i, value] : to_sort_pinned | std::views::enumerate) vec[i] = value.wnd;
+			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i + to_sort_pinned.size()] = value.wnd;
 		} break;
 		case sort_option::date_created_newest:
 		case sort_option::date_created_oldest:
 		{
+			std::vector<sort_date> to_sort_pinned;
 			std::vector<sort_date> to_sort; to_sort.reserve(vec.size());
-			for (auto p : vec) to_sort.emplace_back(p, password_editor::get_state(p)->properties.date_created);
+			for (auto p : vec) {
+				auto& state = *password_editor::get_state(p);
+				bool pin = button::get_state(state.controls.btn_pin)->selected;
+				if (pin) to_sort_pinned.emplace_back(p, state.properties.date_created);
+				else to_sort.emplace_back(p, state.properties.date_created);
+			}
 			auto sorting_function = (item.value == sort_option::date_created_newest) ?
 				[](sort_date a, sort_date b) { return a.date > b.date; } :
 				[](sort_date a, sort_date b) { return a.date < b.date; };
 			std::sort(to_sort.begin(), to_sort.end(), sorting_function);
-			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i] = value.wnd;
+			for (const auto& [i, value] : to_sort_pinned | std::views::enumerate) vec[i] = value.wnd;
+			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i + to_sort_pinned.size()] = value.wnd;
 		} break;
 		default: Assert(0);
 		}
@@ -621,7 +643,13 @@ void get_controls_data_for_saving(State& state, str& res) {
 		auto title = ed.controls.edo_title;
 		append_control_text(res, title);
 		//TODO: im just using \r\n for compatibility with the text format, remove the stupid \r later if I end up actually using a text based encoding format with line jumps
-		res += std::format(L":{}:{}\r\n", ed.properties.date_created, ed.properties.date_modified);
+		
+		multiflag<password_editor::ItemFlag> pwed_flags = 0;
+		//TODO(fran): should we maintain ed.properties.flags up to date and use it directly instead?
+		bool pin = button::get_state(ed.controls.btn_pin)->selected;
+		set_flag_bit(pwed_flags, pin, password_editor::ItemFlag::pin);
+		res += std::format(L":{}:{}:{}\r\n", ed.properties.date_created, ed.properties.date_modified, pwed_flags);
+
 		auto& tbl = *table::get_state(ed.controls.tbl_values);
 		for (auto& r : tbl.rows) {
 			auto& description_cell = r[0];
@@ -631,13 +659,11 @@ void get_controls_data_for_saving(State& state, str& res) {
 			append_control_text(res, value_cell.controls.text);
 			res += L":";
 			multiflag<password_editor::ValueCellFlag> flags = 0;
-			bool lock_selected = button::get_state(value_cell.controls.btn_lock)->selected;
+			bool lock = button::get_state(value_cell.controls.btn_lock)->selected;
 			static_assert(std::is_unsigned_v<password_editor::ValueCellFlag::type>, 
 				"Flag value type needs to be unsigned for the bit trick we do for branchless assignment"
 			);
-			using cellflagtype = password_editor::ValueCellFlag::type;
-			using signedtype = std::make_signed_t<cellflagtype>;
-			flags |= password_editor::ValueCellFlag::lock & (cellflagtype)(-(signedtype)lock_selected);
+			set_flag_bit(flags, lock, password_editor::ValueCellFlag::lock);
 			res += to_str(flags);
 			res += L"\r\n";
 		}
@@ -649,8 +675,24 @@ void get_controls_data_for_saving(State& state, str& res) {
 	else res += L'\0'; //Adding an empty content character just in case //TODO(fran): review if this is necessary
 }
 
+void save_passwords_v0(State& state) {
+	int user_len_chars = (int)wcslen(state.current_user);
+	int len_chars = user_len_chars + GetWindowTextLength(state.controls.edit_passwords) + 1;
+	// Pad with extra garbage bytes to get blocks of 16 bytes for encryption
+	int len_bytes = next_multiple_of_16(len_chars * sizeof(cstr)); 
+	void* mem = malloc(len_bytes); defer{ free(mem); };
+	Assert(sizeof(cstr) > 1);
+	wcscpy_s((cstr*)mem, user_len_chars + 1, state.current_user); //append username so we can check against it in later logins
+	GetWindowText(state.controls.edit_passwords, ((cstr*)mem) + user_len_chars, len_chars - user_len_chars);
+	twofish_encrypt(mem, len_bytes, mem);
+
+	bool res = save_to_file_user(state.current_user, mem, len_bytes);
+	set_passwords_need_save(state, !res);
+	if (!res) MessageBox(state.wnd, RCS(LANG_ERROR_SAVEFILE_PASSWORDS), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
+}
+
 void save_passwords(State& state) {
-	// Append username so we can check against it in later logins (another idea is to append the key structure that twofish stores ) //TODO(fran): this aint the most clever, there could be collisions, but it's at least a line of defense for now
+	// Append username so we can check against it in later logins (another idea is to append the key structure that twofish stores ) //TODO(fran): this aint the most clever, there could be collisions, but it's at least a way of checking integrity for now
 	str data = state.current_user;
 	get_controls_data_for_saving(state, data);
 
@@ -693,6 +735,7 @@ void create_password_editors(State& state, utf16* data) {
 				case 0: properties.title = strip(val); continue;
 				case 1: properties.date_created = wcstoll(val, nil, 10); continue;
 				case 2: properties.date_modified = wcstoll(val, nil, 10); continue;
+				case 3: properties.flags = wcstoul(val, nil, 10); continue;
 				}
 				break;
 			}
@@ -714,7 +757,7 @@ void create_password_editors(State& state, utf16* data) {
 					switch (i) {
 					case 0: description_cell = strip(val); continue;
 					case 1: value_cell.text = val; continue; //TODO(fran): not sure if we want to stript characters from a potential password or not, idk if it is common for apps to allow them (either really using them or ignoring them)
-					case 2: value_cell.flags = wcstol(val, nil, 10); continue;
+					case 2: value_cell.flags = wcstoul(val, nil, 10); continue;
 					}
 					break;
 				}
@@ -817,7 +860,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		/**
 		  * Data Formats:
 		  * V0:
-		  *  - file structure: [username | data + null terminator | padding] 
+		  *  - file structure: [username | data + null terminator | padding]
 		  *  - file encryption: twofish (whole file encrypted)
 		  *  - password hashing: sha256
 		  *  - integrity/authorization check: username retrieved from file is compared against the username entered by the user

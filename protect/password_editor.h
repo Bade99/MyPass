@@ -112,12 +112,19 @@ namespace password_editor {
 void on_internal_state_change(State& state) {
 	auto& controls = state.controls;
 	button::set_selected(controls.btn_card, state.is_open);
+	button::set_selected(controls.btn_edit, state.is_editing);
 
-	for (const auto& c : { controls.btn_dates, controls.btn_edit, controls.btn_add, controls.btn_del, controls.tbl_values })
-		ShowWindow(c, state.is_open ? SW_SHOW : SW_HIDE);
+	bool pin = button::get_state(controls.btn_pin)->selected;
+
+	for (const auto& c : _password_editor_tool_list(controls.tbl_values))
+		ShowWindow(c, state.is_open || (pin && c == controls.btn_pin) ? SW_SHOW : SW_HIDE);
+
+	EnableWindow(controls.btn_pin, state.is_open);
 
 	bool enable_editing = state.is_open && state.is_editing;
 	EnableWindow(controls.edo_title, enable_editing);
+	button::Theme btn{ .brushes = {.bk = {.clicked = enable_editing ? colors.Control_BkPush_Strong : colors.Control_BkPush_Soft} } };
+	button::set_theme(controls.btn_card, btn);
 
 	SendMessage(controls.btn_edit, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)(enable_editing ? bmps.cancel : bmps.edit));
 		
@@ -135,6 +142,13 @@ void on_internal_state_change(State& state) {
 void set_is_open(State& state, bool is_open) {
 	if (state.is_open != is_open) {
 		state.is_open = is_open;
+		on_internal_state_change(state);
+	}
+}
+
+void set_is_editing(State& state, bool is_editing) {
+	if (state.is_editing != is_editing) {
+		state.is_editing = is_editing;
 		on_internal_state_change(state);
 	}
 }
@@ -160,6 +174,10 @@ void on_properties_changed(State& state) {
 	);
 	toolInfo.lpszText = dates_msg.data();
 	SendMessage(state.controls.tooltip_btn_dates, TTM_UPDATETIPTEXT, 0, (LPARAM)&toolInfo);
+
+	button::set_selected(state.controls.btn_pin, state.properties.flags & ItemFlag::pin);
+
+	on_internal_state_change(state); //changing the flags changes the rendering
 }
 
 void table_add_row(State& state, const utf16* description, const password_editor::ValueCell* value) {
@@ -193,16 +211,28 @@ void create_controls(State& state) {
 		{.multiline = true, .delay_ms = 200, .duration_ms = 15000}
 	);
 
+	controls.btn_pin = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
+	SendMessage(controls.btn_pin, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.pin);
+	button::set_theme(controls.btn_pin, themes.table_toolbar_btn);
+	add_mouseover_tooltip(controls.btn_pin, LANG_PWD_ED_PIN);
+	button::set_user_data(controls.btn_pin, controls.btn_pin);
+	button::set_functions(controls.btn_pin, {
+		.on_click = [](void* data) {
+			auto btn = (HWND)data;
+			auto& state = *button::get_state(btn);
+			button::set_selected(btn, !state.selected);
+		}
+	});
+
 	controls.btn_edit = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
 	SendMessage(controls.btn_edit, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.edit);
-	button::set_theme(controls.btn_edit, themes.password_editor_toolbar_btn);
+	button::set_theme(controls.btn_edit, themes.table_toolbar_btn);
 	add_mouseover_tooltip(controls.btn_edit, LANG_PWD_ED_EDIT);
 	button::set_user_data(controls.btn_edit, &state);
 	button::set_functions(controls.btn_edit, {
 		.on_click = [](void* data) {
 			auto& state = *(State*)data;
-			state.is_editing = !state.is_editing;
-			on_internal_state_change(state);
+			set_is_editing(state, !state.is_editing);
 		}
 	});
 
@@ -217,8 +247,7 @@ void create_controls(State& state) {
 			auto& tbl = *table::get_state(state.controls.tbl_values);
 			table_add_row(state, L"", &empty_value_cell);
 			// When a row is added we go into editing mode to allow the user to edit directly
-			state.is_editing = true;
-			on_internal_state_change(state);
+			set_is_editing(state, true);
 		}
 	});
 	
@@ -364,7 +393,7 @@ i32 resize_controls(const State& state, bool resize = true) {
 	auto w = RECTW(wnd_r), h = RECTH(wnd_r);
 	i32 title_h = DPI(30);
 	i32 margin_x = title_h;
-	i32 title_w = w * .75f * .75f;
+	i32 title_w = w * .5f;
 	i32 toolbar_w = (w - title_h * 2) - title_w;
 	i32 pad = title_h / 4;
 
@@ -374,10 +403,14 @@ i32 resize_controls(const State& state, bool resize = true) {
 		RECT title_r { 
 			.left = margin_x, 
 			.top = maximum((h - title_h) / 2, 0),
-			.right = title_r.left + title_w, 
+			.right = w - title_r.left,
 			.bottom = title_r.top + title_h
 		};
-		if (resize) move_window(controls.edo_title, title_r);
+		if (resize) {
+			auto pin = rect_i32::create_from(title_r).cut_right(RECTH(title_r));
+			move_window(controls.edo_title, title_r);
+			MoveWindow(controls.btn_pin, pin);
+		}
 		return RECTH(title_r);
 	}
 	else {
@@ -388,7 +421,7 @@ i32 resize_controls(const State& state, bool resize = true) {
 			.right = title_r.left + title_w, 
 			.bottom = title_r.top + title_h };
 
-		const auto tools = { controls.btn_dates, controls.btn_edit, controls.btn_add, controls.btn_del };
+		const auto tools = _password_editor_tool_list();
 		const auto tool_cnt = tools.size();
 		auto total_tool_pad = (tool_cnt - 1) * pad;
 		auto toolbar_usable_w = toolbar_w - total_tool_pad;

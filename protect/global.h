@@ -42,6 +42,7 @@ union known_colors {
 		op(HBRUSH,Btn_Delete_BkMouseOver,CreateSolidBrush(RGB(243, 21, 35))) \
 		op(HBRUSH,Btn_Delete_BkPush,CreateSolidBrush(RGB(183, 21, 35))) \
 		op(HBRUSH,Control_BkPush_Soft,CreateSolidBrush(RGB(58, 93, 156))) \
+		op(HBRUSH,Control_BkPush_Strong,CreateSolidBrush(RGB(38, 70, 130))) \
 		op(HBRUSH,Card_Bk_Soft,CreateSolidBrush(RGB(209, 246, 255))) \
 		op(HBRUSH,Btn_Static_TxtMouseOver,CreateSolidBrush(RGB(29,47,79))) \
 		
@@ -99,8 +100,9 @@ union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 		HBITMAP search;
 		HBITMAP calendar;
 		HBITMAP language;
+		HBITMAP pin;
 	};
-	HBITMAP all[18];
+	HBITMAP all[19];
 
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 } static bmps{};

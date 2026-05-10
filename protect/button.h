@@ -311,15 +311,17 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 		DWORD style = (DWORD)GetWindowLongPtr(state.wnd, GWL_STYLE);
 		const auto& theme = state.theme;
 		HBRUSH bkbr, forebr, borderbr = theme.brushes.border.normal;
-		if ((state.onMouseOver && state.onLMouseClick) || state.selected) {
+		if (!IsWindowEnabled(state.wnd)) {
+			bkbr = theme.brushes.bk.disabled;
+			forebr = theme.brushes.foreground.disabled;
+			borderbr = theme.brushes.border.disabled;
+		} elif ((state.onMouseOver && state.onLMouseClick) || state.selected) {
 			bkbr = theme.brushes.bk.clicked;
 			forebr = theme.brushes.foreground.clicked;
-		}
-		else if (state.onMouseOver || state.OnMouseTracking || (GetFocus()==state.wnd)) {
+		} elif (state.onMouseOver || state.OnMouseTracking || (GetFocus()==state.wnd)) {
 			bkbr = theme.brushes.bk.mouseover;
 			forebr = theme.brushes.foreground.mouseover;
-		}
-		else {
+		} else {
 			bkbr = theme.brushes.bk.normal;
 			forebr = theme.brushes.foreground.normal;
 		}
