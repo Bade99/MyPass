@@ -440,9 +440,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			}
 			button::Theme btn{
 				.brushes = {
-					.foreground = {.normal = btn_fore},
+					.foreground = {.normal = btn_fore, .mouseover = btn_fore, .clicked = btn_fore},
 					.bk = {.normal = btn_bk, .mouseover = btn_bk_mouseover, .clicked = btn_bk_push},
-					.border = {.normal = btn_border}
+					.border = {.normal = btn_border, .mouseover = btn_border, .clicked = btn_border}
 				}
 			};
 			//TODO: we shouldnt be triggering a redraw while on wm_paint, this can be done elsewhere

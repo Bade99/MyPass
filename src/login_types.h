@@ -10,8 +10,6 @@ constexpr auto& wndclass = wndclass_name("login");
 
 //TODO(fran): failure after multiple wrong passwords? eg 10 min block
 
-//TODO(fran): dont use a msgbox to show the message asking the user to sign up, instead draw the text msg on this same control and show a singup and a cancel button
-
 constexpr auto EDIT_USERNAME = 10;
 constexpr auto EDIT_PASSWORD = 11;
 constexpr auto BTN_LOGIN = 12;

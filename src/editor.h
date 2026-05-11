@@ -356,7 +356,7 @@ void add_controls(State& state) {
 	combobox::set_function_render_combobox(controls.combo_sort, [](HDC dc, rect_i32 r, combobox::render_flags flags, void* element, void* user_extra) {
 		auto& theme = themes.base_btn;
 		HFONT font = fonts.General;
-		HBRUSH bk_br, txt_br, border_br = nil;
+		HBRUSH bk_br, txt_br, border_br = theme.brushes.foreground.normal;
 		if (flags.isListboxOpen) bk_br = theme.brushes.bk.normal;
 		else if (flags.onClicked) bk_br = theme.brushes.bk.clicked;
 		else if (flags.onMouseover) bk_br = theme.brushes.bk.mouseover;

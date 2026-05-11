@@ -38,6 +38,19 @@ enum Language
 	_foreach_language(_generate_enum_member)
 };
 
+// Follows ISO 639-1 standard with c1 and c2, eg c1='e', c2='n' matches with English
+// c3 may be a dash (-) or a null terminator (\0), in which case it is ignored. Or a valid character in which case the language search will be from ISO 639-2
+// Returns 0 if not found (which is not a valid Language)
+Language from_language_name(utf16 c1, utf16 c2, utf16 c3) {
+	static_assert(_foreach_language(_generate_count) == 2);
+	auto pack_chars_in_u32 = [](utf8 c1, utf8 c2, utf8 c3 = 0) { return (((u32)c1) << 16) | (((u32)c2) << 8) | c3; };
+	switch (pack_chars_in_u32(tolower(c1), tolower(c2), isalpha(c3) ? tolower(c3) : 0)) {
+	case pack_chars_in_u32('e','n'): return Language::English;
+	case pack_chars_in_u32('e','s'): return Language::Español;
+	default: return (Language)0;
+	}
+}
+
 
 namespace userial {
 	static str serialize(Language v) {
@@ -66,10 +79,10 @@ class LanguageManager
 {
 private:
 
-#define _foreach_LANGUAGE_MANAGER_member(op) \
+#define _foreach_language_manager_member(op) \
 		op(Language,language,Language::English) \
 
-	_foreach_LANGUAGE_MANAGER_member(_generate_member)
+	_foreach_language_manager_member(_generate_member)
 
 public:
 
@@ -242,7 +255,7 @@ public:
 		return this->language;
 	}
 
-	_generate_default_struct_serialize(_foreach_LANGUAGE_MANAGER_member);
+	_generate_default_struct_serialize(_foreach_language_manager_member);
 
 	bool deserialize(str name, const str& content) {
 		bool res = false;
@@ -252,9 +265,11 @@ public:
 		if (str_found(s) && str_found(e)) {
 			s += start.size();
 			str substr = content.substr(s, e - s);
-			_foreach_LANGUAGE_MANAGER_member(_deserialize_member);
+			_foreach_language_manager_member(_deserialize_member);
 			res = true;
 		}
+		else this->language = this->GetBestMatchFromSystemSettings();
+		//TODO(fran): if there was no language information to deserialize then query the system for the current language and see if we support any close matches, otherwise as a last resort default to english
 		this->ChangeLanguage(this->language);//whatever happens we need to set some language
 		return res;
 	}
@@ -333,6 +348,7 @@ private:
 		case Language::Español:
 			return MAKELCID(MAKELANGID(LANG_SPANISH, SUBLANG_SPANISH), SORT_DEFAULT);
 		default:
+			Assert(0);
 			return NULL;
 		}
 	}
@@ -346,8 +362,31 @@ private:
 		case Language::Español:
 			return MAKELANGID(LANG_SPANISH, SUBLANG_SPANISH);
 		default:
+			Assert(0);
 			return NULL;
 		}
+	}
+
+	Language GetBestMatchFromSystemSettings() {
+		Language res = Language::English;
+
+		utf16 preferences[128]; preferences[0] = 0;
+		ULONG prefsz = ARRAYSIZE(preferences), _;
+		auto ret = GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &_, preferences, &prefsz);
+
+		//TODO(fran): fallback to GetUserDefaultUILanguage if OS lower than Windows Vista
+
+		if (ret) {
+			for(u32 i = 0; i + 3 < prefsz && preferences[i]; i++) {
+				Language lang = from_language_name(preferences[i], preferences[i + 1], preferences[i + 2]);
+				if (lang) {
+					res = lang;
+					break;
+				}
+				i += wcslen(&preferences[i]);
+			}
+		}
+		return res;
 	}
 };
 

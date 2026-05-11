@@ -43,6 +43,7 @@ constexpr i64 I64MIN = std::numeric_limits<i64>::min();
 
 typedef float  f32;
 typedef double f64;
+typedef char     utf8;
 typedef wchar_t  utf16;
 typedef char32_t utf32;
 

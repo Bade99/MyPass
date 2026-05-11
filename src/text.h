@@ -1011,6 +1011,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	}break;
 	case WM_PAINT:
 	{
+		auto& brushes = state.theme.brushes;
 		PAINTSTRUCT ps;
 		//ps.rcPaint
 		HDC dc = BeginPaint(state.wnd, &ps); defer{ EndPaint(state.wnd, &ps); };
@@ -1028,19 +1029,19 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		HFONT font = state.theme.font;
 
 		if (is_enabled) {
-			bk_br = state.theme.brushes.bk.normal;
-			txt_br = state.theme.brushes.foreground.normal;
-			border_br = state.theme.brushes.border.normal;
-			selection_br = state.theme.brushes.selection.normal;
+			bk_br = brushes.bk.normal;
+			txt_br = brushes.foreground.normal;
+			border_br = brushes.border.normal;
+			selection_br = (GetFocus() == state.wnd) ? brushes.selection.normal : brushes.selection.disabled;
 		}
 		else {
-			bk_br = state.theme.brushes.bk.disabled;
-			txt_br = state.theme.brushes.foreground.disabled;
-			border_br = state.theme.brushes.border.disabled;
-			selection_br = state.theme.brushes.selection.disabled;
+			bk_br = brushes.bk.disabled;
+			txt_br = brushes.foreground.disabled;
+			border_br = brushes.border.disabled;
+			selection_br = brushes.selection.disabled;
 		}
 		if (show_placeholder) {
-			txt_br = state.theme.brushes.placeholder.normal;
+			txt_br = brushes.placeholder.normal;
 			font = fonts.General; //TODO(fran): add placeholder specific font in theme
 		}
 

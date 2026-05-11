@@ -72,7 +72,7 @@ str GetFontFaceName() {
     //-Microsoft YaHei or UI (look the same,good txt,good jp) (6 codepages) (supported on most versions of windows)
     //-Microsoft JhengHei or UI (look the same,good txt,ok jp) (3 codepages) (supported on most versions of windows)
 
-    i64 cnt = StartCounter(); defer{ printf("ELAPSED3: %f ms\n",EndCounter(cnt)); };
+    i64 cnt = StartCounter(); defer{ printf("ELAPSED FIND FONT: %f ms\n",EndCounter(cnt)); };
 
     HDC dc = GetDC(GetDesktopWindow()); defer{ ReleaseDC(GetDesktopWindow(),dc); };
     std::set<str> fontnames;
