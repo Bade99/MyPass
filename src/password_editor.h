@@ -158,7 +158,7 @@ void set_is_editing(State& state, bool is_editing) {
 void on_properties_changed(State& state) {
 	//TODO(fran): update tip text on change to modified state (at least this way we dont have to use the msg queue and the proc)
 	using namespace std::chrono;
-	TOOLINFO toolInfo{ sizeof(toolInfo) };
+	TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
 	toolInfo.hwnd = state.controls.btn_dates;
 	toolInfo.uId = (UINT_PTR)state.controls.btn_dates;
 	constexpr auto date_format = L"{:%F %T}"; //TODO(fran): we could try to use the local date format of the user
@@ -225,6 +225,7 @@ void create_controls(State& state) {
 			auto& state = *(State*)data;
 			auto& btn = *button::get_state(state.controls.btn_pin);
 			button::set_selected(btn.wnd, !btn.selected);
+			set_flag_bit(state.properties.flags, btn.selected, password_editor::ItemFlag::pin);
 			if (state.stateful_functions.on_change) state.stateful_functions.on_change(state.controls.btn_pin);
 		}
 	});

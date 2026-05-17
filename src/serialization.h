@@ -4,7 +4,6 @@
 #include "win_sdk.h"
 #include "reflection.h"
 #include <Shlobj.h> //SHGetKnownFolderPath
-#include <string>
 
 //--------------------------------------------------------
 //Defines serialization and deserialization for every type (preferably ones not expected to change, for complex structs we have "Reflection for serialization")

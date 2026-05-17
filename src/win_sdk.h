@@ -62,7 +62,7 @@
 #pragma comment(lib,"Imm32.lib") // IME related stuff
 #pragma comment(lib,"Msimg32.lib") // AlphaBlend
 
-#pragma comment(linker,"/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"") //for multiline edit control
+//#pragma comment(linker,"/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"") //for multiline edit control
 
 enum desired_size : unsigned int { dontcare = 0, flexible, fixed };
 static desired_size GetWindowDesiredSize(HWND wnd, SIZE* min, SIZE* max) {

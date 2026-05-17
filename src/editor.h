@@ -25,6 +25,14 @@ void on_password_editors_cnt_changed(State& state) {
 static const auto on_password_editor_change = [](void* data, HWND wnd) {
 	auto& state = *(State*)data;
 	set_passwords_need_save(state, true);
+
+	//Update the modification date of the password editor
+	//TODO(fran): allow for more information storage in stateful functions so you can pass in the password_editor associated with this change, or create a on_change function in the password editor, so you can pass in its state instead, then it would know how to call the general editor to tell it that there was an update
+	auto pw_ed = get_parent_of_class(wnd, password_editor::wndclass); Assert(pw_ed);
+	auto& pw_ed_state = *password_editor::get_state(pw_ed);
+	auto updated_props = pw_ed_state.properties;
+	updated_props.date_modified = std::time(nil);
+	password_editor::set_properties(pw_ed, updated_props);
 };
 
 struct props { const utf16* title = nil; time_t date_created = 0, date_modified = 0; multiflag<password_editor::ItemFlag> flags = 0; };
@@ -42,7 +50,7 @@ password_editor::State& add_password_editor(State& state, const props& propertie
 			auto& vec = state.controls.password_editors;
 			for (const auto& [i, c] : vec | std::views::enumerate)
 				if (c == pwd_ed) {
-					on_password_editor_change(&state, c); //TODO(fran): small bug, we should actually check if the data in this editor was saved, if not then it shouldnt set need_save to true
+					on_password_editor_change(&state, password_editor::get_state(c)->controls.btn_del); //TODO(fran): small bug, we should actually check if the data in this editor was saved, if not then it shouldnt set need_save to true
 					DestroyWindow(c);
 					vec.erase(vec.begin() + i);
 					on_password_editors_cnt_changed(state);
@@ -61,7 +69,7 @@ password_editor::State& add_password_editor(State& state, const props& propertie
 	auto at = at_idx < vec.size() ? vec.begin() + at_idx : vec.end();
 	vec.insert(at, wnd);
 	on_password_editors_cnt_changed(state);
-	if (properties.title) SetWindowTextW(res.controls.edo_title, properties.title);
+	if (properties.title) set_window_text(res.controls.edo_title, properties.title, false);
 	ask_window_for_resize(state.wnd);
 	ask_window_for_repaint(state.wnd);
 	return res;

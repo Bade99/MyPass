@@ -145,7 +145,7 @@ i32 desired_height(State& state) {
 //TODO(fran): positioning relative to a character offset, eg {3,5} 3rd char of 5th row place on top or left or...
 void show_tip(HWND wnd, const cstr* msg, int duration_ms, u32 ETP_flags) {
 	State& state = *get_state(wnd); Assert(&state);
-	TOOLINFO toolInfo{ sizeof(toolInfo) };
+	TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
 	toolInfo.hwnd = state.wnd;
 	toolInfo.uId = (UINT_PTR)state.wnd;
 	toolInfo.hinst = GetModuleHandle(NULL);
@@ -918,7 +918,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			state.wnd, NULL, NULL, NULL);
 		Assert(state.controls.tooltip);
 
-		TOOLINFO toolInfo{ sizeof(toolInfo) };
+		TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
 		toolInfo.hwnd = state.wnd;
 		toolInfo.uFlags = TTF_IDISHWND | TTF_ABSOLUTE | TTF_TRACK /*allows to show the tooltip when we please*/; //TODO(fran): TTF_TRANSPARENT might be useful, mouse msgs that go to the tooltip are sent to the parent aka us
 		toolInfo.uId = (UINT_PTR)state.wnd;
@@ -929,6 +929,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		toolInfo.lpReserved = 0;
 		BOOL addtool_res = (BOOL)SendMessage(state.controls.tooltip, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
 		Assert(addtool_res);
+
+		SendMessage(state.controls.tooltip, TTM_SETTIPTEXTCOLOR, ColorFromBrush(colors.ControlTxt), 0);
+		SendMessage(state.controls.tooltip, TTM_SETTIPBKCOLOR, ColorFromBrush(colors.ControlBk), 0);
 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
@@ -1637,7 +1640,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		case EDITONELINE_tooltip_timer_id:
 		{
 			KillTimer(state.wnd, timerID);
-			TOOLINFO toolInfo{ sizeof(toolInfo) };
+			TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
 			toolInfo.hwnd = state.wnd;
 			toolInfo.uId = (UINT_PTR)state.wnd;
 			SendMessage(state.controls.tooltip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&toolInfo);
@@ -1688,24 +1691,25 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		bool en_change = false;
 
 		cstr* buf = (cstr*)lparam;//null terminated
+		bool notify = wparam; //Custom extension to WM_SETTEXT
 
 		BOOL res = edit_oneline::_settext(state, buf);
 		SendMessage(state.wnd, EM_SETSEL, 0, 0); //When setting the whole element's text we want to keep the cursor at the beginning
 
 		en_change = res;
-		if (en_change) notify_parent(state, EN_CHANGE); //There was a change in the text
+		if (en_change && notify) notify_parent(state, EN_CHANGE); //There was a change in the text
 
 		return res;
 	}break;
-	case WM_SETTEXT_NO_NOTIFY:
-	{
-		cstr* buf = (cstr*)lparam;//null terminated
+	//case WM_SETTEXT_NO_NOTIFY:
+	//{
+	//	cstr* buf = (cstr*)lparam;//null terminated
 
-		BOOL res = edit_oneline::_settext(state, buf);
-		SendMessage(state.wnd, EM_SETSEL, 0, 0);
+	//	BOOL res = edit_oneline::_settext(state, buf);
+	//	SendMessage(state.wnd, EM_SETSEL, 0, 0);
 
-		return res;
-	} break;
+	//	return res;
+	//} break;
 	case WM_SYSKEYDOWN://1st msg received after the user presses F10 or Alt+some key
 	{
 		//TODO(fran): notify the parent?

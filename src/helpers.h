@@ -1,6 +1,7 @@
 #pragma once
 #include "win_sdk.h"
 #include "platform.h"
+#include "global.h"
 #include "macros.h"
 #include "reflection.h"
 #include "math.h"
@@ -655,6 +656,27 @@ static void set_window_manager_parent(HWND wnd, HWND manager_parent) {
 	state.manager_parent = manager_parent;
 }
 
+static LRESULT set_window_text(HWND wnd, const cstr* txt, bool notify) {
+	//Uses my custom extension to WM_SETTEXT to pass in a boolean value in the wparam to indicate if the control is allowed to notify the change or not
+	return SendMessage(wnd, WM_SETTEXT, notify, (LPARAM)txt); 
+}
+
+static HWND get_parent_of_class(HWND child, const cstr* parent_class) {
+	HWND res = nil;
+	HWND parent = child;
+	cstr test_class[50];
+	i32 iteration_limit = 0;
+	while ((parent = GetParent(parent)) && (iteration_limit++ < 25)) {
+		if (GetClassName(parent, test_class, ARRAYSIZE(test_class))) {
+			if (!wcscmp(parent_class, test_class)) {
+				res = parent;
+				break;
+			}
+		}
+	}
+	return res;
+}
+
 static void SetText_txt_app(HWND wnd, const TCHAR* new_txt, const TCHAR* new_appname, bool txt_first = true) {
 	if (!new_txt || !*new_txt) {
 		SetWindowText(wnd, new_appname);
@@ -673,37 +695,6 @@ static void SetText_txt_app(HWND wnd, const TCHAR* new_txt, const TCHAR* new_app
 		title_window += new_appname;
 		SetWindowTextW(wnd, title_window.c_str());
 	}
-}
-
-struct tooltip_props {
-	bool multiline = false;
-	u32 delay_ms = U32MAX; // delay between start of mouse over and showing the tooltip
-	u32 duration_ms = U32MAX; // time that the tooltip remains visible
-};
-static auto add_mouseover_tooltip(HWND target, u64 msg_resource_id, tooltip_props props = {}) {
-	auto tooltip = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL,
-		WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
-		CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-		target, nil, nil, nil);
-	Assert(tooltip);
-
-	TOOLINFO toolInfo{ sizeof(toolInfo) };
-	toolInfo.hwnd = target;
-	toolInfo.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
-	toolInfo.uId = (decltype(toolInfo.uId))target;
-	toolInfo.hinst = GetModuleHandle(nil);
-	toolInfo.lpszText = (decltype(toolInfo.lpszText))msg_resource_id;
-	auto addtool_res = SendMessage(tooltip, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
-	Assert(addtool_res);
-
-	if (props.multiline)
-		SendMessage(tooltip, TTM_SETMAXTIPWIDTH, 0, DPI(1000)); //Enables multiline
-	if (props.delay_ms != U32MAX)
-		SendMessage(tooltip, TTM_SETDELAYTIME, TTDT_INITIAL, (LPARAM)props.delay_ms);
-	if (props.duration_ms != U32MAX)
-		SendMessage(tooltip, TTM_SETDELAYTIME, TTDT_AUTOPOP, (LPARAM)props.duration_ms);
-
-	return tooltip;
 }
 
 /**

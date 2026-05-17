@@ -162,6 +162,7 @@ namespace table {
 		static_assert(sizeof...(column_values) <= MAX_COLUMNS);
 		u32 idx = 0;
 		state.rows.push_back({ state.functions.create_control(idx++, state.wnd, column_values)... });
+		ask_window_for_repaint(state.manager_parent);
 		ask_window_for_resize(state.manager_parent);
 		//TODO(fran): BUG when used with password_editor: adding a row after startup doesnt take into account the is_editing state of the parent, controls that should be disabled arent.
 		//Though it can be argued that adding a row should signal the parent to set is_editing to true, but still there's no communication of what the initial state should be. Parent should send more information with the complete initial control configuration through column_values

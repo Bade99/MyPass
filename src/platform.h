@@ -112,5 +112,5 @@ template <typename T>
 requires std::same_as<T, u32>
 void set_flag_bit(T& flags, bool set, T flag) {
 	using signedt = std::make_signed_t<T>;
-	flags |= flag & (T)(-(signedt)set);
+	flags ^= flag & ((-(signedt)set) ^ flags);
 }

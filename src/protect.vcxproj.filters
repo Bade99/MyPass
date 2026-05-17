@@ -225,6 +225,9 @@
     <ClInclude Include="login_types.h">
       <Filter>Header Files\Screens\Login</Filter>
     </ClInclude>
+    <ClInclude Include="advanced_helpers.h">
+      <Filter>Header Files\Utils</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
