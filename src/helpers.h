@@ -564,6 +564,19 @@ struct WindowState {
 	HWND manager_parent; //window in charge of resizing on size request changes from this control
 };
 
+template <typename Func = void(*)(void*)>
+struct StatefulFunction {
+	void* state;
+	Func function;
+
+	template <typename... Args>
+	decltype(auto) operator()(Args&&... args) const {
+		return function(state, std::forward<Args>(args)...);
+	}
+
+	explicit operator bool() const { return function; }
+};
+
 static void init_wndclass(LPCWSTR class_name, WNDPROC proc, UINT extra_styles = 0, LPWSTR default_cursor = IDC_ARROW, HINSTANCE inst = GetModuleHandleW(nil)) {
 	//INFO: Now that we use pre_post_main we cant depend on anything that isnt calculated at compile time for class creation
 	WNDCLASSEXW wcex;

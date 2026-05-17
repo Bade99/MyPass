@@ -25,12 +25,7 @@ void set_user_extra(HWND wnd, void* user_extra) {
 	}
 }
 
-void set_function_has_invalid_chars(HWND wnd, func_has_invalid_chars func) {
-	State& state = *get_state(wnd);
-	if (&state) {
-		state.has_invalid_chars = func;
-	}
-}
+void set_functions(HWND wnd, const Functions& functions) { _control_create_function__set_functions }
 
 SIZE calc_caret_dim(State& state) {
 	SIZE res;
@@ -325,8 +320,8 @@ bool insert_character(State& state, utf16_str s, size_t x_min, size_t x_max) {
 	if (safe_subtract0(state.char_text.length(), sel.sel_width()) < state.char_max_sz) {
 
 		//check for invalid characters
-		if (state.has_invalid_chars) {//TODO(fran): +1 for having always valid function pointers, we could branch on valid on invalid instead we gotta hack in a return statement in the middle of the code
-			auto [invalid, explanation] = state.has_invalid_chars(s.str, maximum((size_t)0, s.sz_char() - 1), state.user_extra);
+		if (state.functions.has_invalid_chars) {//TODO(fran): +1 for having always valid function pointers, we could branch on valid on invalid instead we gotta hack in a return statement in the middle of the code
+			auto [invalid, explanation] = state.functions.has_invalid_chars(s.str, maximum((size_t)0, s.sz_char() - 1), state.user_extra);
 			if (invalid) {
 				res = false;
 				show_tip(state.wnd, explanation.c_str(), EDITONELINE_default_tooltip_duration, ETP::left | ETP::top);
@@ -495,7 +490,8 @@ void set_composition_font(State& state)//TODO(fran): this must set the other stu
 }
 
 void notify_parent(State& state, WORD notif_code) {
-	PostMessage(state.parent, WM_COMMAND, MAKELONG(state.identifier, notif_code), (LPARAM)state.wnd);
+	if (notif_code == EN_CHANGE && state.functions.on_change) state.functions.on_change(state.user_extra, state.wnd);
+	else PostMessage(state.parent, WM_COMMAND, MAKELONG(state.identifier, notif_code), (LPARAM)state.wnd);
 }
 
 bool is_placeholder_visible(State& state) {

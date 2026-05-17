@@ -122,6 +122,11 @@ template<typename F> Defer<F> operator+(defer_dummy, F&& f) { return makeDefer<F
 	for (u32 i = 0; i < ARRAYSIZE(state.functions.all); i++) \
 		if (functions.all[i]) state.functions.all[i] = functions.all[i];
 
+#define _control_create_function__set_stateful_functions \
+	State& state = *get_state(wnd); Assert(&state); \
+	for (u32 i = 0; i < ARRAYSIZE(state.stateful_functions.all); i++) \
+		if (functions.all[i].function) state.stateful_functions.all[i] = functions.all[i];
+
 #define _control_create_function__set_user_data \
 	State& state = *get_state(wnd); Assert(&state); \
 	state.user_data = user_data;

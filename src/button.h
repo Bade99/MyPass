@@ -22,7 +22,7 @@ void set_user_data(HWND wnd, void* user_data) { _control_create_function__set_us
 void set_functions(HWND wnd, const Functions& functions) { _control_create_function__set_functions }
 
 void notify_on_click(State& state) {
-	if (state.functions.on_click) state.functions.on_click(state.user_data);
+	if (state.functions.on_click) state.functions.on_click(state.user_data, state.wnd);
 	else PostMessage(state.parent, WM_COMMAND, (WPARAM)MAKELONG(state.msg_to_send, 0), (LPARAM)state.wnd);
 }
 

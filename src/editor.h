@@ -22,19 +22,27 @@ void on_password_editors_cnt_changed(State& state) {
 	ShowWindow(state.controls.btn_add_end, state.controls.password_editors.size() ? SW_SHOW : SW_HIDE);
 }
 
+static const auto on_password_editor_change = [](void* data, HWND wnd) {
+	auto& state = *(State*)data;
+	set_passwords_need_save(state, true);
+};
+
 struct props { const utf16* title = nil; time_t date_created = 0, date_modified = 0; multiflag<password_editor::ItemFlag> flags = 0; };
 password_editor::State& add_password_editor(State& state, const props& properties, size_t at_idx) {
 	auto wnd = create_window(state.controls.page, password_editor::wndclass, nil, WS_VISIBLE | WS_CHILD, 0, 0, state.wnd);
 	password_editor::set_user_data(wnd, &state);
 	password_editor::set_properties(wnd, {.date_created = properties.date_created, .date_modified = properties.date_modified, .flags = properties.flags});
 	auto& res = *password_editor::get_state(wnd);
-	AWDT(res.controls.edo_title, LANG_PWD_ED_TITLE);
+	password_editor::set_stateful_functions(wnd, {
+		.on_change = { .state = &state, .function = on_password_editor_change  }
+	});
 	password_editor::set_functions(wnd, {
 		.on_delete = [](HWND pwd_ed, void* data) {
 			auto& state = *(State*)data;
 			auto& vec = state.controls.password_editors;
 			for (const auto& [i, c] : vec | std::views::enumerate)
 				if (c == pwd_ed) {
+					on_password_editor_change(&state, c); //TODO(fran): small bug, we should actually check if the data in this editor was saved, if not then it shouldnt set need_save to true
 					DestroyWindow(c);
 					vec.erase(vec.begin() + i);
 					on_password_editors_cnt_changed(state);
@@ -45,6 +53,10 @@ password_editor::State& add_password_editor(State& state, const props& propertie
 				}
 		}
 	});
+	AWDT(res.controls.edo_title, LANG_PWD_ED_TITLE);
+	edit_oneline::set_user_extra(res.controls.edo_title, &state);
+	edit_oneline::set_functions(res.controls.edo_title, { .on_change = on_password_editor_change });
+
 	auto& vec = state.controls.password_editors;
 	auto at = at_idx < vec.size() ? vec.begin() + at_idx : vec.end();
 	vec.insert(at, wnd);
@@ -58,8 +70,13 @@ password_editor::State& add_password_editor(State& state, const props& propertie
 void add_preset_password_editor(State& state, size_t at_idx) {
 	props properties{ .title = L"", .date_created = std::time(nil), .date_modified = properties.date_created };
 	auto& password_editor = add_password_editor(state, properties, at_idx);
-	password_editor::table_add_row(password_editor, RCS(LANG_PWD_ED_TBL_USER), &password_editor::empty_value_cell);
-	password_editor::table_add_row(password_editor, RCS(LANG_PWD_ED_TBL_PASSWORD), &password_editor::empty_value_cell);
+	auto usr_txt = RS(LANG_PWD_ED_TBL_USER);
+	auto pwd_txt = RS(LANG_PWD_ED_TBL_PASSWORD);
+	auto usr = password_editor::empty_description_cell; usr.text = usr_txt.c_str();
+	auto pwd = password_editor::empty_description_cell; pwd.text = pwd_txt.c_str();
+	auto val = password_editor::empty_value_cell;
+	password_editor::table_add_row(password_editor, &usr, &val);
+	password_editor::table_add_row(password_editor, &pwd, &val);
 	password_editor::set_is_open(password_editor, true);
 	password_editor::set_is_editing(password_editor, true);
 	ask_window_for_resize(state.wnd);
@@ -193,7 +210,7 @@ void add_controls(State& state) {
 	SendMessage(controls.btn_add_start, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.add);
 	button::set_user_data(controls.btn_add_start, &state);
 	button::set_functions(controls.btn_add_start, {
-		.on_click = [](void* data) {
+		.on_click = [](void* data, HWND wnd) {
 			auto& state = *(State*)data;
 			add_preset_password_editor(state, 0);
 		}
@@ -205,7 +222,7 @@ void add_controls(State& state) {
 	SendMessage(controls.btn_add_end, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.add);
 	button::set_user_data(controls.btn_add_end, &state);
 	button::set_functions(controls.btn_add_end, {
-		.on_click = [](void* data) {
+		.on_click = [](void* data, HWND wnd) {
 			auto& state = *(State*)data;
 			add_preset_password_editor(state, -1);
 		}
@@ -465,6 +482,8 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 	AppendMenuW(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_FIND, (LPCWSTR)menu_edit);
 	AMT(menu_edit, SHOWPASSWORDS_MENU_FIND, LANG_MENU_EDIT_FIND);
 
+	//TODO(fran): show the hotkey/shortcut key corresponding to the menu item, eg Save\tCtrl+S
+
 	nonclient::set_menu(state.nc_parent, state.menu);
 }
 
@@ -642,19 +661,19 @@ void create_password_editors(State& state, utf16* data) {
 			const auto row_separator = title_separator;
 			for (const auto& row : std::views::split(std::wstring_view(title_end), row_separator)) {
 				const auto col_separator = title_prop_separator;
-				strtype description_cell{ 0 };
+				auto description_cell = password_editor::empty_description_cell;
 				auto value_cell = password_editor::empty_value_cell;
 				for (const auto& [i, col] : std::views::split(row, col_separator) | std::views::enumerate) {
 					auto val = const_cast<strtype>(col.data());
 					terminate_string_view(col);
 					switch (i) {
-					case 0: description_cell = strip(val); continue;
+					case 0: description_cell.text = strip(val); continue;
 					case 1: value_cell.text = val; continue; //TODO(fran): not sure if we want to stript characters from a potential password or not, idk if it is common for apps to allow them (either really using them or ignoring them)
 					case 2: value_cell.flags = wcstoul(val, nil, 10); continue;
 					}
 					break;
 				}
-				password_editor::table_add_row(password_editor, description_cell, &value_cell);
+				password_editor::table_add_row(password_editor, &description_cell, &value_cell);
 			}
 		}
 	}

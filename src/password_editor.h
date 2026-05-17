@@ -31,6 +31,8 @@ namespace password_editor {
 			private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 			} controls;
 
+			ValueCell cell_data;
+
 			bool default_hidden;
 
 			void set_default_hidden(bool new_default_hidden) {
@@ -180,8 +182,10 @@ void on_properties_changed(State& state) {
 	on_internal_state_change(state); //changing the flags changes the rendering
 }
 
-void table_add_row(State& state, const utf16* description, const password_editor::ValueCell* value) {
+void table_add_row(State& state, DescriptionCell* description, ValueCell* value) {
 	auto& tbl = *table::get_state(state.controls.tbl_values);
+	if (!description->on_change) description->on_change = state.stateful_functions.on_change;
+	if (!value->on_change) value->on_change = state.stateful_functions.on_change;
 	table::add_row(tbl, description, value);
 }
 
@@ -192,7 +196,7 @@ void create_controls(State& state) {
 	button::set_theme(controls.btn_card, themes.password_editor_card_btn);
 	button::set_user_data(controls.btn_card, &state);
 	button::set_functions(controls.btn_card, {
-		.on_click = [](void* data) {
+		.on_click = [](void* data, HWND wnd) {
 			auto& state = *(State*)data;
 			set_is_open(state, !state.is_open);
 		}
@@ -215,12 +219,13 @@ void create_controls(State& state) {
 	SendMessage(controls.btn_pin, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.pin);
 	button::set_theme(controls.btn_pin, themes.table_toolbar_btn);
 	add_mouseover_tooltip(controls.btn_pin, LANG_PWD_ED_PIN);
-	button::set_user_data(controls.btn_pin, controls.btn_pin);
+	button::set_user_data(controls.btn_pin, &state);
 	button::set_functions(controls.btn_pin, {
-		.on_click = [](void* data) {
-			auto btn = (HWND)data;
-			auto& state = *button::get_state(btn);
-			button::set_selected(btn, !state.selected);
+		.on_click = [](void* data, HWND wnd) {
+			auto& state = *(State*)data;
+			auto& btn = *button::get_state(state.controls.btn_pin);
+			button::set_selected(btn.wnd, !btn.selected);
+			if (state.stateful_functions.on_change) state.stateful_functions.on_change(state.controls.btn_pin);
 		}
 	});
 
@@ -230,7 +235,7 @@ void create_controls(State& state) {
 	add_mouseover_tooltip(controls.btn_edit, LANG_PWD_ED_EDIT);
 	button::set_user_data(controls.btn_edit, &state);
 	button::set_functions(controls.btn_edit, {
-		.on_click = [](void* data) {
+		.on_click = [](void* data, HWND wnd) {
 			auto& state = *(State*)data;
 			set_is_editing(state, !state.is_editing);
 		}
@@ -242,10 +247,12 @@ void create_controls(State& state) {
 	add_mouseover_tooltip(controls.btn_add, LANG_PWD_ED_ADD);
 	button::set_user_data(controls.btn_add, &state);
 	button::set_functions(controls.btn_add, {
-		.on_click = [](void* data) {
+		.on_click = [](void* data, HWND wnd) {
 			auto& state = *(State*)data;
 			auto& tbl = *table::get_state(state.controls.tbl_values);
-			table_add_row(state, L"", &empty_value_cell);
+			auto desc = empty_description_cell;
+			auto val = empty_value_cell;
+			table_add_row(state, &desc, &val);
 			// When a row is added we go into editing mode to allow the user to edit directly
 			set_is_editing(state, true);
 		}
@@ -257,7 +264,7 @@ void create_controls(State& state) {
 	add_mouseover_tooltip(controls.btn_del, LANG_PWD_ED_DELETE);
 	button::set_user_data(controls.btn_del, &state);
 	button::set_functions(controls.btn_del, {
-		.on_click = [](void* data) {
+		.on_click = [](void* data, HWND wnd) {
 			auto& state = *(State*)data;
 			state.functions.on_delete(state.wnd, state.user_data);
 		}
@@ -274,35 +281,40 @@ void create_controls(State& state) {
 			switch (column_idx) {
 				case 0: 
 				{
-					auto text = (const utf16*)data;
+					auto& cell = *(const DescriptionCell*)data;
 					auto wnd = create_window(parent, edit_oneline::wndclass);
-					SetWindowTextW(wnd, text);
+					SetWindowTextW(wnd, cell.text);
 					edit_oneline::set_theme(wnd, themes.clear_editoneline);
 					AWDT(wnd, LANG_PWD_ED_TBL_FIELD);
 					SetWindowFont(wnd, fonts.General, true);
+					edit_oneline::set_user_extra(wnd, cell.on_change.state);
+					edit_oneline::set_functions(wnd, {.on_change = cell.on_change.function});
 					return wnd;
 				}
 				case 1: 
 				{
-					auto cell = (const ValueCell*)data;
+					auto& cell = *(const ValueCell*)data;
 
 					auto& state = *(value_cell::State*)calloc(1, sizeof(value_cell::State));
 					state.parent = parent;
 					state.wnd = create_window(parent, value_cell::wndclass);
+					state.cell_data = cell;
 					
 					auto& controls = state.controls;
 
 					controls.text = create_window(state.wnd, edit_oneline::wndclass);
 					AWDT(controls.text, LANG_PWD_ED_TBL_VALUE);
-					SetWindowTextW(controls.text, cell->text);
+					SetWindowTextW(controls.text, cell.text);
 					edit_oneline::set_theme(controls.text, themes.clear_editoneline);
+					edit_oneline::set_user_extra(controls.text, cell.on_change.state);
+					edit_oneline::set_functions(controls.text, { .on_change = cell.on_change.function });
 
 					controls.btn_show = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
 					SendMessage(controls.btn_show, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.eye_open);
 					add_mouseover_tooltip(controls.btn_show, LANG_PWD_ED_TBL_SHOW);
 					button::set_user_data(controls.btn_show, &state);
 					button::set_functions(controls.btn_show, {
-						.on_click = [](void* data) {
+						.on_click = [](void* data, HWND wnd) {
 							value_cell::State& state = *(value_cell::State*)data;
 							auto& controls = state.controls;
 							LONG_PTR style = GetWindowLongPtr(controls.text, GWL_STYLE) ^ ES_PASSWORD;
@@ -318,7 +330,7 @@ void create_controls(State& state) {
 					add_mouseover_tooltip(controls.btn_copy, LANG_PWD_ED_TBL_COPY);
 					button::set_user_data(controls.btn_copy, &state);
 					button::set_functions(controls.btn_copy, {
-						.on_click = [](void* data) {
+						.on_click = [](void* data, HWND wnd) {
 							value_cell::State& state = *(value_cell::State*)data;
 							auto& text = state.controls.text;
 							auto& text_state = *edit_oneline::get_state(text);
@@ -336,9 +348,10 @@ void create_controls(State& state) {
 					add_mouseover_tooltip(controls.btn_lock, LANG_PWD_ED_TBL_LOCK);
 					button::set_user_data(controls.btn_lock, &state);
 					button::set_functions(controls.btn_lock, {
-						.on_click = [](void* data) {
+						.on_click = [](void* data, HWND wnd) {
 							value_cell::State& state = *(value_cell::State*)data;
 							state.set_default_hidden(!state.default_hidden);
+							state.cell_data.on_change(state.controls.btn_lock);
 						}
 					});
 
@@ -347,9 +360,10 @@ void create_controls(State& state) {
 					add_mouseover_tooltip(controls.btn_del, LANG_PWD_ED_TBL_DELETE);
 					button::set_user_data(controls.btn_del, &state);
 					button::set_functions(controls.btn_del, {
-						.on_click = [](void* data) {
+						.on_click = [](void* data, HWND wnd) {
 							value_cell::State& state = *(value_cell::State*)data;
 							auto& tbl_state = *table::get_state(state.parent);
+							state.cell_data.on_change(state.controls.btn_del);
 							table::delete_row(tbl_state, state.wnd);
 						}
 					});
@@ -362,7 +376,7 @@ void create_controls(State& state) {
 
 					set_window_state(state.wnd, &state);
 
-					state.set_default_hidden(cell->flags & ValueCellFlag::lock);
+					state.set_default_hidden(cell.flags & ValueCellFlag::lock);
 
 					return state.wnd;
 				}
@@ -542,6 +556,8 @@ _init_wndclass_at_startup;
 void set_user_data(HWND wnd, void* user_data) { _control_create_function__set_user_data }
 
 void set_functions(HWND wnd, const Functions& functions) { _control_create_function__set_functions }
+
+void set_stateful_functions(HWND wnd, const StatefulFunctions& functions) { _control_create_function__set_stateful_functions }
 
 void set_properties(HWND wnd, const Properties& properties) {
 	State& state = *get_state(wnd);

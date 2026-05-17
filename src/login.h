@@ -100,7 +100,7 @@ void add_controls(State& state) {
 	controls.edit_username = create_window(state.wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP, 0, EDIT_USERNAME);
 	edit_oneline::set_theme(controls.edit_username, themes.login_editoneline);
 	AWDT(controls.edit_username, LANG_LOGIN_USERNAME);
-	edit_oneline::set_function_has_invalid_chars(controls.edit_username, [](const utf16* str, size_t char_cnt, void*) -> auto {
+	edit_oneline::set_functions(controls.edit_username, { .has_invalid_chars = [](const utf16* str, size_t char_cnt, void*) -> auto {
 		edit_oneline::_has_invalid_chars res{};
 		constexpr auto& invalid_username_chars = _t("<>:\"/\\|?*"); //INFO: there's more to it than this, there are some special restrictions that we implemented outside the control when the user presses login https://gist.github.com/doctaphred/d01d05291546186941e1b7ddc02034d3
 		for (u64 i = 0; i < ArraySizeWithoutTerminator(invalid_username_chars); i++) {
@@ -111,7 +111,7 @@ void add_controls(State& state) {
 			}
 		}
 		return res;
-	});
+	}});
 
 	controls.edit_password = create_window(state.wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_PASSWORD, 0, EDIT_PASSWORD);
 	edit_oneline::set_theme(controls.edit_password, themes.login_editoneline);
@@ -143,7 +143,7 @@ void add_controls(State& state) {
 	button::set_theme(controls.button_cancel, themes.login_btn_cancel);
 	button::set_user_data(controls.button_cancel, &state);
 	button::set_functions(controls.button_cancel, {
-		.on_click = [](void* data) {
+		.on_click = [](void* data, HWND wnd) {
 			auto& state = *(State*)data;
 			set_signup_mode(state, false);
 		}

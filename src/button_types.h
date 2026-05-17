@@ -6,7 +6,7 @@ constexpr auto& wndclass = wndclass_name("button");
 
 constexpr auto max_expected_text_length = 500;
 
-typedef void(*func_onclick)(void* data);
+typedef void(*func_onclick)(void* data, HWND wnd);
 
 union Functions {
 	struct {

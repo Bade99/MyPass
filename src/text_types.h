@@ -45,10 +45,6 @@ constexpr auto& wndclass = wndclass_name("text");
 
 constexpr cstr password_char = sizeof(password_char) > 1 ? _t('●') : _t('*');
 
-//TODO(fran): now that I think about it I believe this would be much better done once you need the contents from the editbox, you can perform a one time check, send one notification to the user informing of the problem and that's it
-struct _has_invalid_chars { bool res; std::wstring explanation; };
-typedef _has_invalid_chars(*func_has_invalid_chars)(const utf16* txt, size_t char_cnt, void* user_extra);
-
 struct char_sel {
 	using type = size_t;
 	type anchor;//Eg ABC		anchor=1	anchor is between A and B
@@ -103,15 +99,35 @@ struct Theme {
 	}
 };
 
-struct State {
-	HWND wnd;
-	HWND parent;
+union Controls {
+	struct {
+		HWND tooltip;
+	};
+	HWND all[1];
+
+private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
+};
+
+//TODO(fran): now that I think about it I believe this would be much better done once you need the contents from the editbox, you can perform a one time check, send one notification to the user informing of the problem and that's it
+struct _has_invalid_chars { bool res; std::wstring explanation; };
+typedef _has_invalid_chars(*func_has_invalid_chars)(const utf16* txt, size_t char_cnt, void* user_extra);
+typedef void(*func_on_change)(void* user_extra, HWND wnd);
+
+union Functions {
+	struct {
+		func_has_invalid_chars has_invalid_chars;
+		func_on_change on_change;
+	};
+	void* all[2]{ 0 };
+private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
+};
+
+struct State : WindowState {
 	u32 identifier;
 
 	Theme theme;
 
 	u64 char_max_sz;//doesnt include terminating null, also we wont have terminating null
-
 
 	char_sel selection;//current selection, in "character" coordinates, zero-based //TODO(fran): cache selection's starting line
 
@@ -132,14 +148,7 @@ struct State {
 	cstr placeholder[100]; //NOTE: uses txt_dis brush for rendering
 	bool maintain_placerholder_on_focus;//Hide placeholder text when the user clicks over it
 
-	union EditOnelineControls {
-		struct {
-			HWND tooltip;
-		};
-		HWND all[1];
-
-	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
-	}controls;
+	Controls controls;
 
 	bool on_mouse_tracking;//true when capturing the mouse while the user remains with left click down
 
@@ -150,7 +159,7 @@ struct State {
 
 	void* user_extra;
 
-	func_has_invalid_chars has_invalid_chars;
+	Functions functions;
 
 	v2_i32 scroll;//TODO(fran): v2_i64?
 };
