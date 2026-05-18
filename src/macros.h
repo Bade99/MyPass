@@ -35,7 +35,7 @@
 #endif
 
 //Assert guaranteed to be executed in any build configuration whether assertions are enabled or not
-#define runtime_assert(assertion,msg) if (!(assertion))MessageBoxW(0,msg,L"Error",MB_OK|MB_ICONWARNING|MB_SETFOREGROUND) || (*(int*)NULL = 0)==0
+#define runtime_assert(assertion,msg) if (!(assertion))MessageBox(0,msg,TEXT("Error"),MB_OK|MB_ICONWARNING|MB_SETFOREGROUND) || (*(int*)NULL = 0)==0
 
 
 /**

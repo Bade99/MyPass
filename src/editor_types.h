@@ -12,6 +12,8 @@ constexpr auto debug_text_view = true;
 constexpr auto debug_text_view = false;
 #endif
 
+constexpr auto msgbox_placement = MBP::center | MBP::top;
+
 struct Settings {
 
 #define foreach_editor_member(op) \

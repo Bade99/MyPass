@@ -608,7 +608,7 @@ void save_passwords_v0(State& state) {
 
 	bool res = save_to_file_user(state.current_user, mem, len_bytes);
 	set_passwords_need_save(state, !res);
-	if (!res) MessageBox(state.wnd, RCS(LANG_ERROR_SAVEFILE_PASSWORDS), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
+	if (!res) CustomMessageBox(state.wnd, RCS(LANG_ERROR_SAVEFILE_PASSWORDS), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement);
 }
 
 void save_passwords(State& state) {
@@ -628,7 +628,7 @@ void save_passwords(State& state) {
 	
 	bool res = save_to_file_user(state.current_user, data_ptr, data_cnt_bytes);
 	set_passwords_need_save(state, !res);
-	if (!res) MessageBox(state.wnd, RCS(LANG_ERROR_SAVEFILE_PASSWORDS), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
+	if (!res) CustomMessageBox(state.wnd, RCS(LANG_ERROR_SAVEFILE_PASSWORDS), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement);
 }
 
 template<typename T> //I give up trying to write down the entire type of a string view subrange coming from std::views::split
@@ -833,7 +833,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		bool client_handled = false;
 		if (state.passwords_need_save) {
-			int ret = MessageBox(state.wnd, RCS(LANG_UNSAVEDCHANGES_TXT), RCS(LANG_UNSAVEDCHANGES_TITLE), MB_YESNOCANCEL | MB_ICONWARNING | MB_SETFOREGROUND | MB_APPLMODAL);
+			int ret = CustomMessageBox(state.wnd, RCS(LANG_UNSAVEDCHANGES_TXT), RCS(LANG_UNSAVEDCHANGES_TITLE), MB_YESNOCANCEL | MB_ICONWARNING | MB_SETFOREGROUND | MB_APPLMODAL, msgbox_placement);
 			switch (ret) {
 			case IDCANCEL:
 			{
