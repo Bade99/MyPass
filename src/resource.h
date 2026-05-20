@@ -63,10 +63,12 @@
 #define LANG_PWD_ED_DELETE              160
 #define BMP_MENU_RESTORE                160
 #define LANG_PWD_ED_TBL_SHOW            161
-#define IDB_BITMAP2                     161
 #define BMP_RESTORE                     161
 #define LANG_PWD_ED_TBL_COPY            162
+#define BMP_UNDO                        162
 #define LANG_PWD_ED_TBL_DELETE          163
+#define IDB_BITMAP2                     163
+#define BMP_SAVE                        163
 #define LANG_PWD_ED_TBL_LOCK            164
 #define LANG_PWD_ED_TBL_USER            165
 #define LANG_PWD_ED_TBL_PASSWORD        166
@@ -97,7 +99,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        162
+#define _APS_NEXT_RESOURCE_VALUE        164
 #define _APS_NEXT_COMMAND_VALUE         32778
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           110

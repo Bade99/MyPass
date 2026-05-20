@@ -39,6 +39,7 @@ static auto add_mouseover_tooltip(HWND target, u64 msg_resource_id, tooltip_prop
 
 }
 
+
 /**
   * Messagebox
   */
@@ -121,4 +122,68 @@ static int CustomMessageBox(HWND relative_to, const cstr* lpText, const cstr* lp
 	HHOOK hook_proc = SetWindowsHookEx(WH_CBT, __msgbox_hook, 0, GetCurrentThreadId()); defer{ UnhookWindowsHookEx(hook_proc); };
 	int res = MessageBox(relative_to, lpText, lpCaption, uType);
 	return res;
+}
+
+
+/**
+  * Bitmap
+  */
+
+HBITMAP flip_bitmap(HBITMAP srcBitmap, bool flipHorizontal, bool flipVertical) {
+	Assert(flipHorizontal || flipVertical);
+    if (!srcBitmap) return nil;
+
+    DIBSECTION dib{};
+    if (!GetObject(srcBitmap, sizeof(dib), &dib)) return nil;
+    if (!dib.dsBm.bmBits) return nil;
+
+    const int width = dib.dsBm.bmWidth;
+    const int height = dib.dsBm.bmHeight;
+    const int bitsPerPixel = dib.dsBm.bmBitsPixel;
+	Assert(bitsPerPixel == 8); // Doesnt properly support all other bpps
+
+    // Row stride aligned to 4 bytes
+    const int stride = ((width * bitsPerPixel + 31) / 32) * 4;
+
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = height;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = bitsPerPixel;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* dstBits = nil;
+    HDC screenDC = GetDC(nil);
+    HBITMAP dstBitmap = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &dstBits, nil, 0);
+    ReleaseDC(nil, screenDC);
+    if (!dstBitmap || !dstBits) return nil;
+
+    const auto* src = (const u8*)(dib.dsBm.bmBits);
+    auto* dst = (u8*)(dstBits);
+
+    for (int y = 0; y < height; y++) {
+        const int srcY = flipVertical ? (height - 1 - y) : y;
+
+        const auto* srcRow = src + srcY * stride;
+        auto* dstRow = dst + y * stride;
+
+        if (!flipHorizontal) memcpy(dstRow, srcRow, stride);
+        else {
+            const int bytesPerPixel = bitsPerPixel / 8;
+
+            // Optimized path for 8-bit
+            if (bitsPerPixel == 8) for (int x = 0; x < width; x++) dstRow[x] = srcRow[width - 1 - x];
+            else {
+                // Generic path
+                for (int x = 0; x < width; x++) {
+                    const int srcX = width - 1 - x;
+
+                    memcpy(dstRow + x * bytesPerPixel, srcRow + srcX * bytesPerPixel, bytesPerPixel);
+                }
+            }
+        }
+    }
+
+    return dstBitmap;
 }

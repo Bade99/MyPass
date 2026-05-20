@@ -852,9 +852,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 							int img_max_x = GetSystemMetrics(SM_CXMENUCHECK);
 							int img_max_y = RECTH(item->rcItem);
+							auto img_min_dim = minimum(img_max_x, img_max_y);
 							//HACK: instead use png + gdi+ + color matrices
 							int img_sz = (bitmap.bmBitsPixel == 1) ? 
-								roundNdown(bitmap.bmWidth, minimum(img_max_x, img_max_y)) : 16;
+								roundNdown(bitmap.bmWidth, img_min_dim) : clamp(0, (i32)bitmap.bmWidth, img_min_dim);
 							if (!img_sz)img_sz = bitmap.bmWidth; //More HACKs
 							int bmp_height = img_sz;
 							int bmp_width = bmp_height;

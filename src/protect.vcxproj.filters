@@ -339,5 +339,11 @@
     <Image Include="..\icons\Restore16.bmp">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="..\icons\Undo_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\Save_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

@@ -241,9 +241,11 @@
     <Image Include="..\icons\Pin_A.bmp" />
     <Image Include="..\icons\Restore16.bmp" />
     <Image Include="..\icons\RightArrow16.bmp" />
+    <Image Include="..\icons\Save_A.bmp" />
     <Image Include="..\icons\Search32.bmp" />
     <Image Include="..\icons\Search_A.bmp" />
     <Image Include="..\icons\SolidArrowRight16.bmp" />
+    <Image Include="..\icons\Undo_A.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

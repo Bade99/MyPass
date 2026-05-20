@@ -42,6 +42,10 @@ void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 		return (HBITMAP)LoadImage(instance, MAKEINTRESOURCE(resource_id), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION | LR_SHARED);
 	};
 
+	auto load_bitmap8_menu = [](HINSTANCE instance, u32 resource_id) {
+		return (HBITMAP)LoadImage(instance, MAKEINTRESOURCE(resource_id), IMAGE_BITMAP, 8, 8, LR_CREATEDIBSECTION | LR_SHARED);
+	};
+
 	bmps.add = LoadBitmap(instance, MAKEINTRESOURCE(BMP_ADD));
 	bmps.edit = LoadBitmap(instance, MAKEINTRESOURCE(BMP_EDIT));
 	bmps.clipboard = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CLIPBOARD));
@@ -67,6 +71,10 @@ void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 	bmps.eye_open = load_bitmap8(instance, BMP_EYE_OPEN);
 	bmps.eye_closed = load_bitmap8(instance, BMP_EYE_CLOSED);
 	bmps.search = load_bitmap8(instance, BMP_SEARCH);
+	bmps.menu_search = load_bitmap8_menu(instance, BMP_SEARCH);
+	bmps.menu_undo = load_bitmap8(instance, BMP_UNDO);
+	bmps.menu_redo = flip_bitmap(bmps.menu_undo, true, false);
+	bmps.menu_save = load_bitmap8(instance, BMP_SAVE);
 	bmps.pin = load_bitmap8(instance, BMP_PIN);
 
 	atexit([]() { for (auto& bmp : bmps.all) if (bmp) { DeleteObject(bmp); bmp = nil; } });

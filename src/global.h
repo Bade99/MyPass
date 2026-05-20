@@ -104,11 +104,15 @@ union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 		HBITMAP padlock;
 		HBITMAP cancel;
 		HBITMAP search;
+		HBITMAP menu_search;
 		HBITMAP calendar;
 		HBITMAP language;
 		HBITMAP pin;
+		HBITMAP menu_undo;
+		HBITMAP menu_redo;
+		HBITMAP menu_save;
 	};
-	HBITMAP all[25];
+	HBITMAP all[29];
 
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 } static bmps{};

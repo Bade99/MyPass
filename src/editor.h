@@ -485,6 +485,7 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 
 	AppendMenuW(menu_file, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_SAVE, (LPCWSTR)menu_file);
 	AMT(menu_file, SHOWPASSWORDS_MENU_SAVE, LANG_MENU_SAVE);
+	SetMenuItemBitmaps(menu_file, SHOWPASSWORDS_MENU_SAVE, MF_BYCOMMAND, bmps.menu_save, bmps.menu_save);
 
 	AppendMenuW(menu_file, MF_SEPARATOR | MF_OWNERDRAW, SHOWPASSWORDS_MENU_SEPARATOR1, (LPCWSTR)menu_file);
 
@@ -508,12 +509,15 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 
 	AppendMenuW(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_UNDO, (LPCWSTR)menu_edit);
 	AMT(menu_edit, SHOWPASSWORDS_MENU_UNDO, LANG_MENU_EDIT_UNDO);
+	SetMenuItemBitmaps(menu_edit, SHOWPASSWORDS_MENU_UNDO, MF_BYCOMMAND, bmps.menu_undo, bmps.menu_undo);
 
 	AppendMenuW(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_REDO, (LPCWSTR)menu_edit);
 	AMT(menu_edit, SHOWPASSWORDS_MENU_REDO, LANG_MENU_EDIT_REDO);
+	SetMenuItemBitmaps(menu_edit, SHOWPASSWORDS_MENU_REDO, MF_BYCOMMAND, bmps.menu_redo, bmps.menu_redo);
 
 	AppendMenuW(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_FIND, (LPCWSTR)menu_edit);
 	AMT(menu_edit, SHOWPASSWORDS_MENU_FIND, LANG_MENU_EDIT_FIND);
+	SetMenuItemBitmaps(menu_edit, SHOWPASSWORDS_MENU_FIND, MF_BYCOMMAND, bmps.menu_search, bmps.menu_search);
 
 	//TODO(fran): show the hotkey/shortcut key corresponding to the menu item, eg Save\tCtrl+S
 
