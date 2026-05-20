@@ -32,8 +32,8 @@ typedef int16_t i16;
 typedef int32_t i32;
 typedef int64_t i64;
 
-constexpr i8 I8MAX = std::numeric_limits<i8>::max();
-constexpr i8 I8MIN = std::numeric_limits<i8>::min();
+constexpr i8  I8MAX  = std::numeric_limits<i8>::max();
+constexpr i8  I8MIN  = std::numeric_limits<i8>::min();
 constexpr i16 I16MAX = std::numeric_limits<i16>::max();
 constexpr i16 I16MIN = std::numeric_limits<i16>::min();
 constexpr i32 I32MAX = std::numeric_limits<i32>::max();
@@ -43,12 +43,13 @@ constexpr i64 I64MIN = std::numeric_limits<i64>::min();
 
 typedef float  f32;
 typedef double f64;
-typedef char     utf8;
-typedef wchar_t  utf16;
-typedef char32_t utf32;
 
 constexpr f32 F32INFINITY = std::numeric_limits<f32>::infinity();
 constexpr f32 F64INFINITY = std::numeric_limits<f64>::infinity();
+
+typedef char     utf8;
+typedef wchar_t  utf16;
+typedef char32_t utf32;
 
 
 #ifndef UNICODE

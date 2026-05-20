@@ -83,9 +83,15 @@ union known_fonts {
 union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 	struct {
 		HBITMAP close;
-		HBITMAP maximize;
 		HBITMAP minimize;
+		HBITMAP maximize;
+		HBITMAP restore;
+		HBITMAP menu_close;
+		HBITMAP menu_minimize;
+		HBITMAP menu_maximize;
+		HBITMAP menu_restore;
 		HBITMAP solid_arrow_right;
+		HBITMAP line_arrow_right;
 		HBITMAP dropdown;
 		HBITMAP dropdown_up;
 		HBITMAP circle;
@@ -102,7 +108,7 @@ union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 		HBITMAP language;
 		HBITMAP pin;
 	};
-	HBITMAP all[19];
+	HBITMAP all[25];
 
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 } static bmps{};

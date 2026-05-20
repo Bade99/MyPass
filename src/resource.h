@@ -52,12 +52,19 @@
 #define LANG_SIGNUP                     155
 #define ED_SHORTCUTS                    155
 #define LANG_CREATEACCOUNT              156
+#define BMP_LINE_ARROW_RIGHT            156
 #define LANG_ERROR_SAVEFILE             157
 #define LANG_ERROR_SAVEFILE_PASSWORDS   157
+#define BMP_MENU_CLOSE                  157
 #define LANG_PWD_ED_EDIT                158
+#define BMP_MENU_MAXIMIZE               158
 #define LANG_PWD_ED_ADD                 159
+#define BMP_MENU_MINIMIZE               159
 #define LANG_PWD_ED_DELETE              160
+#define BMP_MENU_RESTORE                160
 #define LANG_PWD_ED_TBL_SHOW            161
+#define IDB_BITMAP2                     161
+#define BMP_RESTORE                     161
 #define LANG_PWD_ED_TBL_COPY            162
 #define LANG_PWD_ED_TBL_DELETE          163
 #define LANG_PWD_ED_TBL_LOCK            164
@@ -81,6 +88,7 @@
 #define LANG_CONTROL_SIGNUP             182
 #define LANG_CONTROL_CANCEL             183
 #define LANG_PWD_ED_PIN                 184
+#define LANG_TRANSITION_ICON            185
 #define WMN_FIND                        32774
 #define WMN_SAVE                        32776
 
@@ -89,7 +97,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        156
+#define _APS_NEXT_RESOURCE_VALUE        162
 #define _APS_NEXT_COMMAND_VALUE         32778
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           110

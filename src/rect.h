@@ -32,6 +32,13 @@ union rect_i32 {
 		rect_i32 cut_section{ this->left, this->top + this->h, this->w, h };
 		return cut_section;
 	}
+	rect_i32 cut_center(i32 w, i32 h) {
+		rect_i32 cut_section{ this->center_x() - w / 2, this->center_y() - h / 2, w, h };
+		return cut_section;
+	}
+	rect_i32 cut_center(i32 dim) {
+		return this->cut_center(dim, dim);
+	}
 
 	RECT to_RECT() {
 		RECT res;

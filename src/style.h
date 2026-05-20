@@ -16,6 +16,7 @@ struct Themes {
 	button::Theme password_editor_toolbar_btn_static;
 	button::Theme table_toolbar_btn;
 	button::Theme table_toolbar_btn_danger;
+	button::Theme transition_btn;
 	//static button::Theme img_btn_theme;
 	//static button::Theme accent_btn_theme;
 	//static static_oneline::Theme base_static_theme;
@@ -47,12 +48,18 @@ void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 	bmps.padlock = LoadBitmap(instance, MAKEINTRESOURCE(BMP_PADLOCK));
 	bmps.solid_arrow_right = LoadBitmap(instance, MAKEINTRESOURCE(BMP_SOLID_ARROW_RIGHT));
 	bmps.close = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CLOSE));
-	bmps.maximize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MAX));
 	bmps.minimize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MIN));
+	bmps.maximize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MAX));
+	bmps.restore = LoadBitmap(instance, MAKEINTRESOURCE(BMP_RESTORE));
+	bmps.menu_close = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MENU_CLOSE));
+	bmps.menu_minimize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MENU_MINIMIZE));
+	bmps.menu_maximize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MENU_MAXIMIZE));
+	bmps.menu_restore = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MENU_RESTORE));
 	bmps.calendar = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CALENDAR));
 	bmps.dropdown = LoadBitmap(instance, MAKEINTRESOURCE(BMP_DROPDOWN));
 	bmps.dropdown_up = LoadBitmap(instance, MAKEINTRESOURCE(BMP_DROPDOWN_UP));
 	bmps.bin = LoadBitmap(instance, MAKEINTRESOURCE(BMP_BIN));
+	bmps.line_arrow_right = LoadBitmap(instance, MAKEINTRESOURCE(BMP_LINE_ARROW_RIGHT));
 
 	bmps.circle = load_bitmap8(instance, BMP_CIRCLE);
 	bmps.language = load_bitmap8(instance, BMP_LANGUAGE);
@@ -229,6 +236,15 @@ void load_styles() {
 		t.brushes.bk.clicked = colors.Btn_Delete_BkPush;
 		t.dimensions.border_thickness = 0;
 		t.dimensions.border_radius = { .type = UINumber::type::percent, .value = 50 };
+		return t;
+	}();
+
+	themes.transition_btn = [&]()->auto {
+		button::Theme t{};
+		for (auto& b : t.brushes.bk.all) b = colors.ControlBk_Disabled;
+		for (auto& b : t.brushes.foreground.all) b = colors.ControlTxt_Disabled_Strong;
+		for (auto& b : t.brushes.border.all) b = hollow_brush;
+		t.dimensions.border_radius = { .type = UINumber::type::dpi, .value = 10 };
 		return t;
 	}();
 

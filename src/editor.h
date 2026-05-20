@@ -95,86 +95,99 @@ void resize_controls(State& state) {
 	auto& controls = state.controls;
 	RECT r; GetClientRect(state.wnd, &r);
 	auto w = RECTW(r), h = RECTH(r);
+	i32 spacing = DPI(15); //TODO: add to theme
+	i32 w_pad = 0;
 
-	i32 offset = 0;
-	if constexpr (debug_text_view) {
-		rect_i32 edit_showpasswords{ .x = 0, .y = 0, .w = w, .h = (i32)(h * .25f) };
+	i32 offset_y = 0;
+	{
+		i32 offset_x = 0;
+		if (state.mode == mode::transition_v0) {
+			rect_i32 edit_showpasswords{ .x = 0, .y = 0, .w = w / 2, .h = h };
+			offset_x = edit_showpasswords.right();
+			w -= offset_x;
 
-		MoveWindow(controls.edit_passwords, edit_showpasswords);
-		offset = h * .25f;
+			auto btn_transition_w = DPI(20);
+			auto icon_transition = edit_showpasswords.cut_right(spacing / 2 + btn_transition_w).cut_right(btn_transition_w);
+			//auto icon_transition = edit_showpasswords.cut_right(btn_transition_w).cut_center(btn_transition_w);
+
+			MoveWindow(controls.edit_passwords, edit_showpasswords);
+			MoveWindow(controls.icon_transition, icon_transition);
+		}
+
+		offset_y = spacing;
+
+		w_pad = (i32)(w * pad_percent);
+
+		auto search_max_w = avg_str_dim(GetWindowFont(controls.search), 35).cx;
+		bool sort_on_next_line = w <= search_max_w * 1.5f;
+		rect_i32 search{
+			.x = offset_x + w_pad,
+			.y = offset_y,
+			.w = minimum((sort_on_next_line ? w - w_pad : w / 2) - w_pad, search_max_w),
+			.h = (i32)DPI(30)
+		};
+		MoveWindow(controls.search, search);
+
+		i32 sort_w = search.w * .9f;
+		rect_i32 sort{
+			.x = sort_on_next_line ? search.x : offset_x + w - w_pad - sort_w,
+			.y = sort_on_next_line ? search.bottom() + spacing : search.y,
+			.w = sort_w,
+			.h = search.h
+		};
+		MoveWindow(controls.combo_sort, sort);
+
+		offset_y = sort.bottom() + spacing;
+
+		rect_i32 page_space{ .x = offset_x, .y = offset_y, .w = w, .h = h - offset_y };
+		MoveWindow(controls.page_space, page_space, false);
 	}
 
-	i32 spacing = DPI(15); //TODO: add to theme
-
-	offset += spacing;
-
-	auto search_max_w = avg_str_dim(GetWindowFont(controls.search), 35).cx;
-	bool sort_on_next_line = w <= search_max_w * 1.5f;
-	rect_i32 search{ 
-		.x = (i32)(w * pad_percent),
-		.y = offset, 
-		.w = minimum((sort_on_next_line ? w - search.x : w / 2) - search.x, search_max_w),
-		.h = (i32)DPI(30)
-	};
-	MoveWindow(controls.search, search);
-	
-	i32 sort_w = search.w * .9f;
-	rect_i32 sort{ 
-		.x = sort_on_next_line ? search.x : (i32)(w * (1 - pad_percent) - sort_w),
-		.y = sort_on_next_line ? search.bottom() + spacing : search.y,
-		.w = sort_w,
-		.h = search.h
-	};
-	MoveWindow(controls.combo_sort, sort);
-		
-	offset = sort.bottom() + spacing;
-
-	rect_i32 page_space{ .x = 0, .y = offset, .w = w, .h = h - offset };
-	MoveWindow(controls.page_space, page_space, false);
-
-	offset = 0;
+	offset_y = 0;
 	i32 btn_add_dim = DPI(30);
 	i32 btn_add_x = (w - btn_add_dim) / 2;
 
 	if (controls.password_editors.size()) {
-		auto btn_add_start_y = offset + spacing - btn_add_dim / 2;
+		auto btn_add_start_y = offset_y + spacing - btn_add_dim / 2;
 		MoveWindow(controls.btn_add_start, btn_add_x, btn_add_start_y, btn_add_dim, btn_add_dim, true);
-		auto old_offset = offset;
-		offset = btn_add_start_y + btn_add_dim + spacing;
+		auto old_offset = offset_y;
+		offset_y = btn_add_start_y + btn_add_dim + spacing;
 		bool any_visible = false;
 		for (const auto& p : controls.password_editors) {
 			if (IsWindowVisible(p)) {
 				any_visible = true;
 				const auto& pstate = *password_editor::get_state(p);
 				auto item_h = password_editor::resize_controls(pstate, false);
-				MoveWindow(p, w * pad_percent, offset, w * (1 - pad_percent * 2), item_h, true);
-				offset += (item_h + spacing);
+				MoveWindow(p, w_pad, offset_y, w - 2 * w_pad, item_h, true);
+				offset_y += (item_h + spacing);
 			}
 		}
 		if (!any_visible) {
-			offset = old_offset;
+			offset_y = old_offset;
 			goto empty_editor;
 		}
 
-		MoveWindow(controls.btn_add_end, btn_add_x, offset, btn_add_dim, btn_add_dim, true);
-		offset += btn_add_dim;
+		MoveWindow(controls.btn_add_end, btn_add_x, offset_y, btn_add_dim, btn_add_dim, true);
+		offset_y += btn_add_dim;
 	}
 	else {
 		empty_editor:
-		RECT btn_add_start{ .left = (w - btn_add_dim) / 2, .top = offset + spacing - btn_add_dim / 2, .right = btn_add_start.left + btn_add_dim, .bottom = btn_add_start.top + btn_add_dim };
-		MoveWindow(controls.btn_add_start, btn_add_x, offset + spacing, btn_add_dim, btn_add_dim, true);
-		offset += (spacing + btn_add_dim);
+		RECT btn_add_start{ 
+			.left = (w - btn_add_dim) / 2, .top = offset_y + spacing - btn_add_dim / 2, 
+			.right = btn_add_start.left + btn_add_dim, .bottom = btn_add_start.top + btn_add_dim 
+		};
+		MoveWindow(controls.btn_add_start, btn_add_x, offset_y + spacing, btn_add_dim, btn_add_dim, true);
+		offset_y += (spacing + btn_add_dim);
 
 		MoveWindow(controls.btn_add_end, DPI(-100), 0, btn_add_dim, btn_add_dim, true); //HACK: hide end button without having to worry about restoring visibility states
 	}
-	offset += spacing;
-	page::set_wnd_size(controls.page, controls.page_space, offset); //TODO(fran): it may be better to resize the page before all of its children, so that we dont cause issues where the children cant re-render because they arent within the visible area of the parent (this may be a non issue though, and by tracking scrolling events and making visible and rendering the proper children this may fix itself)
+	offset_y += spacing;
+	page::set_wnd_size(controls.page, controls.page_space, offset_y); //TODO(fran): it may be better to resize the page before all of its children, so that we dont cause issues where the children cant re-render because they arent within the visible area of the parent (this may be a non issue though, and by tracking scrolling events and making visible and rendering the proper children this may fix itself)
 }
 
-void add_controls(State& state) {
+void add_controls_transition_v0(State& state) {
 	auto& controls = state.controls;
-
-	if constexpr (debug_text_view) {
+	if (!controls.edit_passwords) {
 		//TODO(fran): EM_SETENDOFLINE allows you to change between EC_ENDOFLINE_CRLF EC_ENDOFLINE_CR EC_ENDOFLINE_LF
 		controls.edit_passwords = CreateWindowExW(NULL, L"Edit", NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | WS_VISIBLE | ES_NOHIDESEL /*to show selection even when you dont have the focus*/ //| WS_VSCROLL | WS_HSCROLL 
 			, 0, 0, 0, 0
@@ -184,8 +197,7 @@ void add_controls(State& state) {
 		constexpr auto EDIT_PASSWORDS_MAX_TEXT_LENGTH = 32767 * 2; //32767 is the default
 		SendMessageW(controls.edit_passwords, EM_SETLIMITTEXT, (WPARAM)EDIT_PASSWORDS_MAX_TEXT_LENGTH, NULL);
 
-		//TODO: the window subclass turned out to be the cause of the permanent wm_paint re-renders, not sure why, extract the functionality we need and throw it away
-		//SetWindowSubclass(controls.edit_passwords, EditProc, 0, (DWORD_PTR)calloc(1, sizeof(EditProcState)));
+		SetWindowSubclass(controls.edit_passwords, EditProc, 0, (DWORD_PTR)calloc(1, sizeof(EditProcState)));
 
 		HWND VScrollControl = CreateWindowExW(NULL, scrollbar::wndclass, NULL, WS_CHILD | WS_VISIBLE,
 			0, 0, 0, 0, controls.edit_passwords, NULL, NULL, NULL);
@@ -195,15 +207,28 @@ void add_controls(State& state) {
 
 		//INFO: I dont yet paint edit controls so you gotta use WM_CTLCOLOREDIT
 
-		search::Init searchinit;
+		/*search::Init searchinit;
 		searchinit.parent_type = search::ParentType::edit;
 		searchinit.SearchFlag_flags = 0;
 		searchinit.SearchPlacement_flags = search::Placement::bottom;
 		HWND SearchControl = CreateWindowExW(NULL, search::wndclass, NULL, WS_CHILD,
 			0, 0, 0, 0, controls.edit_passwords, NULL, NULL, &searchinit);
 		SendMessageW(controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)SearchControl, 0);
-		SendMessage(SearchControl, WM_SETFONT, (WPARAM)fonts.General, TRUE);
+		SendMessage(SearchControl, WM_SETFONT, (WPARAM)fonts.General, TRUE);*/
+		
+		controls.icon_transition = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
+		button::set_theme(controls.icon_transition, themes.transition_btn);
+		SendMessage(controls.icon_transition, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.line_arrow_right);
+		add_mouseover_tooltip(controls.icon_transition, LANG_TRANSITION_ICON);
+
+		SetWindowFont(controls.edit_passwords, (WPARAM)fonts.General, true);
 	}
+
+	resize_controls(state);
+}
+
+void add_controls(State& state) {
+	auto& controls = state.controls;
 
 	controls.page_space = create_window(state.wnd, page::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_CLIPSIBLINGS); //TODO(fran): WS_CLIPCHILDREN?
 
@@ -802,8 +827,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			Assert(file_read.sz % 16 == 0);
 			twofish_decrypt(file_read.mem, file_read.sz, file_read.mem);
 			if (!wcsncmp(state.current_user, (wchar_t*)file_read.mem, minimum(state.start->username.sz_chars, file_read.sz / 2 /*byte to wchar*/))) { //Valid password, user inputted username matches stored username
+				state.mode = mode::transition_v0; //v0 data format detected, enabling UI to facilitate user transition to the new data format from their old data
+				add_controls_transition_v0(state);
+
 				SetWindowTextW(state.controls.edit_passwords, ((cstr*)file_read.mem) + state.start->username.sz_chars); //TODO(fran): what did I decide for the data's encoding?
-				//TODO(fran): set keyboard focus to the edit control, SetFocus doesnt work here, maybe cause we arent visible yet?
 				create_password_editors(state, ((cstr*)file_read.mem) + state.start->username.sz_chars);
 				start_attempt = login::AttemptResult::success;
 			}
@@ -904,11 +931,17 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		}
 		else {
 			RECT btn_add_start = get_window_rect_at(state.controls.btn_add_start, state.wnd);
-			auto w = RECTW(r);
+			i32 w = RECTW(r), offset_x = 0, w_pad = 0;
 			auto spacing = DPI(10);
-			card.left = w * pad_percent;
+			if (state.mode == mode::transition_v0) {
+				offset_x = w / 2;
+				w -= offset_x;
+			}
+			w_pad = w * pad_percent;
+
+			card.left = offset_x + w_pad;
 			card.top = btn_add_start.top - spacing;
-			card.right = w * (1 - pad_percent);
+			card.right = offset_x + w - w_pad;
 			card.bottom = btn_add_start.bottom + spacing;
 			//TODO: improve this so it properly matches how it looks like when there are items inside
 		}

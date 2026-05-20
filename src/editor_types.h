@@ -56,6 +56,10 @@ struct sort_combo_item {
 	private: void _(){ static_assert(sizeof(*this) == sizeof(void*)); }
 };
 
+enum class mode {
+	normal = 0, transition_v0
+};
+
 struct State {
 	HWND wnd;
 	HWND nc_parent;
@@ -70,13 +74,15 @@ struct State {
 		union {
 			struct {
 				type edit_passwords;
+				type icon_transition;
+
 				type btn_add_start, btn_add_end;
 				type search;
 				type combo_sort;
 				type page_space;
 				type page;
 			};
-			type all_fixed[7];
+			type all_fixed[8];
 		};
 		std::vector<HWND> password_editors;
 	private: void _() { static_assert(sizeof(all_fixed) == (sizeof(*this) - sizeof(password_editors))); }
@@ -88,6 +94,8 @@ struct State {
 	bool passwords_need_save;
 
 	sort_option sorting;
+
+	mode mode;
 
 	void init() {
 		controls.password_editors = decltype(controls.password_editors)();

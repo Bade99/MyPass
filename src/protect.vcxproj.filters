@@ -315,5 +315,29 @@
     <Image Include="..\icons\Pin_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="..\icons\LineArrowRight16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\MenuClose16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\MenuMaximize16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\MenuMax\16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\MenuMax16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\MenuMin16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\MenuRestore16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\Restore16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

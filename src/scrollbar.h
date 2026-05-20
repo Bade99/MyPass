@@ -35,28 +35,28 @@ static void resize_wnd(State& state, i32 scrollbar_thickness) {
 		scroll_x = spacing;
 		scroll_y = spacing;
 		scroll_w = scrollbar_thickness;
-		scroll_h = RECTH(r) - spacing;
+		scroll_h = RECTH(r) - spacing * 2;
 	}break;
 	case Placement::right:
 	{
 		scroll_x = RECTW(r) - scrollbar_thickness - spacing;
 		scroll_y = spacing;
 		scroll_w = scrollbar_thickness;
-		scroll_h = RECTH(r) - spacing;
+		scroll_h = RECTH(r) - spacing * 2;
 	}break;
 	//horizontal
 	case Placement::top:
 	{
 		scroll_x = spacing;
 		scroll_y = spacing;
-		scroll_w = RECTW(r) - spacing;
+		scroll_w = RECTW(r) - spacing * 2;
 		scroll_h = scrollbar_thickness;
 	}break;
 	case Placement::bottom:
 	{
 		scroll_x = spacing;
 		scroll_y = RECTH(r) - scrollbar_thickness - spacing;
-		scroll_w = RECTW(r) - spacing;
+		scroll_w = RECTW(r) - spacing * 2;
 		scroll_h = scrollbar_thickness;
 	}break;
 	}
@@ -298,20 +298,27 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case U_SB_SET_RANGEMAX:
 	{
-		state.range_max = (int)wparam;
-		ask_window_for_repaint(state.wnd);
-
+		int new_range_max = wparam;
+		if (state.range_max != new_range_max) {
+			state.range_max = new_range_max;
+			ask_window_for_repaint(state.wnd);
+		}
 	} break;
 	case U_SB_SET_PAGESZ:
 	{
-		state.page_sz = (int)wparam;
-		ask_window_for_repaint(state.wnd);
-
+		int new_page_sz = wparam;
+		if (state.page_sz != new_page_sz) {
+			state.page_sz = new_page_sz;
+			ask_window_for_repaint(state.wnd);
+		}
 	} break;
 	case U_SB_SET_POS:
 	{
-		state.p = (int)wparam;
-		ask_window_for_repaint(state.wnd);
+		int new_p = wparam;
+		if (state.p != new_p) {
+			state.p = new_p;
+			ask_window_for_repaint(state.wnd);
+		}
 	} break;
 	case WM_PAINT:
 	{

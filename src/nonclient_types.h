@@ -47,5 +47,7 @@ namespace nonclient {
 			HBITMAP menu_backbuffer;
 			SIZE menu_backbuffer_dim;
 		};
+
+		bool is_maximized;
 	};
 }

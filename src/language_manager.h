@@ -344,9 +344,9 @@ private:
 	{
 		switch (lang) {
 		case Language::English:
-			return MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), SORT_DEFAULT); //TODO(fran):this is deprecated and not great for macros, unless we set each enum to this values
+			return MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_NEUTRAL), SORT_DEFAULT); //TODO(fran):this is deprecated and not great for macros, unless we set each enum to this values
 		case Language::Español:
-			return MAKELCID(MAKELANGID(LANG_SPANISH, SUBLANG_SPANISH), SORT_DEFAULT);
+			return MAKELCID(MAKELANGID(LANG_SPANISH, SUBLANG_NEUTRAL), SORT_DEFAULT);
 		default:
 			Assert(0);
 			return NULL;
@@ -358,9 +358,9 @@ private:
 		//INFO: https://docs.microsoft.com/en-us/windows/win32/intl/language-identifier-constants-and-strings
 		switch (lang) {
 		case Language::English:
-			return MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US);//TODO(fran): same as GetLCID
+			return MAKELANGID(LANG_ENGLISH, SUBLANG_NEUTRAL);//TODO(fran): same as GetLCID
 		case Language::Español:
-			return MAKELANGID(LANG_SPANISH, SUBLANG_SPANISH);
+			return MAKELANGID(LANG_SPANISH, SUBLANG_NEUTRAL);
 		default:
 			Assert(0);
 			return NULL;
