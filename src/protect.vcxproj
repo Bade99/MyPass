@@ -219,6 +219,7 @@
     <Image Include="..\icons\Circle_A.bmp" />
     <Image Include="..\icons\Clipboard32.bmp" />
     <Image Include="..\icons\Close16.bmp" />
+    <Image Include="..\icons\Cut_A.bmp" />
     <Image Include="..\icons\Dropdown16.bmp" />
     <Image Include="..\icons\DropdownUp16.bmp" />
     <Image Include="..\icons\Edit32.bmp" />
@@ -235,9 +236,12 @@
     <Image Include="..\icons\MenuMaximize16.bmp" />
     <Image Include="..\icons\MenuMax\16.bmp" />
     <Image Include="..\icons\MenuMin16.bmp" />
+    <Image Include="..\icons\MenuPaste_A.bmp" />
     <Image Include="..\icons\MenuRestore16.bmp" />
+    <Image Include="..\icons\MenuSelectAll_A.bmp" />
     <Image Include="..\icons\Min16.bmp" />
     <Image Include="..\icons\Padlock32.bmp" />
+    <Image Include="..\icons\Paste_A.bmp" />
     <Image Include="..\icons\Pin_A.bmp" />
     <Image Include="..\icons\Restore16.bmp" />
     <Image Include="..\icons\RightArrow16.bmp" />

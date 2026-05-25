@@ -872,6 +872,72 @@ void render_selection(HDC dc, HBRUSH brush, char_sel sel, State& state, int yPos
 	//TODO(fran): benchmark whether doing all the calculations and only rendering one polygon is faster, in which case render_selection would have to take the entire (multiline) selection and convert it into one big polygon
 }
 
+/**
+  * mouse: in screen coords
+  */
+void show_rclickmenu(State& state, POINT mouse) {
+	HMENU m = CreateMenu();
+	HMENU subm = CreateMenu();//IMPORTANT: you need a MF_POPUP submenu for the menu wnd to be rendered properly, thanks https://www.codeproject.com/Questions/334598/Popup-Menu-Problem-is-not-working-properly
+	AppendMenuW(m, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)subm, (LPCWSTR)m);
+
+	bool has_selection = state.selection.has_selection();
+
+	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::undo, (LPCWSTR)subm);
+	SetMenuItemString(subm, menu::undo, FALSE, RCS(LANG_MENU_EDIT_UNDO));
+	SetMenuItemBitmaps(subm, menu::undo, MF_BYCOMMAND, bmps.menu_undo, nil);
+	EnableMenuItem(subm, menu::undo, MF_BYCOMMAND | MF_GRAYED);
+
+	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::redo, (LPCWSTR)subm);
+	SetMenuItemString(subm, menu::redo, FALSE, RCS(LANG_MENU_EDIT_REDO));
+	SetMenuItemBitmaps(subm, menu::redo, MF_BYCOMMAND, bmps.menu_redo, nil);
+	EnableMenuItem(subm, menu::redo, MF_BYCOMMAND | MF_GRAYED);
+
+	AppendMenuW(subm, MF_SEPARATOR | MF_OWNERDRAW, 0, (LPCWSTR)subm);
+
+	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::cut, (LPCWSTR)subm);
+	SetMenuItemString(subm, menu::cut, FALSE, RCS(LANG_MENU_EDIT_CUT));
+	SetMenuItemBitmaps(subm, menu::cut, MF_BYCOMMAND, bmps.cut, nil);
+	if (!has_selection) EnableMenuItem(subm, menu::cut, MF_BYCOMMAND | MF_GRAYED);
+
+	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::copy, (LPCWSTR)subm);
+	SetMenuItemString(subm, menu::copy, FALSE, RCS(LANG_MENU_EDIT_COPY));
+	SetMenuItemBitmaps(subm, menu::copy, MF_BYCOMMAND, bmps.clipboard, nil);
+	if (!has_selection) EnableMenuItem(subm, menu::copy, MF_BYCOMMAND | MF_GRAYED);
+
+	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::paste, (LPCWSTR)subm);
+	SetMenuItemString(subm, menu::paste, FALSE, RCS(LANG_MENU_EDIT_PASTE));
+	SetMenuItemBitmaps(subm, menu::paste, MF_BYCOMMAND, bmps.menu_paste, nil);
+	if (!IsClipboardFormatAvailable(clipboard_format)) EnableMenuItem(subm, menu::paste, MF_BYCOMMAND | MF_GRAYED);
+
+	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::del, (LPCWSTR)subm);
+	SetMenuItemString(subm, menu::del, FALSE, RCS(LANG_MENU_EDIT_DELETE));
+	SetMenuItemBitmaps(subm, menu::del, MF_BYCOMMAND, bmps.bin, nil);
+	if (!has_selection) EnableMenuItem(subm, menu::del, MF_BYCOMMAND | MF_GRAYED);
+
+	AppendMenuW(subm, MF_SEPARATOR | MF_OWNERDRAW, 0, (LPCWSTR)subm);
+
+	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::find, (LPCWSTR)subm);
+	SetMenuItemString(subm, menu::find, FALSE, RCS(LANG_MENU_EDIT_FIND));
+	SetMenuItemBitmaps(subm, menu::find, MF_BYCOMMAND, bmps.menu_search, nil);
+	EnableMenuItem(subm, menu::find, MF_BYCOMMAND | MF_GRAYED);
+
+	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::select_all, (LPCWSTR)subm);
+	SetMenuItemString(subm, menu::select_all, FALSE, RCS(LANG_MENU_EDIT_SELECT_ALL));
+	SetMenuItemBitmaps(subm, menu::select_all, MF_BYCOMMAND, bmps.menu_select_all, nil);
+	if (!state.char_text.size() || (has_selection && state.selection.sel_width() >= state.char_text.size()))
+		EnableMenuItem(subm, menu::select_all, MF_BYCOMMAND | MF_GRAYED);
+
+	MENUINFO mi{ sizeof(mi) };
+	mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
+	mi.hbrBack = colors.CaptionBk;
+	SetMenuInfo(m, &mi);
+
+	//NOTE: using tpm_returncmd would be a quick and simple cheat to get past msg collision problems and the like
+	//TrackPopupMenu(m, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, 0, state.wnd, 0);
+	TrackPopupMenuEx(subm, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, state.wnd, 0);
+	DestroyMenu(m);
+}
+
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	//static int __c; printf("%d:EDITONELINE:%s\n",__c++, msgToString(msg));
 
@@ -1139,6 +1205,14 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 		return desired_size::flexible;
 	} break;
+	case WM_MEASUREITEM:
+	{
+		return handle_wm_measureitem(hwnd, msg, wparam, lparam);
+	} break;
+	case WM_DRAWITEM:
+	{
+		return handle_wm_drawitem(hwnd, msg, wparam, lparam);
+	} break;
 	case WM_STYLECHANGED:
 	{
 		auto style_change = wparam == GWL_STYLE;
@@ -1232,6 +1306,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		ReleaseCapture();
 		state.on_mouse_tracking = false;
+	} break;
+	case WM_RBUTTONUP:
+	{
+		POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) }; MapWindowPoints(state.wnd, nil, &mouse, 1);
+		//TODO(fran): before showing the menu we have to update the selection, but only if the click happened outside of the current selection area. If the user right clicks inside of the currently selected area then we just show the menu
+		show_rclickmenu(state, mouse);
+		return 0;
 	} break;
 	case WM_SETFOCUS://SetFocus -> WM_IME_SETCONTEXT -> WM_SETFOCUS
 	{
@@ -1479,11 +1560,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_COPY:
 	{
-#ifdef UNICODE
-		UINT format = CF_UNICODETEXT;
-#else
-		UINT format = CF_TEXT;
-#endif
 		//Copy text from current selection to clipboard
 		if (state.selection.has_selection()) {
 			if (OpenClipboard(state.wnd)) {
@@ -1498,30 +1574,22 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				}
 
 				EmptyClipboard();
-				auto setclipret = SetClipboardData(format, mem);
+				auto setclipret = SetClipboardData(clipboard_format, mem);
 
 				if (!setclipret) GlobalFree(mem);//free mem if for some reason we fail to set the clipboard with our data
 				else state.clipboard_handle = mem;//store handle so we can free it on WM_DESTROYCLIPBOARD
 			}
 		}
-
 	} break;
 	case WM_PASTE:
 	{
 		//Notifications:
 		bool en_change = false;
 
-		//TODO(fran): pasting onto the selected region
-		//TODO(fran): if no unicode is available we could get the ansi and convert it, if it is available. //NOTE: docs say the format is converted automatically to the one you ask for
-#ifdef UNICODE
-		UINT format = CF_UNICODETEXT;
-#else
-		UINT format = CF_TEXT;
-#endif
-		if (IsClipboardFormatAvailable(format)) {//NOTE: lines end with \r\n, has null terminator
+		if (IsClipboardFormatAvailable(clipboard_format)) {//NOTE: lines end with \r\n, has null terminator
 			if (OpenClipboard(state.wnd)) {
 				defer{ CloseClipboard(); };
-				HGLOBAL clipboard = GetClipboardData(format);
+				HGLOBAL clipboard = GetClipboardData(clipboard_format);
 				if (clipboard) {
 					cstr* clipboardtxt = (cstr*)GlobalLock(clipboard);
 					if (clipboardtxt)
@@ -2008,14 +2076,27 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_COMMAND:
 	{
-		LRESULT res;
+		LRESULT res = 0;
 		HWND child = (HWND)lparam;
 		if (child) {//Notifs from our childs
 			//NOTE: for now childs are completely opaque, we simply work as "pasamanos", TODO(fran): we shouldnt have to do this, what we need is some sort of observer, aka something happens and the control can send the msg directly to a place where it'll be answered, having this parent child relationships is not enough, for example in cases like this were there are lots of things that can be appended to edit controls, searchbar, button, scrollbar, ...
 			res = SendMessage(state.parent, WM_COMMAND, wparam, lparam);
 		}
 		else {//otherwise it's a notif from an accelerator or menu
-			Assert(0);
+			bool en_change = false;
+			switch (LOWORD(wparam))
+			{
+			case menu::undo: break; //TODO(fran)
+			case menu::redo: break; //TODO(fran)
+			case menu::cut: SendMessage(state.wnd, WM_CUT, 0, 0); break;
+			case menu::copy: SendMessage(state.wnd, WM_COPY, 0, 0); break;
+			case menu::paste: SendMessage(state.wnd, WM_PASTE, 0, 0); break;
+			case menu::del: if (en_change = state.selection.has_selection()) remove_selection(state); break;
+			case menu::find: break; //TODO(fran)
+			case menu::select_all: select_all(state); break;
+			default: res = SendMessage(state.parent, msg, wparam, lparam);
+			}
+			if (en_change) notify_parent(state, EN_CHANGE); //There was a change in the text
 		}
 		return res;
 	} break;

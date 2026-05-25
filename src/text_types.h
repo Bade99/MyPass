@@ -45,6 +45,13 @@ constexpr auto& wndclass = wndclass_name("text");
 
 constexpr cstr password_char = sizeof(password_char) > 1 ? _t('●') : _t('*');
 
+constexpr UINT clipboard_format =
+#ifdef UNICODE
+	CF_UNICODETEXT;
+#else
+	CF_TEXT;
+#endif
+
 struct char_sel {
 	using type = size_t;
 	type anchor;//Eg ABC		anchor=1	anchor is between A and B
@@ -171,6 +178,12 @@ namespace ETP {
 		right = (1 << 3),
 		bottom = (1 << 4),
 		//current_char = (1 << 5), //instead of placement in relation to the control wnd it will be done relative to a character
+	};
+}
+
+namespace menu {
+	enum menu : u32 {
+		undo = 300, redo, cut, copy, paste, del, find, select_all
 	};
 }
 }

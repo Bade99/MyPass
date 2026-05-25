@@ -2,6 +2,7 @@
 // Microsoft Visual C++ generated include file.
 // Used by protect.rc
 //
+#define BMP_PASTE                       2
 #define BMP_CALENDAR                    8
 #define BMP_EDIT                        9
 #define LANG_CONTROL_LOGIN              129
@@ -67,12 +68,14 @@
 #define LANG_PWD_ED_TBL_COPY            162
 #define BMP_UNDO                        162
 #define LANG_PWD_ED_TBL_DELETE          163
-#define IDB_BITMAP2                     163
 #define BMP_SAVE                        163
 #define LANG_PWD_ED_TBL_LOCK            164
+#define BMP_CUT                         164
 #define LANG_PWD_ED_TBL_USER            165
 #define LANG_PWD_ED_TBL_PASSWORD        166
+#define BMP_MENU_PASTE                  166
 #define LANG_PWD_ED_TITLE               167
+#define BMP_MENU_SELECT_ALL             167
 #define LANG_PWD_ED_TBL_FIELD           168
 #define LANG_PWD_ED_TBL_VALUE           169
 #define LANG_SEARCH                     170
@@ -90,7 +93,15 @@
 #define LANG_CONTROL_SIGNUP             182
 #define LANG_CONTROL_CANCEL             183
 #define LANG_PWD_ED_PIN                 184
-#define LANG_TRANSITION_ICON            185
+#define LANG_TRANSITION_V0              185
+#define LANG_ERROR_USERNAME             186
+#define LANG_TRANSITION_BTN_CONFIRM     187
+#define LANG_MENU_EDIT_CUT              188
+#define LANG_MENU_EDIT_COPY             189
+#define LANG_MENU_EDIT_PASTE            190
+#define LANG_MENU_EDIT_DELETE           191
+#define LANG_MENU_EDIT_SELECT_ALL       192
+#define LANG_ERROR_USERNAME_EXISTS      193
 #define WMN_FIND                        32774
 #define WMN_SAVE                        32776
 
@@ -99,7 +110,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        164
+#define _APS_NEXT_RESOURCE_VALUE        168
 #define _APS_NEXT_COMMAND_VALUE         32778
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           110

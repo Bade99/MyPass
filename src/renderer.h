@@ -424,7 +424,7 @@ namespace urender {
 
 		//Draw on the new buffer, this is neeeded cause draw_mask uses MaskBlt which sometimes fails on menus 
 		//Explanation: I think I know what the problem is, draw_mask doesnt fail on the first submenus because the menu window is already being shown/exists, but for submenus of those guys the window is not yet shown when we draw onto it, this problaly confuses MaskBlt in some strange way
-		urender::draw_mask(maskDC, 0, 0, wDest, hDest, mask, 0, 0, wDest, hDest, colorbr);
+		urender::draw_mask(maskDC, 0, 0, wDest, hDest, mask, xSrc, ySrc, wSrc, hSrc, colorbr);
 
 		//Draw back to dest with the new content
 		BitBlt(destDC, xDest, yDest, wDest, hDest, maskDC, 0, 0, SRCCOPY);

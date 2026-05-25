@@ -11,95 +11,94 @@ namespace login {
 
 auto get_state(HWND wnd) { _control_create_function__get_state }
 
+auto get_background_cover_pad() {
+	return (i32)DPI(20);
+}
+
 void resize_controls(State& state) {
 	auto& controls = state.controls;
 	RECT r; GetClientRect(state.wnd, &r);
-	int w = RECTW(r);
-	int h = RECTH(r);
-	int w_pad = DPI(8);
-	int h_pad = DPI(8);
+	i32 w = RECTW(r), h = RECTH(r);
+	i32 w_pad = DPI(8), h_pad = DPI(8);
+	i32 small_pad = DPI(2);
+	i32 bk_pad = get_background_cover_pad();
+	i32 normal_window_h = DPI(30);
+	i32 max_w = DPI(140);
+	bool show_error_msg = IsWindowVisible(controls.static_error_message);
 
-	auto normal_window_h = DPI(30);
+	rect_i32 prev{};
 
-	int h_center = h / 2;
+	rect_i32 btn_toggle_signup{}; Button_GetIdealSize(controls.button_toggle_signup, &btn_toggle_signup.wh);
+	btn_toggle_signup.w = clamp(0, btn_toggle_signup.w, max_w);
+	btn_toggle_signup.xy = { align_right(btn_toggle_signup.w, max_w), 0 };
 
-	if (!state.signup_mode) {
-		int edit_username_w = DPI(140);
-		int edit_username_h = normal_window_h;
+	prev = btn_toggle_signup;
 
-		int edit_password_w = edit_username_w;
-		int edit_password_h = edit_username_h;
+	rect_i32 edit_username;
+	edit_username.xy = { 0, prev.bottom() + small_pad };
+	edit_username.wh = { max_w, normal_window_h };
+
+	prev = edit_username;
+
+	rect_i32 edit_password;
+	edit_password.xy = { 0, prev.bottom() + h_pad };
+	edit_password.wh = edit_username.wh;
+
+	prev = edit_password;
+
+	rect_i32 static_error_message;
+	if (show_error_msg) {
+		static_error_message.xy = { 0, prev.bottom() + small_pad };
+		static_error_message.wh = { edit_password.w, (i32)(edit_password.h * .75f) };
+
+		prev = static_error_message;
+	}
+
+	rect_i32 btn_login{}; Button_GetIdealSize(controls.button_login, &btn_login.wh);
+	btn_login.wh = { clamp(0, btn_login.w, edit_username.w), edit_password.h };
+	btn_login.xy = { align_center(btn_login.w, edit_password.w), prev.bottom() + h_pad };
+
+	prev = btn_login;
 	
-		int btn_login_w = DPI(70);
-		int btn_login_h = edit_password_h;
+	MoveWindowOffset move(v2_i32{ max_w, prev.bottom() }, { w, h }, v2_i32{ bk_pad, bk_pad } + v2_i32{ w_pad, h_pad });
 
-		int edit_password_y = h_center - edit_password_h/2;
-		int edit_password_x = (w - edit_password_w) / 2;
-
-		int edit_username_y = edit_password_y - h_pad - edit_username_h;
-		int edit_username_x = (w - edit_username_w) / 2;
-
-		int btn_login_y = edit_password_y + edit_password_h + h_pad;
-		int btn_login_x = (w - btn_login_w) / 2;
-
-		if (IsWindowVisible(controls.static_invalid_password)) {
-			i32 small_pad = DPI(2);
-			rect_i32 static_invalid_password{
-				.x = edit_password_x, .y = (i32)(edit_password_y + edit_password_h + small_pad),
-				.w = edit_password_w, .h = (i32)(edit_password_h * .75f)
-			};
-			MoveWindow(controls.static_invalid_password, static_invalid_password);
-
-			btn_login_y = static_invalid_password.bottom() + small_pad;
-		}
-
-		//TODO(fran): resizer that takes into account multiple hwnds
-		MoveWindow(controls.edit_username, edit_username_x, edit_username_y, edit_username_w, edit_username_h, false);
-		MoveWindow(controls.edit_password, edit_password_x, edit_password_y, edit_password_w, edit_password_h, false);
-		MoveWindow(controls.button_login, btn_login_x, btn_login_y, btn_login_w, btn_login_h, false);
-	}
-	else {
-		int static_msg_w = DPI(200);
-		int static_msg_h = normal_window_h * 2 + h_pad;
-		int static_msg_y = h_center - normal_window_h / 2 - h_pad - normal_window_h;
-		int static_msg_x = (w - static_msg_w) / 2;
-
-		int btn_signup_w = (static_msg_w - h_pad) / 2;
-		int btn_signup_h = normal_window_h;
-		int btn_signup_y = static_msg_y + static_msg_h + h_pad;
-		int btn_signup_x = static_msg_x;
-
-		int btn_cancel_w = btn_signup_w;
-		int btn_cancel_h = btn_signup_h;
-		int btn_cancel_y = btn_signup_y;
-		int btn_cancel_x = btn_signup_x + btn_signup_w + h_pad;
-
-		MoveWindow(controls.static_signup_user, static_msg_x, static_msg_y, static_msg_w, static_msg_h, true);
-		MoveWindow(controls.button_signup, btn_signup_x, btn_signup_y, btn_signup_w, btn_signup_h, true);
-		MoveWindow(controls.button_cancel, btn_cancel_x, btn_cancel_y, btn_cancel_w, btn_cancel_h, true);
-	}
+	move(controls.button_toggle_signup, btn_toggle_signup);
+	move(controls.edit_username, edit_username, false);
+	move(controls.edit_password, edit_password, false);
+	if (show_error_msg) move(controls.static_error_message, static_error_message);
+	move(controls.button_login, btn_login, false);
 }
 
 void set_signup_mode(State& state, bool signup_mode) {
 	state.signup_mode = signup_mode;
 
 	auto& controls = state.controls;
-	HWND signup_mode_wnds[]{controls.static_signup_user, controls.button_signup, controls.button_cancel};
-	HWND non_singup_mode_wnds[]{ controls.edit_username, controls.edit_password, controls.button_login };
-	i32 signup_mode_wnds_show = SW_SHOW, non_singup_mode_wnds_show = SW_HIDE;
-	if (!state.signup_mode) std::swap(signup_mode_wnds_show, non_singup_mode_wnds_show);
-	for (auto w : signup_mode_wnds) ShowWindow(w, signup_mode_wnds_show);
-	for (auto w : non_singup_mode_wnds) ShowWindow(w, non_singup_mode_wnds_show);
-	ShowWindow(controls.static_invalid_password, SW_HIDE);
+	auto toggle_signup_msg = LANG_CONTROL_SIGNUP, login_msg = LANG_CONTROL_LOGIN;
+	if (state.signup_mode) std::swap(login_msg, toggle_signup_msg);
+	AWT(controls.button_login, login_msg);
+	AWT(controls.button_toggle_signup, toggle_signup_msg);
 	ask_window_for_resize(state.wnd);
 	ask_window_for_repaint(state.wnd);
 }
 
 void add_controls(State& state) {
 	auto& controls = state.controls;
+
+	controls.button_toggle_signup = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
+	AWT(controls.button_toggle_signup, LANG_CONTROL_SIGNUP);
+	button::set_theme(controls.button_toggle_signup, themes.login_btn_toggle);
+	button::set_user_data(controls.button_toggle_signup, &state);
+	button::set_functions(controls.button_toggle_signup, {
+		.on_click = [](void* data, HWND wnd) {
+			auto& state = *(State*)data;
+			set_signup_mode(state, !state.signup_mode);
+		}
+	});
+
 	controls.edit_username = create_window(state.wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP, 0, EDIT_USERNAME);
 	edit_oneline::set_theme(controls.edit_username, themes.login_editoneline);
 	AWDT(controls.edit_username, LANG_LOGIN_USERNAME);
+	Edit_LimitText(controls.edit_username, max_input_chars);
 	edit_oneline::set_functions(controls.edit_username, { .has_invalid_chars = [](const utf16* str, size_t char_cnt, void*) -> auto {
 		edit_oneline::_has_invalid_chars res{};
 		constexpr auto& invalid_username_chars = _t("<>:\"/\\|?*"); //INFO: there's more to it than this, there are some special restrictions that we implemented outside the control when the user presses login https://gist.github.com/doctaphred/d01d05291546186941e1b7ddc02034d3
@@ -116,42 +115,14 @@ void add_controls(State& state) {
 	controls.edit_password = create_window(state.wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_PASSWORD, 0, EDIT_PASSWORD);
 	edit_oneline::set_theme(controls.edit_password, themes.login_editoneline);
 	AWDT(controls.edit_password, LANG_LOGIN_PASSWORD);
+	Edit_LimitText(controls.edit_password, max_input_chars);
 
-	controls.static_invalid_password = create_window(state.wnd, edit_oneline::wndclass, nil, WS_CHILD | WS_DISABLED);
-	edit_oneline::set_theme(controls.static_invalid_password, themes.login_text_static_error);
+	controls.static_error_message = create_window(state.wnd, edit_oneline::wndclass, nil, WS_CHILD | WS_DISABLED);
+	edit_oneline::set_theme(controls.static_error_message, themes.login_text_static_error);
 
 	controls.button_login = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP, 0, BTN_LOGIN);
 	AWT(controls.button_login, LANG_CONTROL_LOGIN);
 	button::set_theme(controls.button_login, themes.login_btn);
-
-	for (auto ctl : {controls.edit_username, controls.edit_password}) SetWindowFont(ctl, fonts.General, true);
-	SetWindowFont(controls.button_login, fonts.GeneralBold, true);
-	SetWindowFont(controls.static_invalid_password, fonts.SmallBold, true);
-
-
-	// Signup mode Controls
-
-	controls.static_signup_user = create_window(state.wnd, edit_oneline::wndclass, nil, WS_CHILD | WS_DISABLED);
-	edit_oneline::set_theme(controls.static_signup_user, themes.login_text_static_signup);
-
-	controls.button_signup = create_window(state.wnd, button::wndclass, nil, WS_CHILD | WS_TABSTOP, 0, BTN_LOGIN);
-	AWT(controls.button_signup, LANG_CONTROL_SIGNUP);
-	button::set_theme(controls.button_signup, themes.login_btn);
-
-	controls.button_cancel = create_window(state.wnd, button::wndclass, nil, WS_CHILD | WS_TABSTOP);
-	AWT(controls.button_cancel, LANG_CONTROL_CANCEL);
-	button::set_theme(controls.button_cancel, themes.login_btn_cancel);
-	button::set_user_data(controls.button_cancel, &state);
-	button::set_functions(controls.button_cancel, {
-		.on_click = [](void* data, HWND wnd) {
-			auto& state = *(State*)data;
-			set_signup_mode(state, false);
-		}
-	});
-
-	SetWindowFont(controls.static_signup_user, fonts.General, true);
-	SetWindowFont(controls.button_signup, fonts.GeneralBold, true);
-	SetWindowFont(controls.button_cancel, fonts.General, true);
 }
 
 void save_settings(State& state) {
@@ -224,7 +195,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_COMMAND:
 	{
-		printf("HIWORD(wparam)=%d\n", HIWORD(wparam));
 		// Msgs from my controls
 		switch (LOWORD(wparam))
 		{
@@ -339,27 +309,24 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		auto start_attempt = (AttemptResult)wparam;
 		switch (start_attempt) {
 		case AttemptResult::fail_password:
+		case AttemptResult::fail_username:
+		case AttemptResult::fail_signup_username_exists:
 		{
-			SetWindowText(state.controls.static_invalid_password, RCS(LANG_ERROR_PASSWORD));
-			ShowWindow(state.controls.static_invalid_password, SW_SHOW);
-			ask_window_for_resize(state.wnd);
-			ask_window_for_repaint(state.wnd);
 			auto hide_error_text = [](HWND wnd, UINT, UINT_PTR timer_id, DWORD) {
 				KillTimer(wnd, timer_id);
 				if (auto& state = *get_state(wnd); &state) {
-					ShowWindow(state.controls.static_invalid_password, SW_HIDE);
+					ShowWindow(state.controls.static_error_message, SW_HIDE);
 					ask_window_for_resize(wnd);
 					ask_window_for_repaint(wnd);
 				}
-				};
+			};
+			auto msg_id = start_attempt == AttemptResult::fail_username ? LANG_ERROR_USERNAME : 
+				start_attempt == AttemptResult::fail_signup_username_exists ? LANG_ERROR_USERNAME_EXISTS : LANG_ERROR_PASSWORD;
+			SetWindowText(state.controls.static_error_message, RCS(msg_id));
+			ShowWindow(state.controls.static_error_message, SW_SHOW);
+			ask_window_for_resize(state.wnd);
+			ask_window_for_repaint(state.wnd);
 			SetTimer(state.wnd, (UINT_PTR)&hide_error_text, invalid_password_message_duration_ms, hide_error_text);
-		} break;
-		case AttemptResult::fail_username:
-		{
-			auto user = std::wstring_view(state.results->username.str, state.results->username.sz_chars);
-			auto signup_msg = std::vformat(RS(LANG_CREATEACCOUNT), std::make_wformat_args(user));
-			SetWindowText(state.controls.static_signup_user, signup_msg.c_str());
-			set_signup_mode(state, true);
 		} break;
 		}
 	} break;
@@ -390,13 +357,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		auto& controls = state.controls;
 		RECT r; GetClientRect(state.wnd, &r);
 		FillRect(dc, &r, colors.ControlBk);
-		HWND signup_wnds[] { controls.static_signup_user, controls.button_cancel };
-		HWND non_signup_wnds[] { controls.edit_username, controls.button_login };
-		RECT bounds = state.signup_mode ? 
-			bounding_box(state.wnd, signup_wnds, ARRAYSIZE(signup_wnds)) :
-			bounding_box(state.wnd, non_signup_wnds, ARRAYSIZE(non_signup_wnds));
+		HWND wnds[] { controls.button_toggle_signup, controls.edit_username, controls.button_login };
+		RECT bounds = bounding_box(state.wnd, wnds, ARRAYSIZE(wnds));
 		//TODO: login Theme
-		const auto pad = DPI(20);
+		const auto pad = get_background_cover_pad();
 		InflateRect(&bounds, pad, pad);
 		urender::draw_round_rectangle(dc, bounds, themes.base_btn.dimensions.border_radius.to_px(), colors.Card_Bk_Soft);
 		return 1;

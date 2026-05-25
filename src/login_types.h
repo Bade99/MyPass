@@ -18,6 +18,8 @@ constexpr auto default_text_tooltip_location = edit_oneline::ETP::left | edit_on
 
 constexpr auto invalid_password_message_duration_ms = 3000;
 
+constexpr auto max_input_chars = 32;
+
 struct Settings {
 
 #define foreach_LoginSettings_member(op) \
@@ -52,14 +54,11 @@ struct State {
 
 	union LoginControls {
 		struct {
+			HWND button_toggle_signup;
 			HWND edit_username;
 			HWND edit_password;
-			HWND static_invalid_password;
+			HWND static_error_message;
 			HWND button_login;
-
-			HWND static_signup_user;
-			HWND button_signup;
-			HWND button_cancel;
 		};
 		HWND all[7];
 		private: void _() { static_assert(sizeof(*this) == sizeof(all)); }
@@ -71,7 +70,7 @@ struct State {
 };
 
 enum class AttemptResult {
-	success, fail_password, fail_username
+	success, fail_password, fail_username, fail_signup_username_exists
 	//TODO: on fail_username then we should display a signup message, if the user wants to sing up then in our login result we should add a boolean signup, so that the editor knows that it should pass the user as a valid new signup if it doesnt exist
 };
 }

@@ -45,6 +45,9 @@ union known_colors {
 		op(HBRUSH,Control_BkPush_Strong,CreateSolidBrush(RGB(38, 70, 130))) \
 		op(HBRUSH,Card_Bk_Soft,CreateSolidBrush(RGB(209, 246, 255))) \
 		op(HBRUSH,Btn_Static_TxtMouseOver,CreateSolidBrush(RGB(29,47,79))) \
+		op(HBRUSH,ControlBkColored,CreateSolidBrush(RGB(35, 40, 46))) \
+
+		//op(HBRUSH,ControlBkColored,CreateSolidBrush(RGB(40, 41, 60))) \
 		
 		//op(HBRUSH,Card_Bk_Soft,CreateSolidBrush(RGB(142, 195, 230))) \
 		
@@ -101,6 +104,8 @@ union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 		HBITMAP add;
 		HBITMAP edit;
 		HBITMAP clipboard;
+		HBITMAP cut;
+		HBITMAP paste;
 		HBITMAP padlock;
 		HBITMAP cancel;
 		HBITMAP search;
@@ -111,12 +116,22 @@ union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 		HBITMAP menu_undo;
 		HBITMAP menu_redo;
 		HBITMAP menu_save;
+		HBITMAP menu_paste;
+		HBITMAP menu_select_all;
 	};
-	HBITMAP all[29];
+	HBITMAP all[33];
 
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 } static bmps{};
 
+/**
+  * Design Decision: Shortcut hotkeys are language agnostic. 
+  * It is not good to teach the user they should have different 
+  * ones for their language as that makes it impossible for them 
+  * to reuse their knowledge in another app that doesn't use those
+  * same ones, by normalizing to english we increase the chances
+  * the shortcuts they know they will be able to use in other apps.
+  */
 struct known_shortcuts {
 	//Accelerator memory is cleared by the system on close, no need to deallocate
 	HACCEL table; 

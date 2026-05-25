@@ -11,10 +11,13 @@ namespace debug {
 
 	struct Controls {
 		HWND color_buttons[ARRAYSIZE(colors.brushes)];
+		HWND static_focus_wnd;
 	};
 
 	struct State : WindowState {
 		HWND* track_wnd;
+
+		HWND focus_wnd;
 
 		Controls controls;
 
@@ -28,6 +31,15 @@ namespace debug {
 			for (auto& br : t.brushes.foreground.all) br = hollow_br;
 			t.dimensions.border_thickness = 1;
 
+			edit_oneline::Theme static_theme{
+				.brushes = {
+					.foreground = {.disabled = colors.ControlTxt},
+					.bk = {.disabled = hollow_br},
+					.border = {.disabled = hollow_br},
+				},
+				.font = fonts.General,
+			};
+
 			for (const auto& [i, c] : colors.brushes | std::views::enumerate) {
 				auto& b = controls.color_buttons[i];
 				b = create_window(wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD);
@@ -37,6 +49,9 @@ namespace debug {
 				auto msg = std::format(L"{}\nRGB({}, {}, {})", known_colors_names[i], GetRValue(col), GetGValue(col), GetBValue(col));
 				add_mouseover_tooltip(b, (u64)(void*)msg.c_str(), {.multiline = true, .delay_ms = 100});
 			}
+
+			controls.static_focus_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
+			edit_oneline::set_theme(controls.static_focus_wnd, static_theme);
 		}
 
 		void resize_controls() {
@@ -46,7 +61,11 @@ namespace debug {
 
 			auto pad = DPI(8);
 
-			auto [rows, cols, dim] = pack_squares(w, h, ARRAYSIZE(controls.color_buttons), pad);
+			rect_i32 bounds{}; bounds.wh = { w, h };
+
+			rect_i32 static_focus_wnd = bounds.cut_bottom(DPI(30));
+
+			auto [rows, cols, dim] = pack_squares(bounds.w, bounds.h, ARRAYSIZE(controls.color_buttons), pad);
 
 			i32 start_offset_x = pad, offset_x = start_offset_x, offset_y = pad;
 			for (i32 j = 0; j < rows; j++) {
@@ -60,6 +79,8 @@ namespace debug {
 				offset_y += dim + pad;
 				offset_x = start_offset_x;
 			}
+
+			MoveWindow(controls.static_focus_wnd, static_focus_wnd);
 		}
 
 		void follow_track_window() {
@@ -114,9 +135,41 @@ namespace debug {
 
 			SetTimer(wnd, anim_id, refresh_ms, anim_proc);
 		}
+	
+		void track_focus_window() {
+			constexpr auto anim_id = 49856, refresh_ms = 1000;
+
+			static void (*anim_proc)(HWND, UINT, UINT_PTR, DWORD) = [](HWND wnd, UINT, UINT_PTR anim_id, DWORD) {
+				auto& state = *get_state(wnd);
+				if (&state) {
+					if (!state.track_wnd || !(GetAsyncKeyState(VK_CONTROL) & 0x8000)) goto set_timer;
+					POINT cursor; GetCursorPos(&cursor); MapWindowPoints(nil, *state.track_wnd, &cursor, 1);
+					HWND track = child_wnd_from_point(cursor, *state.track_wnd);
+
+					if (track != state.focus_wnd) {
+						state.focus_wnd = track;
+						if (state.focus_wnd) {
+							cstr cls[100]; *cls = 0;
+							GetClassName(state.focus_wnd, cls, ARRAYSIZE(cls));
+							str hex_str = std::format(_t("{} ({:010})"), cls, (void*)state.focus_wnd);
+							SetWindowText(state.controls.static_focus_wnd, hex_str.c_str());
+						}
+						else SetWindowText(state.controls.static_focus_wnd, 0);
+					}
+				}
+				else {
+					KillTimer(wnd, anim_id);
+					return;
+				}
+				set_timer:
+				SetTimer(wnd, anim_id, refresh_ms, anim_proc);
+			};
+
+			SetTimer(wnd, anim_id, refresh_ms, anim_proc);
+		}
 	};
 
-	static LRESULT CALLBACK proc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+	LRESULT CALLBACK proc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		auto& state = *State::get_state(wnd);
 		switch (msg)
 		{
@@ -127,12 +180,13 @@ namespace debug {
 			st->parent = creation_nfo->hwndParent;
 			st->wnd = wnd;
 			st->track_wnd = (HWND*)creation_nfo->lpCreateParams;
-			SetWindowText(st->parent, L"Debug");
+			SetWindowText(st->parent, _t("Debug"));
 		} break;
 		case WM_CREATE:
 		{
 			state.add_controls();
 			state.follow_track_window();
+			state.track_focus_window();
 		} break;
 		case WM_SIZE:
 		{

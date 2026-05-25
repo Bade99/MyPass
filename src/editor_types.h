@@ -73,6 +73,10 @@ struct State {
 		using type = HWND;
 		union {
 			struct {
+				type btn_static_bk_transition;
+				type btn_static_transition;
+				type static_transition;
+				type btn_confirm_transfer;
 				type edit_passwords;
 				type icon_transition;
 
@@ -82,7 +86,7 @@ struct State {
 				type page_space;
 				type page;
 			};
-			type all_fixed[8];
+			type all_fixed[12];
 		};
 		std::vector<HWND> password_editors;
 	private: void _() { static_assert(sizeof(all_fixed) == (sizeof(*this) - sizeof(password_editors))); }

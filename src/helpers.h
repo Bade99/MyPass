@@ -247,6 +247,25 @@ static RECT get_window_rect_at(HWND wnd, HWND reference) {
 	return r;
 }
 
+static POINT get_window_point_at(POINT p, HWND wnd, HWND reference) {
+	MapWindowPoints(reference, wnd, &p, 1);
+	return p;
+}
+
+/**
+  * p: in coords relative to `reference`
+  */
+static HWND child_wnd_from_point(POINT p, HWND reference) {
+	Assert(reference);
+	HWND res = nil;
+
+	HWND last_parent = nil;
+	HWND child = reference;
+	while ((child = RealChildWindowFromPoint(child, get_window_point_at(p, child, reference))) && child != last_parent)
+		res = last_parent = child;
+	return res;
+}
+
 /**
   * Finds the rectangle with the biggest area in an array of RECTs, 
   * if two have the same area it chooses the one first on the array
@@ -636,6 +655,47 @@ static void move_window(HWND wnd, RECT r, bool repaint = true) {
 static auto MoveWindow(HWND wnd, rect_i32 r, bool repaint = true) {
 	return MoveWindow(wnd, r.x, r.y, r.w, r.h, repaint);
 }
+
+
+/**
+  * Returns the (x,y) offset necessary to center `current_dimension` in `bounds`.
+  * If `current_dimension` + `padding_on_overflow` is larger than `bounds` it uses `padding_on_overflow` for that axis instead
+  */
+static i32 align_center(i32 current_dimension, i32 bound, i32 padding_on_overflow = {}) {
+	i32 res = (bound - current_dimension) / 2;
+	if (res < padding_on_overflow) res = padding_on_overflow;
+	return res;
+}
+
+static i32 align_right(i32 current_dimension, i32 bound) {
+	//TODO(fran): should we do something different on overflow?
+	i32 res = bound - current_dimension;
+	return res;
+}
+
+static v2_i32 align_center(v2_i32 current_dimension, v2_i32 bounds, v2_i32 padding_on_overflow = {}) {
+	v2_i32 res;
+	for (const auto& [i, axis] : res.comp | std::views::enumerate)
+		axis = align_center(current_dimension.comp[i], bounds.comp[i], padding_on_overflow.comp[i]);
+	return res;
+}
+
+struct MoveWindowOffset {
+	v2_i32 offset;
+
+	MoveWindowOffset(i32 offset_x, i32 offset_y = 0) : offset{ offset_x, offset_y } {}
+	MoveWindowOffset(v2_i32 offset) : offset(offset) {}
+	MoveWindowOffset(v2_i32 current_dimension, v2_i32 bounds, v2_i32 padding_on_overflow = {}) :
+		offset(align_center(current_dimension, bounds, padding_on_overflow)) {}
+
+	auto operator()(HWND wnd, i32 x, i32 y, i32 w, i32 h, bool repaint = true) {
+		return MoveWindow(wnd, x + offset.x, y + offset.y, w, h, repaint);
+	}
+	auto operator()(HWND wnd, rect_i32 r, bool repaint = true) {
+		r.xy += offset;
+		return MoveWindow(wnd, r, repaint);
+	}
+};
 
 template<typename T> 
 static T* get_window_state(HWND wnd) {

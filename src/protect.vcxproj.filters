@@ -345,5 +345,17 @@
     <Image Include="..\icons\Save_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="..\icons\Cut_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\Paste_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\MenuPaste_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\MenuSelectAll_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

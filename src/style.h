@@ -8,8 +8,11 @@
 struct Themes {
 	button::Theme base_btn;
 	button::Theme login_btn;
-	button::Theme login_btn_cancel;
+	button::Theme login_btn_toggle;
 	button::Theme editor_add_btn;
+	button::Theme editor_btn_static_transition;
+	button::Theme editor_btn_static_bk_transition;
+	edit_oneline::Theme editor_static_transition;
 	button::Theme password_editor_card_btn;
 	button::Theme password_editor_toolbar_btn;
 	button::Theme password_editor_toolbar_btn_danger;
@@ -17,21 +20,10 @@ struct Themes {
 	button::Theme table_toolbar_btn;
 	button::Theme table_toolbar_btn_danger;
 	button::Theme transition_btn;
-	//static button::Theme img_btn_theme;
-	//static button::Theme accent_btn_theme;
-	//static static_oneline::Theme base_static_theme;
-	//static navbar::Theme nav_theme;
-	//static navbar::Theme sidebar_theme;
-	//static button::Theme navbar_btn_theme;
-	//static button::Theme navbar_img_btn_theme;
-	//static button::Theme dark_btn_theme;
-	//static button::Theme dark_nonclickable_btn_theme;
 	edit_oneline::Theme base_editoneline;
 	edit_oneline::Theme clear_editoneline;
 	edit_oneline::Theme login_editoneline;
 	edit_oneline::Theme login_text_static_error;
-	edit_oneline::Theme login_text_static_signup;
-	//static page::Theme base_page_theme;
 	table::Theme base_table;
 	search::Theme base_search;
 	toast::Theme base_toast;
@@ -75,7 +67,11 @@ void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 	bmps.menu_undo = load_bitmap8(instance, BMP_UNDO);
 	bmps.menu_redo = flip_bitmap(bmps.menu_undo, true, false);
 	bmps.menu_save = load_bitmap8(instance, BMP_SAVE);
+	bmps.menu_paste = load_bitmap8(instance, BMP_MENU_PASTE);
+	bmps.menu_select_all = load_bitmap8(instance, BMP_MENU_SELECT_ALL);
 	bmps.pin = load_bitmap8(instance, BMP_PIN);
+	bmps.cut = load_bitmap8(instance, BMP_CUT);
+	bmps.paste = load_bitmap8(instance, BMP_PASTE);
 
 	atexit([]() { for (auto& bmp : bmps.all) if (bmp) { DeleteObject(bmp); bmp = nil; } });
 }
@@ -116,20 +112,20 @@ void load_styles() {
 	}();
 
 	themes.base_editoneline = [&]()->auto {
-		edit_oneline::Theme base_editoneline{};
-		base_editoneline.dimensions.border_thickness = 1;
-		base_editoneline.brushes.foreground.normal = colors.ControlTxt;
-		base_editoneline.brushes.foreground.disabled = colors.ControlTxt_Disabled;
-		base_editoneline.brushes.bk.normal = colors.ControlBk;
-		base_editoneline.brushes.bk.disabled = colors.ControlBk_Disabled;
-		base_editoneline.brushes.border.normal = colors.Img;
-		base_editoneline.brushes.border.disabled = colors.Img_Disabled;
-		base_editoneline.brushes.placeholder.normal = colors.ControlTxt_Disabled;
+		auto t = themes.base_editoneline;
+		t.dimensions.border_thickness = 1;
+		t.brushes.foreground.normal = colors.ControlTxt;
+		t.brushes.foreground.disabled = colors.ControlTxt_Disabled;
+		t.brushes.bk.normal = colors.ControlBkColored;
+		t.brushes.bk.disabled = colors.ControlBk_Disabled;
+		t.brushes.border.normal = colors.Img;
+		t.brushes.border.disabled = colors.Img_Disabled;
+		t.brushes.placeholder.normal = colors.ControlTxt_Disabled;
 		//base_editoneline.brushes.selection.normal = colors.Selection;
 		//base_editoneline.brushes.selection.disabled = colors.Selection_Disabled;
-		base_editoneline.brushes.selection.normal = colors.Img;
-		base_editoneline.brushes.selection.disabled = colors.Img_Disabled; //TODO(fran): use disabled when the text edit has a selection but is not focused
-		return base_editoneline;
+		t.brushes.selection.normal = colors.Img;
+		t.brushes.selection.disabled = colors.Img_Disabled; //TODO(fran): use disabled when the text edit has a selection but is not focused
+		return t;
 	}();
 
 	themes.clear_editoneline = [&]()->auto {
@@ -143,37 +139,33 @@ void load_styles() {
 	}();
 
 	themes.login_editoneline = [&]()->auto {
-		auto login_editoneline = themes.base_editoneline;
-		login_editoneline.dimensions.border_thickness = 0;
-		login_editoneline.dimensions.border_radius = themes.base_btn.dimensions.border_radius;
-		return login_editoneline;
-	}();
-
-	themes.login_text_static_signup = [&]()->auto {
-		auto t = themes.login_editoneline;
-		t.brushes.foreground.disabled = t.brushes.foreground.normal;
+		auto t = themes.base_editoneline;
+		t.dimensions.border_thickness = 0;
+		t.dimensions.border_radius = themes.base_btn.dimensions.border_radius;
+		t.font = fonts.General;
 		return t;
 	}();
 
 	themes.login_text_static_error = [&]()->auto {
-		auto login_text_static_error = themes.login_text_static_error;
-		for (auto& b : login_text_static_error.brushes.border.all) b = hollow_brush;
-		for (auto& b : login_text_static_error.brushes.bk.all) b = hollow_brush;
-		for (auto& b : login_text_static_error.brushes.foreground.all) b = colors.Toast_Failure;
-		login_text_static_error.font = fonts.SmallBold;
-		return login_text_static_error;
+		auto t = themes.login_text_static_error;
+		for (auto& b : t.brushes.border.all) b = hollow_brush;
+		for (auto& b : t.brushes.bk.all) b = hollow_brush;
+		for (auto& b : t.brushes.foreground.all) b = colors.Toast_Failure;
+		t.font = fonts.SmallBold;
+		return t;
 	}();
 
 	themes.login_btn = [&]()->auto {
-		auto login_btn = themes.base_btn;
-		login_btn.brushes.bk.normal = colors.ControlBkPush;
-		login_btn.dimensions.border_thickness = 0;
-		login_btn.dimensions.border_radius = {.type = UINumber::type::percent, .value = 50};
-		return login_btn;
+		auto t = themes.base_btn;
+		t.brushes.bk.normal = colors.ControlBkPush;
+		t.dimensions.border_thickness = 0;
+		t.dimensions.border_radius = {.type = UINumber::type::percent, .value = 50};
+		t.font = fonts.GeneralBold;
+		return t;
 	}();
 
-	themes.login_btn_cancel = [&]()->auto {
-		auto t = themes.login_btn_cancel;
+	themes.login_btn_toggle = [&]()->auto {
+		auto t = themes.login_btn_toggle;
 		for (auto& b : t.brushes.bk.all) b = hollow_brush;
 		for (auto& b : t.brushes.border.all) b = hollow_brush;
 		t.brushes.foreground = {
@@ -183,11 +175,45 @@ void load_styles() {
 			.clicked = themes.login_btn.brushes.bk.clicked,
 		};
 		t.cursor = hand_cursor;
+		t.font = fonts.Menu;
 		return t;
 	}();
 
 	themes.editor_add_btn = [&]()->auto {
 		auto t = themes.login_btn;
+		return t;
+	}();
+
+	themes.editor_static_transition = [&]()->auto {
+		edit_oneline::Theme t{};
+		for (auto& b : t.brushes.border.all) b = hollow_brush;
+		for (auto& b : t.brushes.bk.all) b = hollow_brush;
+		for (auto& b : t.brushes.foreground.all) b = colors.ControlBkMouseOver;
+		t.font = fonts.GeneralBold;
+		return t;
+	}();
+
+	themes.editor_btn_static_transition = [&]() {
+		auto t = themes.editor_btn_static_transition;
+		for (auto& b : t.brushes.border.all) b = hollow_brush;
+		for (auto& b : t.brushes.foreground.all) b = hollow_brush;
+		t.brushes.bk = themes.editor_static_transition.brushes.foreground;
+		return t;
+	}();
+
+	themes.editor_btn_static_bk_transition = [&]() {
+		auto t = themes.editor_btn_static_transition;
+		for (auto& b : t.brushes.bk.all) b = colors.ControlBkColored;
+		t.dimensions = themes.base_btn.dimensions;
+		return t;
+	}();
+
+	themes.transition_btn = [&]()->auto {
+		button::Theme t{};
+		for (auto& b : t.brushes.bk.all) b = colors.ControlBk_Disabled;
+		for (auto& b : t.brushes.foreground.all) b = colors.ControlTxt_Disabled_Strong;
+		for (auto& b : t.brushes.border.all) b = hollow_brush;
+		t.dimensions.border_radius = { .type = UINumber::type::dpi, .value = 10 };
 		return t;
 	}();
 
@@ -247,15 +273,6 @@ void load_styles() {
 		return t;
 	}();
 
-	themes.transition_btn = [&]()->auto {
-		button::Theme t{};
-		for (auto& b : t.brushes.bk.all) b = colors.ControlBk_Disabled;
-		for (auto& b : t.brushes.foreground.all) b = colors.ControlTxt_Disabled_Strong;
-		for (auto& b : t.brushes.border.all) b = hollow_brush;
-		t.dimensions.border_radius = { .type = UINumber::type::dpi, .value = 10 };
-		return t;
-	}();
-
 	themes.base_search = [&]()->auto {
 		search::Theme base_search{};
 
@@ -305,85 +322,4 @@ void load_styles() {
 
 		return base_toast;
 	}();
-
-	/*
-
-	img_btn_theme = [&]()->auto {
-		auto img_btn_theme = base_btn;
-		img_btn_theme.brushes.foreground.normal = global::colors.Img;
-		return img_btn_theme;
-		}();
-
-	accent_btn_theme = [&]()->auto {
-		auto accent_btn_theme = base_btn;
-		accent_btn_theme.brushes.foreground.normal = global::colors.Accent;
-		accent_btn_theme.brushes.border.normal = global::colors.Accent;
-		return accent_btn_theme;
-		}();
-
-	base_static_theme = [&]()->auto {
-		static_oneline::Theme base_static_theme;
-		base_static_theme.brushes.foreground.normal = global::colors.ControlTxt;
-		base_static_theme.brushes.foreground.disabled = global::colors.ControlTxt_Disabled;
-		base_static_theme.brushes.bk.normal = global::colors.ControlBk;
-		base_static_theme.brushes.bk.disabled = global::colors.ControlBk_Disabled;
-		return base_static_theme;
-		}();
-
-	kanji_static_theme = [&]()->auto {
-		auto kanji_static_theme = base_static_theme;
-		kanji_static_theme.brushes.foreground.normal = brush_for(learnt_word_elem::kanji);
-		return kanji_static_theme;
-		}();
-
-	nav_theme = [&]()->auto {
-		navbar::Theme nav_theme;
-		nav_theme.brushes.bk.normal = global::colors.ControlBk_Disabled;//TODO(fran): darker color than bk
-		nav_theme.dimensions.spacing = 3;
-		nav_theme.dimensions.is_vertical = false;
-		return nav_theme;
-		}();
-
-	sidebar_theme = [&]()->auto {
-		auto sidebar_theme = nav_theme;
-		sidebar_theme.dimensions.spacing = 0;
-		sidebar_theme.dimensions.is_vertical = true;
-		return sidebar_theme;
-		}();
-
-	navbar_btn_theme = [&]()->auto {
-		auto navbar_btn_theme = base_btn;
-		navbar_btn_theme.brushes.bk.normal = nav_theme.brushes.bk.normal;
-		navbar_btn_theme.brushes.border = navbar_btn_theme.brushes.bk;
-		return navbar_btn_theme;
-		}();
-
-	navbar_img_btn_theme = [&]()->auto {
-		auto navbar_img_btn_theme = img_btn_theme;
-		navbar_img_btn_theme.brushes.bk.normal = nav_theme.brushes.bk.normal;
-		navbar_img_btn_theme.brushes.border = navbar_img_btn_theme.brushes.bk;
-		return navbar_img_btn_theme;
-		}();
-
-	dark_btn_theme = [&]()->auto {
-		auto dark_btn_theme = base_btn;
-		dark_btn_theme.brushes.bk.normal = global::colors.ControlBk_Dark;
-		return dark_btn_theme;
-		}();
-
-	dark_nonclickable_btn_theme = [&]()->auto {
-		auto dark_nonclickable_btn_theme = dark_btn_theme;
-		for (auto& b : dark_nonclickable_btn_theme.brushes.bk.all) b = dark_nonclickable_btn_theme.brushes.bk.normal;
-		for (auto& b : dark_nonclickable_btn_theme.brushes.border.all) b = dark_nonclickable_btn_theme.brushes.border.normal;
-		return dark_nonclickable_btn_theme;
-		}();
-
-	base_page_theme = [&]()->auto {
-		page::Theme base_page_theme;
-		base_page_theme.brushes.bk.normal = global::colors.ControlBk;
-		base_page_theme.brushes.border = base_page_theme.brushes.bk;
-		base_page_theme.dimensions.border_thickness = 0;
-		return base_page_theme;
-		}();
-	*/
 }
