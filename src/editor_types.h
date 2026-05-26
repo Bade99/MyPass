@@ -79,12 +79,20 @@ struct State {
 		using type = HWND;
 		union {
 			struct {
-				type btn_static_bk_transition;
-				type btn_static_transition;
-				type static_transition;
-				type btn_confirm_transfer;
-				type edit_passwords;
-				type icon_transition;
+				struct {
+					union {
+						struct {
+							type btn_static_bk_transition;
+							type btn_static_transition;
+							type static_transition;
+							type btn_confirm_transfer;
+							type edit_passwords;
+							type icon_transition;
+						};
+						type all[6];
+					};
+				private: void _() { static_assert(sizeof(all) == (sizeof(*this))); }
+				} transition_v0;
 
 				type btn_add_start, btn_add_end;
 				type search;

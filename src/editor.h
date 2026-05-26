@@ -92,7 +92,6 @@ void add_preset_password_editor(State& state, size_t at_idx) {
 }
 
 void resize_controls(State& state) {
-	auto& controls = state.controls;
 	RECT r; GetClientRect(state.wnd, &r);
 	auto w = RECTW(r), h = RECTH(r);
 	i32 spacing = DPI(15); //TODO: add to theme
@@ -102,6 +101,7 @@ void resize_controls(State& state) {
 	{
 		i32 offset_x = 0;
 		if (state.mode == mode::transition_v0) {
+			auto& controls = state.controls.transition_v0;
 			rect_i32 edit_showpasswords{ .x = 0, .y = 0, .w = w / 2, .h = h };
 			offset_x = edit_showpasswords.right();
 			w -= offset_x;
@@ -125,6 +125,7 @@ void resize_controls(State& state) {
 			MoveWindow(controls.icon_transition, icon_transition);
 		}
 
+		auto& controls = state.controls;
 		offset_y = spacing;
 
 		auto search_max_w = avg_str_dim(GetWindowFont(controls.search), 35).cx;
@@ -152,6 +153,7 @@ void resize_controls(State& state) {
 		MoveWindow(controls.page_space, page_space, false);
 	}
 
+	auto& controls = state.controls;
 	offset_y = 0;
 	i32 btn_add_dim = DPI(30);
 	i32 btn_add_x = (w - btn_add_dim) / 2;
@@ -194,63 +196,31 @@ void resize_controls(State& state) {
 	page::set_wnd_size(controls.page, controls.page_space, offset_y); //TODO(fran): it may be better to resize the page before all of its children, so that we dont cause issues where the children cant re-render because they arent within the visible area of the parent (this may be a non issue though, and by tracking scrolling events and making visible and rendering the proper children this may fix itself)
 }
 
-void add_controls_transition_v0(State& state) {
-	auto& controls = state.controls;
-	if (!controls.edit_passwords) {
-		controls.btn_static_bk_transition = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD);
-		button::set_theme(controls.btn_static_bk_transition, themes.editor_btn_static_bk_transition);
+void add_controls_transition_v0(State& state); //forward declaration to solve circular dependency with set_mode
 
-		controls.btn_static_transition = create_window(controls.btn_static_bk_transition, button::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
-		button::set_theme(controls.btn_static_transition, themes.editor_btn_static_transition);
+void set_mode(State& state, mode new_mode) {
+	if (new_mode != state.mode) {
+		auto old_mode = state.mode;
+		state.mode = new_mode;
 
-		controls.static_transition = create_window(controls.btn_static_bk_transition, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
-		edit_oneline::set_theme(controls.static_transition, themes.editor_static_transition);
-		AWT(controls.static_transition, LANG_TRANSITION_V0);
-
-		controls.btn_confirm_transfer = create_window(controls.btn_static_bk_transition, button::wndclass, nil, WS_VISIBLE | WS_CHILD);
-		button::set_theme(controls.btn_confirm_transfer, themes.login_btn);
-		button::set_user_data(controls.btn_confirm_transfer, &state);
-		button::set_functions(controls.btn_confirm_transfer, {
-			.on_click = [](void* data, HWND wnd) {
-				auto& state = *(State*)data;
+		switch (state.mode) {
+		case mode::transition_v0:
+		{
+			//v0 data format detected, enabling UI to facilitate user transition to the new data format from their old data
+			add_controls_transition_v0(state);
+		} break;
+		case mode::normal:
+		{
+			if (old_mode == mode::transition_v0) {
+				for (auto& c : state.controls.transition_v0.all) { DestroyWindow(c); c = nil; }
 			}
-		});
-		AWT(controls.btn_confirm_transfer, LANG_TRANSITION_BTN_CONFIRM);
 
-		//TODO(fran): EM_SETENDOFLINE allows you to change between EC_ENDOFLINE_CRLF EC_ENDOFLINE_CR EC_ENDOFLINE_LF
-		controls.edit_passwords = create_window(state.wnd, L"Edit", nil, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | ES_NOHIDESEL /*to show selection even when you dont have the focus*/);
-
-		constexpr auto EDIT_PASSWORDS_MAX_TEXT_LENGTH = 32767 * 2; //32767 is the default
-		SendMessage(controls.edit_passwords, EM_SETLIMITTEXT, (WPARAM)EDIT_PASSWORDS_MAX_TEXT_LENGTH, NULL);
-
-		SetWindowSubclass(controls.edit_passwords, EditProc, 0, (DWORD_PTR)calloc(1, sizeof(EditProcState)));
-
-		HWND VScrollControl = CreateWindowEx(NULL, scrollbar::wndclass, NULL, WS_CHILD | WS_VISIBLE,
-			0, 0, 0, 0, controls.edit_passwords, NULL, NULL, NULL);
-		SendMessage(VScrollControl, scrollbar::U_SB_SET_PLACEMENT, (WPARAM)scrollbar::Placement::right, 0);
-
-		SendMessage(controls.edit_passwords, EM_SETVSCROLL, (WPARAM)VScrollControl, 0);
-		SetWindowFont(controls.edit_passwords, (WPARAM)fonts.General, true);
-
-		//INFO: I dont yet paint edit controls so you gotta use WM_CTLCOLOREDIT
-
-		/*search::Init searchinit;
-		searchinit.parent_type = search::ParentType::edit;
-		searchinit.SearchFlag_flags = 0;
-		searchinit.SearchPlacement_flags = search::Placement::bottom;
-		HWND SearchControl = CreateWindowEx(NULL, search::wndclass, NULL, WS_CHILD,
-			0, 0, 0, 0, controls.edit_passwords, NULL, NULL, &searchinit);
-		SendMessage(controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)SearchControl, 0);
-		SendMessage(SearchControl, WM_SETFONT, (WPARAM)fonts.General, TRUE);*/
-		
-		controls.icon_transition = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
-		button::set_theme(controls.icon_transition, themes.transition_btn);
-		SendMessage(controls.icon_transition, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.pointed_line_arrow_right);
-		add_mouseover_tooltip(controls.icon_transition, LANG_TRANSITION_V0);
-
+			ask_window_for_resize(state.wnd);
+			ask_window_for_repaint(state.wnd);
+		} break;
+		default: Assert(0);
+		}
 	}
-
-	resize_controls(state);
 }
 
 void add_controls(State& state) {
@@ -544,8 +514,6 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 	AMT(menu_edit, SHOWPASSWORDS_MENU_FIND, LANG_MENU_EDIT_FIND);
 	SetMenuItemBitmaps(menu_edit, SHOWPASSWORDS_MENU_FIND, MF_BYCOMMAND, bmps.menu_search, bmps.menu_search);
 
-	//TODO(fran): show the hotkey/shortcut key corresponding to the menu item, eg Save\tCtrl+S
-
 	nonclient::set_menu(state.nc_parent, state.menu);
 }
 
@@ -657,14 +625,15 @@ void get_controls_data_for_saving(State& state, str& res) {
 }
 
 void save_passwords_v0(State& state) {
+	auto& controls = state.controls.transition_v0;
 	int user_len_chars = (int)wcslen(state.current_user);
-	int len_chars = user_len_chars + GetWindowTextLength(state.controls.edit_passwords) + 1;
+	int len_chars = user_len_chars + GetWindowTextLength(controls.edit_passwords) + 1;
 	// Pad with extra garbage bytes to get blocks of 16 bytes for encryption
 	int len_bytes = next_multiple_of_16(len_chars * sizeof(cstr)); 
 	void* mem = malloc(len_bytes); defer{ free(mem); };
 	Assert(sizeof(cstr) > 1);
 	wcscpy_s((cstr*)mem, user_len_chars + 1, state.current_user); //append username so we can check against it in later logins
-	GetWindowText(state.controls.edit_passwords, ((cstr*)mem) + user_len_chars, len_chars - user_len_chars);
+	GetWindowText(controls.edit_passwords, ((cstr*)mem) + user_len_chars, len_chars - user_len_chars);
 	twofish_encrypt(mem, len_bytes, mem);
 
 	bool res = save_to_file_user(state.current_user, mem, len_bytes);
@@ -672,12 +641,20 @@ void save_passwords_v0(State& state) {
 	if (!res) CustomMessageBox(state.wnd, RCS(LANG_ERROR_SAVEFILE_PASSWORDS), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement);
 }
 
-void save_passwords(State& state) {
+bool save_passwords(State& state, bool complete_version_transition = false) {
+	bool res;
+	if (state.mode == mode::transition_v0 && !complete_version_transition) {
+		//Prevent manual user saving while on a version transition until they confirm that the transition has been completed
+		res = false;
+		CustomMessageBox(state.wnd, RCS(LANG_ERROR_SAVE_ON_TRANSITION_TEXT), RCS(LANG_ERROR_SAVE_ON_TRANSITION_TITLE), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement);
+		return res;
+	}
+
 	// Append username so we can check against it in later logins (another idea is to append the key structure that twofish stores ) //TODO(fran): this aint the most clever, there could be collisions, but it's at least a way of checking integrity for now
 	str data = state.current_user;
 	get_controls_data_for_saving(state, data);
 
-	if constexpr (debug_text_view) SetWindowText(state.controls.edit_passwords, data.c_str() + wcslen(state.current_user));
+	if constexpr (debug_text_view) SetWindowText(state.controls.transition_v0.edit_passwords, data.c_str() + wcslen(state.current_user));
 
 	// Pad with extra garbage bytes to get blocks of 16 bytes for encryption
 	auto size_for_encryption = next_multiple_of_16(data.size() * sizeof(cstr)) / sizeof(cstr);
@@ -687,9 +664,10 @@ void save_passwords(State& state) {
 	auto data_cnt_bytes = size_for_encryption * sizeof(cstr);
 	twofish_encrypt(data.c_str(), data_cnt_bytes, data_ptr);
 	
-	bool res = save_to_file_user(state.current_user, data_ptr, data_cnt_bytes);
+	res = save_to_file_user(state.current_user, data_ptr, data_cnt_bytes);
 	set_passwords_need_save(state, !res);
 	if (!res) CustomMessageBox(state.wnd, RCS(LANG_ERROR_SAVEFILE_PASSWORDS), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement);
+	return res;
 }
 
 template<typename T> //I give up trying to write down the entire type of a string view subrange coming from std::views::split
@@ -749,6 +727,69 @@ void create_password_editors(State& state, utf16* data) {
 	resize_controls(state);
 }
 
+void add_controls_transition_v0(State& state) {
+	auto& controls = state.controls.transition_v0;
+	if (!controls.edit_passwords) {
+		controls.btn_static_bk_transition = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD);
+		button::set_theme(controls.btn_static_bk_transition, themes.editor_btn_static_bk_transition);
+
+		controls.btn_static_transition = create_window(controls.btn_static_bk_transition, button::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
+		button::set_theme(controls.btn_static_transition, themes.editor_btn_static_transition);
+
+		controls.static_transition = create_window(controls.btn_static_bk_transition, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
+		edit_oneline::set_theme(controls.static_transition, themes.editor_static_transition);
+		AWT(controls.static_transition, LANG_TRANSITION_V0);
+
+		controls.btn_confirm_transfer = create_window(controls.btn_static_bk_transition, button::wndclass, nil, WS_VISIBLE | WS_CHILD);
+		button::set_theme(controls.btn_confirm_transfer, themes.login_btn);
+		button::set_user_data(controls.btn_confirm_transfer, &state);
+		button::set_functions(controls.btn_confirm_transfer, {
+			.on_click = [](void* data, HWND wnd) {
+				auto& state = *(State*)data;
+				if (CustomMessageBox(state.wnd,
+					RCS(LANG_MSG_CONFIRM_COMPLETE_TRANSITION_V0_TEXT), RCS(LANG_MSG_CONFIRM_COMPLETE_TRANSITION_V0_TITLE),
+					MB_YESNOCANCEL | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement) == IDYES)
+					if (save_passwords(state, true))
+						set_mode(state, mode::normal);
+			}
+			});
+		AWT(controls.btn_confirm_transfer, LANG_TRANSITION_BTN_CONFIRM);
+
+		//TODO(fran): EM_SETENDOFLINE allows you to change between EC_ENDOFLINE_CRLF EC_ENDOFLINE_CR EC_ENDOFLINE_LF
+		controls.edit_passwords = create_window(state.wnd, L"Edit", nil, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | ES_NOHIDESEL /*to show selection even when you dont have the focus*/);
+
+		constexpr auto EDIT_PASSWORDS_MAX_TEXT_LENGTH = 32767 * 2; //32767 is the default
+		SendMessage(controls.edit_passwords, EM_SETLIMITTEXT, (WPARAM)EDIT_PASSWORDS_MAX_TEXT_LENGTH, NULL);
+
+		SetWindowSubclass(controls.edit_passwords, EditProc, 0, (DWORD_PTR)calloc(1, sizeof(EditProcState)));
+
+		HWND VScrollControl = CreateWindowEx(NULL, scrollbar::wndclass, NULL, WS_CHILD | WS_VISIBLE,
+			0, 0, 0, 0, controls.edit_passwords, NULL, NULL, NULL);
+		SendMessage(VScrollControl, scrollbar::U_SB_SET_PLACEMENT, (WPARAM)scrollbar::Placement::right, 0);
+
+		SendMessage(controls.edit_passwords, EM_SETVSCROLL, (WPARAM)VScrollControl, 0);
+		SetWindowFont(controls.edit_passwords, (WPARAM)fonts.General, true);
+
+		//INFO: I dont yet paint edit controls so you gotta use WM_CTLCOLOREDIT
+
+		/*search::Init searchinit;
+		searchinit.parent_type = search::ParentType::edit;
+		searchinit.SearchFlag_flags = 0;
+		searchinit.SearchPlacement_flags = search::Placement::bottom;
+		HWND SearchControl = CreateWindowEx(NULL, search::wndclass, NULL, WS_CHILD,
+			0, 0, 0, 0, controls.edit_passwords, NULL, NULL, &searchinit);
+		SendMessage(controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)SearchControl, 0);
+		SendMessage(SearchControl, WM_SETFONT, (WPARAM)fonts.General, TRUE);*/
+
+		controls.icon_transition = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
+		button::set_theme(controls.icon_transition, themes.transition_btn);
+		SendMessage(controls.icon_transition, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.pointed_line_arrow_right);
+		add_mouseover_tooltip(controls.icon_transition, LANG_TRANSITION_V0);
+
+	}
+	resize_controls(state);
+}
+
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	State& state = *get_state(hwnd);
 	switch (msg) {
@@ -784,13 +825,15 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		HWND child = (HWND)lparam;
 		if (child) { // Child notifications
-			if (child == state.controls.edit_passwords) {
-				switch (HIWORD(wparam)) { //Notif code
-				case EN_CHANGE:
-				{
-					set_passwords_need_save(state, true);
-					return 0;
-				}
+			if constexpr (debug_text_view) {
+				if (child == state.controls.transition_v0.edit_passwords) {
+					switch (HIWORD(wparam)) { //Notif code
+					case EN_CHANGE:
+					{
+						set_passwords_need_save(state, true);
+						return 0;
+					}
+					}
 				}
 			}
 		}
@@ -813,7 +856,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			} break;
 			case SHOWPASSWORDS_MENU_UNDO:
 			{
-				SendMessage(state.controls.edit_passwords, EM_UNDO, 0, 0); //TODO(fran): undo is terrible in edit controls, we gotta manage that in the subclass //NOTE: WM_UNDO seems to do the same
+				if constexpr (debug_text_view) SendMessage(state.controls.transition_v0.edit_passwords, EM_UNDO, 0, 0); //TODO(fran): undo is terrible in edit controls, we gotta manage that in the subclass //NOTE: WM_UNDO seems to do the same
 			} break;
 			case SHOWPASSWORDS_MENU_REDO:
 			{
@@ -866,10 +909,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				Assert(file_read.sz % 16 == 0);
 				twofish_decrypt(file_read.mem, file_read.sz, file_read.mem);
 				if (!wcsncmp(state.current_user, (cstr*)file_read.mem, minimum(state.start->username.sz_chars, file_read.sz / 2 /*byte to wchar*/))) { //Valid password, user inputted username matches stored username
-					state.mode = mode::transition_v0; //v0 data format detected, enabling UI to facilitate user transition to the new data format from their old data
-					add_controls_transition_v0(state);
+					set_mode(state, mode::transition_v0);
 
-					SetWindowText(state.controls.edit_passwords, ((cstr*)file_read.mem) + state.start->username.sz_chars);
+					SetWindowText(state.controls.transition_v0.edit_passwords, ((cstr*)file_read.mem) + state.start->username.sz_chars);
 					create_password_editors(state, ((cstr*)file_read.mem) + state.start->username.sz_chars);
 					start_attempt = login::AttemptResult::success;
 				}
@@ -897,14 +939,14 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			free(state.current_user);//No real need to zero the memory before freeing
 			state.current_user = nullptr;
 		}
-		SetWindowText(state.controls.edit_passwords, _t(""));//TODO(fran): yet again, we need to zero the mem also
+		SetWindowText(state.controls.transition_v0.edit_passwords, nil);//TODO(fran): yet again, we need to zero the mem also
 		return 0;
 	} break;
 	case WM_CLOSE: //Sent by our parent asking whether we want to handle it
 	{
 		bool client_handled = false;
 		if (state.passwords_need_save) {
-			int ret = CustomMessageBox(state.wnd, RCS(LANG_UNSAVEDCHANGES_TXT), RCS(LANG_UNSAVEDCHANGES_TITLE), MB_YESNOCANCEL | MB_ICONWARNING | MB_SETFOREGROUND | MB_APPLMODAL, msgbox_placement);
+			int ret = CustomMessageBox(state.wnd, RCS(LANG_UNSAVEDCHANGES_TXT), RCS(LANG_UNSAVEDCHANGES_TITLE), MB_YESNOCANCEL | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement);
 			switch (ret) {
 			case IDCANCEL:
 			{
@@ -912,7 +954,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			} break;
 			case IDYES:
 			{
-				save_passwords(state);
+				client_handled = !save_passwords(state);
 			} break;
 			case IDNO:
 			{
@@ -941,7 +983,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		HWND ctl = (HWND)lparam;
 		HDC dc = (HDC)wparam;
-		if (ctl == state.controls.edit_passwords)
+		if (ctl == state.controls.transition_v0.edit_passwords)
 		{
 			SetBkColor(dc, ColorFromBrush(colors.ControlBk));
 			SetTextColor(dc, ColorFromBrush(colors.ControlTxt));

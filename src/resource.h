@@ -77,7 +77,6 @@
 #define LANG_PWD_ED_TITLE               167
 #define BMP_MENU_SELECT_ALL             167
 #define LANG_PWD_ED_TBL_FIELD           168
-#define IDB_BITMAP2                     168
 #define BMP_POINTED_LINE_ARROW_RIGHT    168
 #define LANG_PWD_ED_TBL_VALUE           169
 #define LANG_SEARCH                     170
@@ -106,6 +105,10 @@
 #define LANG_ERROR_USERNAME_EXISTS      193
 #define LANG_MSG_TRANSITION_V0_TITLE    194
 #define LANG_MSG_TRANSITION_V0_TEXT     195
+#define LANG_ERROR_SAVE_ON_TRANSITION_TEXT 196
+#define LANG_ERROR_SAVE_ON_TRANSITION_TITLE 197
+#define LANG_MSG_CONFIRM_COMPLETE_TRANSITION_V0_TEXT 198
+#define LANG_MSG_CONFIRM_COMPLETE_TRANSITION_V0_TITLE 199
 #define WMN_FIND                        32774
 #define WMN_SAVE                        32776
 
