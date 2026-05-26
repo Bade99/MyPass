@@ -56,6 +56,7 @@ void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 	bmps.dropdown_up = LoadBitmap(instance, MAKEINTRESOURCE(BMP_DROPDOWN_UP));
 	bmps.bin = LoadBitmap(instance, MAKEINTRESOURCE(BMP_BIN));
 	bmps.line_arrow_right = LoadBitmap(instance, MAKEINTRESOURCE(BMP_LINE_ARROW_RIGHT));
+	bmps.pointed_line_arrow_right = LoadBitmap(instance, MAKEINTRESOURCE(BMP_POINTED_LINE_ARROW_RIGHT));
 
 	bmps.circle = load_bitmap8(instance, BMP_CIRCLE);
 	bmps.language = load_bitmap8(instance, BMP_LANGUAGE);

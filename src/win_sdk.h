@@ -66,13 +66,13 @@
 
 enum desired_size : unsigned int { dontcare = 0, flexible, fixed };
 static desired_size GetWindowDesiredSize(HWND wnd, SIZE* min, SIZE* max) {
-	return (desired_size)SendMessageW(wnd, WM_DESIRED_SIZE, (WPARAM)min, (LPARAM)max);
+	return (desired_size)SendMessage(wnd, WM_DESIRED_SIZE, (WPARAM)min, (LPARAM)max);
 }
 
 struct _desired_size { SIZE min, max; desired_size flexibility; };
 static _desired_size GetWindowDesiredSize(HWND wnd, SIZE min, SIZE max) {
 	_desired_size res;
-	res.flexibility = (desired_size)SendMessageW(wnd, WM_DESIRED_SIZE, (WPARAM)&min, (LPARAM)&max);
+	res.flexibility = (desired_size)SendMessage(wnd, WM_DESIRED_SIZE, (WPARAM)&min, (LPARAM)&max);
 	res.min = min;
 	res.max = max;
 	return res;

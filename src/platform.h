@@ -60,6 +60,7 @@ static_assert(sizeof(long long) == 8, "We expect external functions that use ll 
 
 
 typedef std::wstring str;
+typedef std::wstring_view str_view;
 typedef wchar_t cstr;
 
 

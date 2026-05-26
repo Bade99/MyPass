@@ -77,6 +77,8 @@
 #define LANG_PWD_ED_TITLE               167
 #define BMP_MENU_SELECT_ALL             167
 #define LANG_PWD_ED_TBL_FIELD           168
+#define IDB_BITMAP2                     168
+#define BMP_POINTED_LINE_ARROW_RIGHT    168
 #define LANG_PWD_ED_TBL_VALUE           169
 #define LANG_SEARCH                     170
 #define LANG_COPY_TO_CLIPBOARD          171
@@ -102,6 +104,8 @@
 #define LANG_MENU_EDIT_DELETE           191
 #define LANG_MENU_EDIT_SELECT_ALL       192
 #define LANG_ERROR_USERNAME_EXISTS      193
+#define LANG_MSG_TRANSITION_V0_TITLE    194
+#define LANG_MSG_TRANSITION_V0_TEXT     195
 #define WMN_FIND                        32774
 #define WMN_SAVE                        32776
 
@@ -110,7 +114,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        168
+#define _APS_NEXT_RESOURCE_VALUE        169
 #define _APS_NEXT_COMMAND_VALUE         32778
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           110

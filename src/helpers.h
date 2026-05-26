@@ -361,7 +361,7 @@ static void validate_rect_in_screen(RECT& target, RECT default_rect) {
 		return;
 	}
 
-	if (MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMonitor, &mi)) {
+	if (MONITORINFO mi = { sizeof(MONITORINFO) }; GetMonitorInfo(hMonitor, &mi)) {
 		auto& bounds = mi.rcWork;
 		auto fudge = 15;
 		InflateRect(&bounds, fudge, fudge);
@@ -524,11 +524,11 @@ static BOOL SetMenuItemData(HMENU hmenu, UINT item, BOOL fByPositon, ULONG_PTR d
 }
 
 static BOOL SetMenuItemString(HMENU hmenu, UINT item, BOOL fByPositon, const TCHAR* str) {
-	MENUITEMINFOW menu_setter;
+	MENUITEMINFO menu_setter;
 	menu_setter.cbSize = sizeof(menu_setter);
 	menu_setter.fMask = MIIM_STRING;
 	menu_setter.dwTypeData = const_cast<TCHAR*>(str);
-	BOOL res = SetMenuItemInfoW(hmenu, item, fByPositon, &menu_setter);
+	BOOL res = SetMenuItemInfo(hmenu, item, fByPositon, &menu_setter);
 	return res;
 }
 
@@ -597,10 +597,10 @@ struct StatefulFunction {
 	explicit operator bool() const { return function; }
 };
 
-static void init_wndclass(LPCWSTR class_name, WNDPROC proc, UINT extra_styles = 0, LPWSTR default_cursor = IDC_ARROW, HINSTANCE inst = GetModuleHandleW(nil)) {
+static void init_wndclass(const cstr* class_name, WNDPROC proc, UINT extra_styles = 0, cstr* default_cursor = IDC_ARROW, HINSTANCE inst = GetModuleHandle(nil)) {
 	//INFO: Now that we use pre_post_main we cant depend on anything that isnt calculated at compile time for class creation
-	WNDCLASSEXW wcex;
-	wcex.cbSize = sizeof(wcex);
+	WNDCLASSEX wcex;
+	wcex.cbSize = sizeof(WNDCLASSEX);
 	wcex.style = CS_HREDRAW | CS_VREDRAW | extra_styles;
 	wcex.lpfnWndProc = proc;
 	wcex.cbClsExtra = 0;
@@ -612,7 +612,7 @@ static void init_wndclass(LPCWSTR class_name, WNDPROC proc, UINT extra_styles = 
 	wcex.lpszMenuName = nil;
 	wcex.lpszClassName = class_name;
 	wcex.hIconSm = nil;
-	ATOM class_atom = RegisterClassExW(&wcex);
+	ATOM class_atom = RegisterClassEx(&wcex);
 	runtime_assert(class_atom, (str(L"Failed to initialize class ") + class_name).c_str());
 }
 
@@ -639,8 +639,8 @@ static HWND create_root_window(HINSTANCE instance, RECT r, void* data = nil, con
 	return res;
 }
 
-static HWND create_window(HWND parent, const utf16* wndclass, const utf16* title = nil, u32 styles = WS_VISIBLE | WS_CHILD, u32 extended_styles = 0, u64 wnd_id = 0, HWND manager_parent = nil) {
-	auto res = CreateWindowExW(
+static HWND create_window(HWND parent, const cstr* wndclass, const cstr* title = nil, u32 styles = WS_VISIBLE | WS_CHILD, u32 extended_styles = 0, u64 wnd_id = 0, HWND manager_parent = nil) {
+	auto res = CreateWindowEx(
 		WS_EX_COMPOSITED | WS_EX_TRANSPARENT | extended_styles,
 		wndclass, title, styles
 		, 0, 0, 0, 0, parent, (HMENU)wnd_id, nil, manager_parent);
@@ -709,7 +709,7 @@ static void set_window_state(HWND wnd, void* state) {
 
 static void ask_window_for_repaint(HWND wnd) { InvalidateRect(wnd, nullptr, true); }
 
-static void ask_window_for_resize(HWND wnd) { PostMessageW(wnd, WM_SIZE, 0, 0); }
+static void ask_window_for_resize(HWND wnd) { PostMessage(wnd, WM_SIZE, 0, 0); }
 
 static void set_window_manager_parent(HWND wnd, HWND manager_parent) {
 	WindowState& state = *get_window_state<WindowState>(wnd); Assert(&state);
@@ -753,7 +753,7 @@ static void SetText_txt_app(HWND wnd, const TCHAR* new_txt, const TCHAR* new_app
 		str title_window = new_txt;
 		title_window += L" - ";
 		title_window += new_appname;
-		SetWindowTextW(wnd, title_window.c_str());
+		SetWindowText(wnd, title_window.c_str());
 	}
 }
 

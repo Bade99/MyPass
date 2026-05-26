@@ -95,6 +95,7 @@ union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 		HBITMAP menu_restore;
 		HBITMAP solid_arrow_right;
 		HBITMAP line_arrow_right;
+		HBITMAP pointed_line_arrow_right;
 		HBITMAP dropdown;
 		HBITMAP dropdown_up;
 		HBITMAP circle;
@@ -119,7 +120,7 @@ union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 		HBITMAP menu_paste;
 		HBITMAP menu_select_all;
 	};
-	HBITMAP all[33];
+	HBITMAP all[34];
 
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 } static bmps{};

@@ -116,7 +116,7 @@ private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 };
 
 //TODO(fran): now that I think about it I believe this would be much better done once you need the contents from the editbox, you can perform a one time check, send one notification to the user informing of the problem and that's it
-struct _has_invalid_chars { bool res; std::wstring explanation; };
+struct _has_invalid_chars { bool res; str explanation; };
 typedef _has_invalid_chars(*func_has_invalid_chars)(const utf16* txt, size_t char_cnt, void* user_extra);
 typedef void(*func_on_change)(void* user_extra, HWND wnd);
 
@@ -146,7 +146,7 @@ struct State : WindowState {
 		POINT pos;//client coords, it's also top down so this is the _top_ of the caret
 	}caret;
 
-	std::wstring char_text;//much simpler to work with and debug
+	str char_text;//much simpler to work with and debug
 	std::vector<int> char_dims;//NOTE: specifies, for each character, its width
 	std::vector<size_t> line_breaks; //Indices into the text string where line breaks occur
 

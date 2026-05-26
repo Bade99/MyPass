@@ -191,12 +191,12 @@ public:
 	//·Returns the requested string in the current language
 	//·If stringID is invalid returns L"" //TODO(fran): check this is true
 	//INFO: uses temporary string that lives till the end of the full expression it appears in
-	std::wstring RequestString(UINT stringID)
+	str RequestString(UINT stringID)
 	{
-		std::wstring res;
-		const utf16* text;
-		auto char_cnt = LoadStringW(this->hInstance, stringID, (LPWSTR)&text, 0);
-		if (char_cnt) res = std::wstring(text, char_cnt);
+		str res;
+		const cstr* text;
+		auto char_cnt = LoadString(this->hInstance, stringID, (cstr*)&text, 0);
+		if (char_cnt) res = str(text, char_cnt);
 		else res = str(L"INVALID ID ") + to_str(stringID);
 		return res;
 	}
@@ -330,13 +330,13 @@ private:
 
 	BOOL UpdateMenu(HMENU hmenu, UINT_PTR ID, UINT stringID)
 	{
-		MENUITEMINFOW menu_setter;
-		menu_setter.cbSize = sizeof(menu_setter);
+		MENUITEMINFO menu_setter;
+		menu_setter.cbSize = sizeof(MENUITEMINFO);
 		menu_setter.fMask = MIIM_STRING;
-		std::wstring temp_text = this->RequestString(stringID);
+		str temp_text = this->RequestString(stringID);
 		//menu_setter.dwTypeData = _wcsdup(this->RequestString(stringID).c_str()); //TODO(fran): can we avoid dupping, if not free memory
-		menu_setter.dwTypeData = (LPWSTR)temp_text.c_str();
-		BOOL res = SetMenuItemInfoW(hmenu, (UINT)ID, FALSE, &menu_setter);
+		menu_setter.dwTypeData = (cstr*)temp_text.c_str();
+		BOOL res = SetMenuItemInfo(hmenu, (UINT)ID, FALSE, &menu_setter);
 		return res;
 	}
 

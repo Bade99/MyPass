@@ -284,7 +284,7 @@ void create_controls(State& state) {
 				{
 					auto& cell = *(const DescriptionCell*)data;
 					auto wnd = create_window(parent, edit_oneline::wndclass);
-					SetWindowTextW(wnd, cell.text);
+					SetWindowText(wnd, cell.text);
 					edit_oneline::set_theme(wnd, themes.clear_editoneline);
 					AWDT(wnd, LANG_PWD_ED_TBL_FIELD);
 					SetWindowFont(wnd, fonts.General, true);
@@ -305,7 +305,7 @@ void create_controls(State& state) {
 
 					controls.text = create_window(state.wnd, edit_oneline::wndclass);
 					AWDT(controls.text, LANG_PWD_ED_TBL_VALUE);
-					SetWindowTextW(controls.text, cell.text);
+					SetWindowText(controls.text, cell.text);
 					edit_oneline::set_theme(controls.text, themes.clear_editoneline);
 					edit_oneline::set_user_extra(controls.text, cell.on_change.state);
 					edit_oneline::set_functions(controls.text, { .on_change = cell.on_change.function });

@@ -357,5 +357,8 @@
     <Image Include="..\icons\MenuSelectAll_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="..\icons\PointedLineArrowRight16.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

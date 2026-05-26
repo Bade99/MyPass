@@ -187,3 +187,39 @@ HBITMAP flip_bitmap(HBITMAP srcBitmap, bool flipHorizontal, bool flipVertical) {
 
     return dstBitmap;
 }
+
+
+
+/**
+  * Menu
+  */
+
+static bool append_item_to_menu(HMENU menu, u32 item_id, u32 msg_id, HBITMAP img) {
+	bool res;
+	res = AppendMenu(menu, MF_STRING | MF_OWNERDRAW, item_id, (cstr*)menu);
+	res = SetMenuItemString(menu, item_id, FALSE, RCS(msg_id));
+	res = SetMenuItemBitmaps(menu, item_id, MF_BYCOMMAND, img, nil);
+	return res;
+}
+
+static bool append_item_to_menu(HMENU menu, u32 item_id, u32 msg_id, HBITMAP img, bool disabled) {
+	bool res;
+	res = append_item_to_menu(menu, item_id, msg_id, img);
+	if (disabled) res = EnableMenuItem(menu, item_id, MF_BYCOMMAND | MF_GRAYED);
+	return res;
+}
+
+static bool append_separator_to_menu(HMENU menu) {
+	bool res;
+	res = AppendMenu(menu, MF_SEPARATOR | MF_OWNERDRAW, 0, (LPCWSTR)menu);
+	return res;
+}
+
+static bool set_menu_background_color(HMENU menu, HBRUSH color) {
+	bool res;
+	MENUINFO mi{ sizeof(MENUINFO) };
+	mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
+	mi.hbrBack = color;
+	res = SetMenuInfo(menu, &mi);
+	return res;
+}

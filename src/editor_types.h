@@ -60,6 +60,12 @@ enum class mode {
 	normal = 0, transition_v0
 };
 
+namespace custom_message {
+	enum custom_message {
+		show_transition_v0_msgbox = WM_USER + 1, 
+	};
+};
+
 struct State {
 	HWND wnd;
 	HWND nc_parent;
@@ -94,7 +100,7 @@ struct State {
 	Settings* settings;
 	Start* start;
 
-	wchar_t* current_user;
+	cstr* current_user;
 	bool passwords_need_save;
 
 	sort_option sorting;

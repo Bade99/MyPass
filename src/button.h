@@ -212,21 +212,6 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 	{
 		return handle_wm_nchittest(state.wnd, lparam);
 	}
-	case WM_ERASEBKGND:
-	{
-		//You receive this msg if you didnt specify hbrBackground  when you registered the class, now it's up to you to draw the background
-		HDC dc = (HDC)wparam;
-		//TODO(fran): look at https://docs.microsoft.com/en-us/windows/win32/gdi/drawing-a-custom-window-background and SetMapModek, allows for transforms
-
-		return 0; //If you return 0 then on WM_PAINT fErase will be true, aka paint the background there
-	} break;
-	case WM_NCPAINT:
-	{
-		//Paint non client area, we shouldnt have any
-		HDC hdc = GetDCEx(hwnd, (HRGN)wparam, DCX_WINDOW | DCX_USESTYLE);
-		ReleaseDC(hwnd, hdc);
-		return 0; //we process this message, for now
-	} break;
 	case WM_WINDOWPOSCHANGED:
 	{
 		WINDOWPOS* p = (WINDOWPOS*)lparam; //new window pos, size, etc

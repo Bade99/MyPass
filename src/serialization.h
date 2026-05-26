@@ -117,20 +117,20 @@ static size_t find_identifier(str s, size_t offset, str compare) {
 	return str::npos;
 }
 
-static str load_file_serialized(std::wstring folder = L"\\unCap", std::wstring filename = L"\\serialized.txt") {
-	PWSTR general_folder;
+static str load_file_serialized(str folder = _t("\\unCap"), str filename = _t("\\serialized.txt")) {
+	cstr* general_folder;
 	SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &general_folder);//NOTE: I dont think this has an ansi version that isnt deprecated
-	std::wstring file = general_folder + folder + filename;
+	str file = general_folder + folder + filename;
 	CoTaskMemFree(general_folder);
 
 	str res;
-	HANDLE hFile = CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	HANDLE hFile = CreateFile(file.c_str(), GENERIC_READ, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
 	if (hFile != INVALID_HANDLE_VALUE) {
 		LARGE_INTEGER sz;
 		if (GetFileSizeEx(hFile, &sz)) {
 			u32 sz32 = (u32)sz.QuadPart;
-			TCHAR* buf = (TCHAR*)malloc(sz32);
+			auto buf = (cstr*)malloc(sz32);
 			if (buf) {
 				DWORD bytes_read;
 				if (ReadFile(hFile, buf, sz32, &bytes_read, 0) && sz32 == bytes_read) {
@@ -144,17 +144,17 @@ static str load_file_serialized(std::wstring folder = L"\\unCap", std::wstring f
 	return res;
 }
 
-static void save_to_file_serialized(str content, std::wstring folder = L"\\unCap", std::wstring filename = L"\\serialized.txt") {
-	PWSTR general_folder;
+static void save_to_file_serialized(str content, str folder = _t("\\unCap"), str filename = _t("\\serialized.txt")) {
+	cstr* general_folder;
 	SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &general_folder);
-	std::wstring dir = general_folder + folder;
-	std::wstring path = general_folder + folder + filename;
+	str dir = general_folder + folder;
+	str path = general_folder + folder + filename;
 	CoTaskMemFree(general_folder);
 
 	//SUPERTODO(fran): gotta create the folder first, if the folder isnt there the function fails
-	CreateDirectoryW(dir.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
+	CreateDirectory(dir.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
 
-	HANDLE file_handle = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	HANDLE file_handle = CreateFile(path.c_str(), GENERIC_WRITE, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (file_handle != INVALID_HANDLE_VALUE) {
 		DWORD bytes_written;
 		BOOL write_res = WriteFile(file_handle, (TCHAR*)content.c_str(), (DWORD)content.size() * sizeof(TCHAR), &bytes_written, NULL);

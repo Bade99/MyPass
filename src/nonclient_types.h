@@ -4,6 +4,8 @@ namespace nonclient {
 
 	constexpr auto& wndclass = wndclass_name("nonclient");
 
+	namespace menu { enum menu { minimize = 100, maximize, close, restore }; }
+
 	struct LpParam {//NOTE: pass a pointer to LpParam to set up the client area, if client_class_name is null no client is created
 		const TCHAR* client_class_name;
 		void* client_lp_param;

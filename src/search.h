@@ -16,10 +16,10 @@ auto search(State& state, bool search_in_current_selection) {
 
 	struct search_result { int p, sz_char; } res, fail_res{.p = -1};
 
-	int match_len = (int)SendMessageW(state.controls.edit_match, WM_GETTEXTLENGTH, 0, 0) + 1;//lenght in characters, includes null terminator
+	int match_len = (int)SendMessage(state.controls.edit_match, WM_GETTEXTLENGTH, 0, 0) + 1;//lenght in characters, includes null terminator
 	res.sz_char = match_len-1;
 	if (match_len > 1) {
-		WCHAR* match = (WCHAR*)malloc(match_len * sizeof(*match)); defer{ free(match); };
+		cstr* match = (cstr*)malloc(match_len * sizeof(*match)); defer{ free(match); };
 		SendMessage(state.controls.edit_match, WM_GETTEXT, match_len, (LPARAM)match);
 
 		switch (state.parent_type) {
@@ -68,7 +68,7 @@ auto search(State& state, bool search_in_current_selection) {
 
 			if (res.p != -1) res.p += range.min; //since we offset the string when searching now we gotta reintegrate that offset
 
-			//StrStrIW(str, match);//TODO(fran): look at https://www.codeproject.com/Articles/383185/SSE-accelerated-case-insensitive-substring-search which says to be much faster than this
+			//StrStrI(str, match);//TODO(fran): look at https://www.codeproject.com/Articles/383185/SSE-accelerated-case-insensitive-substring-search which says to be much faster than this
 			//wcsstr(, )//Case sensitive comparison, exact match
 
 			//TODO(fran): we could implement whole_word by ourselves, simply check what's next to and behind the found text

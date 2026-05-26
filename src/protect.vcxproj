@@ -243,6 +243,7 @@
     <Image Include="..\icons\Padlock32.bmp" />
     <Image Include="..\icons\Paste_A.bmp" />
     <Image Include="..\icons\Pin_A.bmp" />
+    <Image Include="..\icons\PointedLineArrowRight16.bmp" />
     <Image Include="..\icons\Restore16.bmp" />
     <Image Include="..\icons\RightArrow16.bmp" />
     <Image Include="..\icons\Save_A.bmp" />

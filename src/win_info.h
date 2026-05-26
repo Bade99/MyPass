@@ -38,6 +38,19 @@ namespace Placement {
 // NOTE: Windows' menu bar is terrible, it doesnt care to update for nothing
 // Calling SetMenu after one has already been set doesn't really work, the user should call our set_menu and get_menu instead of Windows' SetMenu and GetMenu
 
+void show_rclickmenu(HWND wnd, POINT mouse) {
+	HMENU m = CreateMenu();
+	HMENU subm = CreateMenu();
+	// IMPORTANT: you need a MF_POPUP submenu for the menu wnd to be rendered properly
+	// thanks https://www.codeproject.com/Questions/334598/Popup-Menu-Problem-is-not-working-properly
+	AppendMenu(m, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)subm, (LPCWSTR)m);
+	
+	//...
+	
+	//NOTE: using TPM_RETURNCMD makes it so TrackPopupMenuEx returns the command id that the user selected
+	TrackPopupMenuEx(subm, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, wnd, 0);
+	DestroyMenu(m);
+}
 
 /**
   * Window Proc Messages
@@ -61,6 +74,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		}
 		else {
 			RECT* client_rc = (RECT*)lparam;
+			//can be used to make client_rc cover the full window area
 			return 0;
 		}
 	} break;
@@ -196,7 +210,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 #include <commdlg.h> //FR_DOWN,... //INFO: FR_DOWN was added in rich edit 2.0, so if you want to do the proper implementation you gotta special case that
 
 //+ Fixing windows' bad design: //TODO(fran): move to richedit .h file
-LPCWSTR get_richedit_classW(int setclass = 0 /*for internal use, not end user*/) {
+const cstr* get_richedit_class(int setclass = 0 /*for internal use, not end user*/) {
     static int v = 1;
     if (setclass) v = setclass;
     switch (v) {
@@ -213,7 +227,7 @@ BOOL load_richedit() {//NOTE: use RICHEDIT_CLASS for the window's class name
     if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Msftedit.dll")); if (success)success = 4; } //v4.1
     if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Riched20.dll")); if (success)success = 2; } //v3.0 or 2.0
     if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Riched32.dll")); if (success)success = 1; } //v1.0
-    get_richedit_classW(success);
+    get_richedit_class(success);
     return success;
 }
 
@@ -223,13 +237,13 @@ void setup_window_classes(HINSTANCE hInstance) {
 //+
 
 void create_richedit() {
-	state.controls.edit_passwords = CreateWindowExW(NULL, get_richedit_classW(), NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | WS_VISIBLE | WS_TABSTOP | ES_NOHIDESEL //| WS_VSCROLL | WS_HSCROLL 
+	state.controls.edit_passwords = CreateWindowEx(NULL, get_richedit_class(), NULL, WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | WS_VISIBLE | WS_TABSTOP | ES_NOHIDESEL //| WS_VSCROLL | WS_HSCROLL 
 		, 0, 0, 0, 0
 		, state.wnd
 		, NULL, NULL, NULL);
 
 	#define EDIT_PASSWORDS_MAX_TEXT_LENGTH (32767*2) //32767 is the default
-	SendMessageW(state.controls.edit_passwords, EM_EXLIMITTEXT, 0, EDIT_PASSWORDS_MAX_TEXT_LENGTH); //msg completely different from edit control, good job microsoft
+	SendMessage(state.controls.edit_passwords, EM_EXLIMITTEXT, 0, EDIT_PASSWORDS_MAX_TEXT_LENGTH); //msg completely different from edit control, good job microsoft
 
 	SetWindowSubclass(state.controls.edit_passwords, EditProc, 0, (DWORD_PTR)calloc(1, sizeof(EditProcState)));
 
@@ -237,10 +251,10 @@ void create_richedit() {
 	//RICHEDIT_set_txt_color(state.controls.edit_passwords, ColorFromBrush(colors.ControlTxt)); //IMPORTANT: this needs to be called each time the text changes
 	RICHEDIT_set_txt_bk_color(state.controls.edit_passwords, ColorFromBrush(colors.ControlBk));
 
-	HWND VScrollControl = CreateWindowExW(NULL, wndclass_scrollbar, NULL, WS_CHILD | WS_VISIBLE,
+	HWND VScrollControl = CreateWindowEx(NULL, wndclass_scrollbar, NULL, WS_CHILD | WS_VISIBLE,
 		0, 0, 0, 0, state.controls.edit_passwords, NULL, NULL, NULL);
 	SendMessage(VScrollControl, U_SB_SET_PLACEMENT, (WPARAM)Placement::right, 0);
-	SendMessageW(state.controls.edit_passwords, EM_SETVSCROLL, (WPARAM)VScrollControl, 0);
+	SendMessage(state.controls.edit_passwords, EM_SETVSCROLL, (WPARAM)VScrollControl, 0);
 
 	Init searchinit;
 	searchinit.parent_type = richedit;
@@ -250,10 +264,10 @@ void create_richedit() {
 	#else
 	searchinit.SearchPlacement_flags = Placement::bottom;
 	#endif
-	HWND SearchControl = CreateWindowExW(NULL, protect_wndclass_search, NULL, WS_CHILD,
+	HWND SearchControl = CreateWindowEx(NULL, protect_wndclass_search, NULL, WS_CHILD,
 		0, 0, 0, 0, state.controls.edit_passwords, NULL, NULL, &searchinit);
 	SEARCH_set_brushes(SearchControl, TRUE, colors.Search_Bk, colors.Search_Bk, colors.Search_Txt, colors.Search_BkPush, colors.Search_BkMouseOver, colors.Search_Edit_Bk, colors.Search_Edit_Txt);
-	SendMessageW(state.controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)SearchControl, 0);
+	SendMessage(state.controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)SearchControl, 0);
 	//TODO(fran): for some reason IME doesnt get correctly set up in the search wnd
 	//TODO(fran): enumchildwindows of your parent to make sure you dont overlap with one another
 }

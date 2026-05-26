@@ -267,7 +267,7 @@ void recalculate_line_breaks(State& state) {
 	//TODO(fran): @speed: provide additional parameters to allow us to only recalculate line breaks after the changed characters
 	state.line_breaks.clear();
 	size_t linebreak = 0;
-	while ((linebreak = state.char_text.find('\n', linebreak)) != std::wstring::npos) {
+	while ((linebreak = state.char_text.find('\n', linebreak)) != str::npos) {
 		state.line_breaks.push_back(linebreak);
 		linebreak++;
 	}
@@ -876,66 +876,37 @@ void render_selection(HDC dc, HBRUSH brush, char_sel sel, State& state, int yPos
   * mouse: in screen coords
   */
 void show_rclickmenu(State& state, POINT mouse) {
-	HMENU m = CreateMenu();
-	HMENU subm = CreateMenu();//IMPORTANT: you need a MF_POPUP submenu for the menu wnd to be rendered properly, thanks https://www.codeproject.com/Questions/334598/Popup-Menu-Problem-is-not-working-properly
-	AppendMenuW(m, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)subm, (LPCWSTR)m);
+	HMENU m = CreateMenu(); defer{ DestroyMenu(m); };
+	HMENU subm = CreateMenu();
+	AppendMenu(m, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)subm, (LPCWSTR)m);
 
 	bool has_selection = state.selection.has_selection();
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::undo, (LPCWSTR)subm);
-	SetMenuItemString(subm, menu::undo, FALSE, RCS(LANG_MENU_EDIT_UNDO));
-	SetMenuItemBitmaps(subm, menu::undo, MF_BYCOMMAND, bmps.menu_undo, nil);
-	EnableMenuItem(subm, menu::undo, MF_BYCOMMAND | MF_GRAYED);
+	append_item_to_menu(subm, menu::undo, LANG_MENU_EDIT_UNDO, bmps.menu_undo, true);
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::redo, (LPCWSTR)subm);
-	SetMenuItemString(subm, menu::redo, FALSE, RCS(LANG_MENU_EDIT_REDO));
-	SetMenuItemBitmaps(subm, menu::redo, MF_BYCOMMAND, bmps.menu_redo, nil);
-	EnableMenuItem(subm, menu::redo, MF_BYCOMMAND | MF_GRAYED);
+	append_item_to_menu(subm, menu::redo, LANG_MENU_EDIT_REDO, bmps.menu_redo, true);
 
-	AppendMenuW(subm, MF_SEPARATOR | MF_OWNERDRAW, 0, (LPCWSTR)subm);
+	append_separator_to_menu(subm);
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::cut, (LPCWSTR)subm);
-	SetMenuItemString(subm, menu::cut, FALSE, RCS(LANG_MENU_EDIT_CUT));
-	SetMenuItemBitmaps(subm, menu::cut, MF_BYCOMMAND, bmps.cut, nil);
-	if (!has_selection) EnableMenuItem(subm, menu::cut, MF_BYCOMMAND | MF_GRAYED);
+	append_item_to_menu(subm, menu::cut, LANG_MENU_EDIT_CUT, bmps.cut, !has_selection);
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::copy, (LPCWSTR)subm);
-	SetMenuItemString(subm, menu::copy, FALSE, RCS(LANG_MENU_EDIT_COPY));
-	SetMenuItemBitmaps(subm, menu::copy, MF_BYCOMMAND, bmps.clipboard, nil);
-	if (!has_selection) EnableMenuItem(subm, menu::copy, MF_BYCOMMAND | MF_GRAYED);
+	append_item_to_menu(subm, menu::copy, LANG_MENU_EDIT_COPY, bmps.clipboard, !has_selection);
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::paste, (LPCWSTR)subm);
-	SetMenuItemString(subm, menu::paste, FALSE, RCS(LANG_MENU_EDIT_PASTE));
-	SetMenuItemBitmaps(subm, menu::paste, MF_BYCOMMAND, bmps.menu_paste, nil);
-	if (!IsClipboardFormatAvailable(clipboard_format)) EnableMenuItem(subm, menu::paste, MF_BYCOMMAND | MF_GRAYED);
+	append_item_to_menu(subm, menu::paste, LANG_MENU_EDIT_PASTE, bmps.menu_paste, !IsClipboardFormatAvailable(clipboard_format));
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::del, (LPCWSTR)subm);
-	SetMenuItemString(subm, menu::del, FALSE, RCS(LANG_MENU_EDIT_DELETE));
-	SetMenuItemBitmaps(subm, menu::del, MF_BYCOMMAND, bmps.bin, nil);
-	if (!has_selection) EnableMenuItem(subm, menu::del, MF_BYCOMMAND | MF_GRAYED);
+	append_item_to_menu(subm, menu::del, LANG_MENU_EDIT_DELETE, bmps.bin, !has_selection);
 
-	AppendMenuW(subm, MF_SEPARATOR | MF_OWNERDRAW, 0, (LPCWSTR)subm);
+	append_separator_to_menu(subm);
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::find, (LPCWSTR)subm);
-	SetMenuItemString(subm, menu::find, FALSE, RCS(LANG_MENU_EDIT_FIND));
-	SetMenuItemBitmaps(subm, menu::find, MF_BYCOMMAND, bmps.menu_search, nil);
-	EnableMenuItem(subm, menu::find, MF_BYCOMMAND | MF_GRAYED);
+	append_item_to_menu(subm, menu::find, LANG_MENU_EDIT_FIND, bmps.menu_search, true);
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, menu::select_all, (LPCWSTR)subm);
-	SetMenuItemString(subm, menu::select_all, FALSE, RCS(LANG_MENU_EDIT_SELECT_ALL));
-	SetMenuItemBitmaps(subm, menu::select_all, MF_BYCOMMAND, bmps.menu_select_all, nil);
-	if (!state.char_text.size() || (has_selection && state.selection.sel_width() >= state.char_text.size()))
-		EnableMenuItem(subm, menu::select_all, MF_BYCOMMAND | MF_GRAYED);
+	append_item_to_menu(subm, menu::select_all, LANG_MENU_EDIT_SELECT_ALL, bmps.menu_select_all, 
+		!state.char_text.size() || (has_selection && state.selection.sel_width() >= state.char_text.size())
+	);
 
-	MENUINFO mi{ sizeof(mi) };
-	mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
-	mi.hbrBack = colors.CaptionBk;
-	SetMenuInfo(m, &mi);
+	set_menu_background_color(m, colors.CaptionBk);
 
-	//NOTE: using tpm_returncmd would be a quick and simple cheat to get past msg collision problems and the like
-	//TrackPopupMenu(m, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, 0, state.wnd, 0);
 	TrackPopupMenuEx(subm, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, state.wnd, 0);
-	DestroyMenu(m);
 }
 
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -944,7 +915,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	State& state = *get_state(hwnd); _control_validate_state;
 	switch (msg) {
 	case WM_NCCREATE:
-	{ //1st msg received
+	{
 		CREATESTRUCT* creation_nfo = (CREATESTRUCT*)lparam;
 
 		Assert(!(creation_nfo->style & ES_RIGHT));//TODO(fran)
@@ -961,21 +932,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		st->char_dims = std::vector<int>();
 		st->line_breaks = decltype(st->line_breaks)();
 
-		return TRUE; //continue creation
+		return TRUE;
 	} break;
-	case WM_NCCALCSIZE: { //2nd msg received https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-nccalcsize
-		if (wparam) {
-			//Indicate part of current client area that is valid
-			NCCALCSIZE_PARAMS* calcsz = (NCCALCSIZE_PARAMS*)lparam;
-			return 0; //causes the client area to resize to the size of the window, including the window frame
-		}
-		else {
-			RECT* client_rc = (RECT*)lparam;
-			//TODO(fran): make client_rc cover the full window area
-			return 0;
-		}
-	} break;
-	case WM_CREATE://3rd msg received
+	case WM_CREATE:
 	{
 		//Create our tooltip
 		state.controls.tooltip = CreateWindowEx(WS_EX_TOPMOST/*make sure it can be seen in any wnd config*/, TOOLTIPS_CLASS, NULL,
@@ -1001,23 +960,14 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
-	case WM_SIZE: {//4th, strange, I though this was sent only if you didnt handle windowposchanging (or a similar one)
-		//NOTE: neat, here you resize your render target, if I had one or cared to resize windows' https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-size
-		//This msg is received _after_ the window was resized
+	case WM_SIZE: {
 		update_char_pad(state);
 		reposition_caret(state, true);
 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
-	case WM_MOVE: //5th. Sent on startup after WM_SIZE, although possibly sent by DefWindowProc after I let it process WM_SIZE, not sure
+	case WM_SHOWWINDOW:
 	{
-		//This msg is received _after_ the window was moved
-		//Here you can obtain x and y of your window's client area
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_SHOWWINDOW: //6th. On startup I received this cause of WS_VISIBLE flag
-	{
-		//Sent when window is about to be hidden or shown, doesnt let it clear if we are in charge of that or it's going to happen no matter what we do
 		BOOL show = (BOOL)wparam;
 		if (!show) {
 			//We're going to be hidden, we must also hide our tooltips
@@ -1025,23 +975,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
-	case WM_NCPAINT://7th
-	{
-		//Paint non client area, we shouldnt have any
-		HDC hdc = GetDCEx(hwnd, (HRGN)wparam, DCX_WINDOW | DCX_USESTYLE);
-		ReleaseDC(hwnd, hdc);
-		return 0; //we process this message, for now
-	} break;
-	case WM_ERASEBKGND://8th
-	{
-		//You receive this msg if you didnt specify hbrBackground  when you registered the class, now it's up to you to draw the background
-		HDC dc = (HDC)wparam;
-		//TODO(fran): look at https://docs.microsoft.com/en-us/windows/win32/gdi/drawing-a-custom-window-background and SetMapModek, allows for transforms
-
-		return 0; //If you return 0 then on WM_PAINT fErase will be true, aka paint the background there
-	} break;
-	case EM_LIMITTEXT://Set text limit in _characters_ ; does NOT include the terminating null
-		//wparam = unsigned int with max char count ; lparam=0
+	case EM_LIMITTEXT: //Set text limit in _characters_ ; does NOT include the terminating null
 	{
 		//TODO(fran): docs says this shouldnt affect text already inside the control nor text set via WM_SETTEXT, not sure I agree with that
 		state.char_max_sz = (u32)wparam;
@@ -1056,16 +990,12 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 		return 0;
 	} break;
-	case WM_DESTROY:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_NCDESTROY://Last msg. Sent _after_ WM_DESTROY
+	case WM_NCDESTROY:
 	{
 		stop_caret_blinking(state);//TODO(fran): not sure I need this
 		if (state.caret.bmp) {
 			DeleteBitmap(state.caret.bmp);
-			state.caret.bmp = 0;
+			state.caret.bmp = nil;
 		}
 		state.char_dims.~vector();
 		state.char_text.~basic_string();
@@ -1246,19 +1176,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_SETCURSOR://When the mouse goes over us this is 2nd msg received
 	{
-		//DefWindowProc passes this to its parent to see if it wants to change the cursor settings, we'll make a decision, setting the mouse cursor, and halting proccessing so it stays like that
-		//Sent after getting the result of WM_NCHITTEST, mouse is inside our window and mouse input is not being captured
-
-		/* https://docs.microsoft.com/en-us/windows/win32/learnwin32/setting-the-cursor-image
-			if we pass WM_SETCURSOR to DefWindowProc, the function uses the following algorithm to set the cursor image:
-			1. If the window has a parent, forward the WM_SETCURSOR message to the parent to handle.
-			2. Otherwise, if the window has a class cursor, set the cursor to the class cursor.
-			3. If there is no class cursor, set the cursor to the arrow cursor.
-		*/
-			
 		return handle_wm_setcursor(hwnd, msg, wparam, lparam, (HCURSOR)GetClassLongPtr(hwnd, GCLP_HCURSOR));
 	} break;
-	case WM_MOUSEMOVE /*WM_MOUSEFIRST*/://When the mouse goes over us this is 3rd msg received
+	case WM_MOUSEMOVE:
 	{
 		//wparam = test for virtual keys pressed
 		POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };//Client coords, relative to upper-left corner of client area
@@ -1523,7 +1443,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		} break;
 		case (char)VK_PROCESSKEY://TODO(fran): WTF if you dont cast to (char) vk doesnt match ?!
 		{
-			//UINT conv_vk = MapVirtualKeyW(lparam>>16, MAPVK_VSC_TO_VK_EX);//doesnt work for arrow keys, thanks windows
+			//UINT conv_vk = MapVirtualKey(lparam>>16, MAPVK_VSC_TO_VK_EX);//doesnt work for arrow keys, thanks windows
 			u16 scancode = (decltype(scancode))(lparam >> 16);
 
 			//TODO(fran): check that the candidates window has some candidates, if it doesnt then we can simply continue as if nothing happened
@@ -1682,7 +1602,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 			//if (contains_char(c, state.invalid_chars)) {
 			//	//display tooltip //TODO(fran): make this into a reusable function
-			//	std::wstring tooltip_msg = (RS(10) + L" " + state.invalid_chars);
+			//	str tooltip_msg = (RS(10) + L" " + state.invalid_chars);
 			//	show_tip(state.wnd, tooltip_msg.c_str(), EDITONELINE_default_tooltip_duration, ETP::left | ETP::top);
 			//	return 0;
 			//}
@@ -1729,11 +1649,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		default: return DefWindowProc(hwnd, msg, wparam, lparam);
 		}
 	} break;
-	case WM_KEYUP:
-	{
-		//TODO(fran): smth to do here?
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
 	case WM_GETTEXT://the specified char count must include null terminator, since windows' defaults to force writing it to you
 	{
 		LRESULT res;
@@ -1769,21 +1684,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 		return res;
 	}break;
-	//case WM_SETTEXT_NO_NOTIFY:
-	//{
-	//	cstr* buf = (cstr*)lparam;//null terminated
-
-	//	BOOL res = edit_oneline::_settext(state, buf);
-	//	SendMessage(state.wnd, EM_SETSEL, 0, 0);
-
-	//	return res;
-	//} break;
 	case WM_SYSKEYDOWN://1st msg received after the user presses F10 or Alt+some key
-	{
-		//TODO(fran): notify the parent?
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_SYSKEYUP:
 	{
 		//TODO(fran): notify the parent?
 		return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -1950,15 +1851,15 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			HIMC imc = ImmGetContext(state.wnd);
 			if (imc != NULL) {
 				defer{ ImmReleaseContext(state.wnd, imc); };
-				//INFO: ImmGetCompositionStringW: https://cpp.hotexamples.com/examples/-/-/ImmGetCompositionStringW/cpp-immgetcompositionstringw-function-examples.html
-				int szbytes = ImmGetCompositionStringW(imc, GCS_COMPSTR, 0, 0);//excluding null terminator
+				//INFO: ImmGetCompositionString: https://cpp.hotexamples.com/examples/-/-/ImmGetCompositionStringW/cpp-immgetcompositionstringw-function-examples.html
+				int szbytes = ImmGetCompositionString(imc, GCS_COMPSTR, 0, 0);//excluding null terminator
 				if (szbytes > 0) {//otherwise gotta handle possible errors
 					utf16* txt;
 					//szbytes += (1 * sizeof(*txt));//include null terminator
 					txt = (decltype(txt))malloc(szbytes + sizeof(*txt)); defer{ free(txt); };
 
-					auto len = ImmGetCompositionStringW(imc, GCS_COMPSTR, txt, szbytes) / sizeof(*txt);
-					txt[len] = 0;//ImmGetCompositionStringW does _not_ write the null terminator
+					auto len = ImmGetCompositionString(imc, GCS_COMPSTR, txt, szbytes) / sizeof(*txt);
+					txt[len] = 0;//ImmGetCompositionString does _not_ write the null terminator
 
 					en_change = insert_character(state, txt);
 
@@ -1985,14 +1886,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_IME_ENDCOMPOSITION://After the chars are sent from the IME window it hides/destroys itself (idk)
 	{
 		//TODO: Handle once we process our own IME
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_WINDOWPOSCHANGING:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_WINDOWPOSCHANGED:
-	{
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	//case WM_IME_CONTROL: //NOTE: I feel like this should be received by the wndproc of the IME, I dont think I can get DefWndProc to send it there for me
@@ -2164,7 +2057,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_MOUSEWHEEL:
 	{
-		//no reason for processing mousewheel input. TODO(fran): we may want to process it if the text is longer that what fits on our box, we could provide sideways scrolling
+		//no reason for processing mousewheel input. TODO(fran): we may want to process it if the text is longer than what fits on our box, we could provide sideways scrolling
 		return DefWindowProc(hwnd, msg, wparam, lparam);//propagates the msg to the parent
 	} break;
 

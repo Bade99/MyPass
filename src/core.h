@@ -3,16 +3,16 @@
 #include "sha256.h"
 #include "twofish.h"
 
-static std::wstring get_general_save_folder() { //NOTE: this folder is guaranteed to exist
-	static std::wstring folder; //folder stored globally, if the user decides to delete it mid execution I wish them good luck
+static str get_general_save_folder() { //NOTE: this folder is guaranteed to exist
+	static str folder; //folder stored globally, if the user decides to delete it mid execution I wish them good luck
 	if (folder.empty()) {
-		constexpr wchar_t application_folder[] = L"\\MyPass";
-		PWSTR general_folder;
+		constexpr auto& application_folder = _t("\\MyPass");
+		cstr* general_folder;
 		SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &general_folder);//NOTE: I dont think this has an ansi version that isnt deprecated
 		(folder = general_folder) += application_folder;
 		CoTaskMemFree(general_folder);
-		BOOL res = CreateDirectoryW(folder.c_str(), 0);
-		runtime_assert(res || GetLastError()==ERROR_ALREADY_EXISTS, L"Unable to create work folder on AppData\\Roaming");
+		BOOL res = CreateDirectory(folder.c_str(), 0);
+		runtime_assert(res || GetLastError()==ERROR_ALREADY_EXISTS, _t("Unable to create work folder on AppData\\Roaming"));
 	}
 	return folder;
 }

@@ -17,9 +17,9 @@
 #include "platform.h"
 #include "macros.h"
 #include "global.h"
+#include "language_manager.h"
 #include "advanced_helpers.h"
 #include "renderer.h"
-#include "language_manager.h"
 #include "serialization.h"
 #include "core.h"
 #include "win_msg_common_handler.h"
@@ -111,11 +111,11 @@ void setup_fonts() {
 
 
     lf.lfHeight = (LONG)((float)GetSystemMetrics(SM_CYMENU) * .85f);
-    fonts.Menu = CreateFontIndirectW(&lf);
+    fonts.Menu = CreateFontIndirect(&lf);
     Assert(fonts.Menu);
 
     lf.lfWeight = FW_BOLD;
-    fonts.SmallBold = CreateFontIndirectW(&lf);
+    fonts.SmallBold = CreateFontIndirect(&lf);
     Assert(fonts.SmallBold);
 
     atexit([]() { for (auto& f : fonts.all) if (f) { DeleteObject(f); f = nil; } });
@@ -135,9 +135,9 @@ void ensure_close_windows(HWND login, HWND editor) {
      */
     constexpr auto& nonclient = nonclient::wndclass;
     constexpr auto sz = ARRAYSIZE(nonclient);
-    WCHAR test_class[sz];
+    cstr test_class[sz];
     for (auto w : {login, editor})
-        if (IsWindow(w) && GetClassNameW(w, &test_class[0], sz) && !wcsncmp(test_class, nonclient, sz))
+        if (IsWindow(w) && GetClassName(w, &test_class[0], sz) && !wcsncmp(test_class, nonclient, sz))
             DestroyWindow(w);
 }
 
@@ -209,15 +209,20 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
         .client_lp_param = &editor_data,
     };
 
+    auto validate_nonclient_rect_in_screen = [](RECT nc, RECT default_nc) {
+        validate_rect_in_screen(nc, default_nc);
+        return nc;
+    };
+
     HWND login_wnd = create_root_window(
         hInstance, 
-        nonclient::calc_nonclient_rc_from_client(login_cl.rc, false), 
+        validate_nonclient_rect_in_screen(nonclient::calc_nonclient_rc_from_client(login_cl.rc, false), login_cl.rc),
         &login_nclpparam
     );
 
     HWND editor_wnd = create_root_window(
         hInstance, 
-        nonclient::calc_nonclient_rc_from_client(editor_cl.rc, true), 
+        validate_nonclient_rect_in_screen(nonclient::calc_nonclient_rc_from_client(editor_cl.rc, true), editor_cl.rc),
         &show_nclpparam
     );
     

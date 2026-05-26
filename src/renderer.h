@@ -20,7 +20,7 @@
 
 #pragma comment(lib, "Windowscodecs.lib")
 
-HRESULT WriteBitmap(HBITMAP bitmap, const wchar_t* pathname) {
+HRESULT WriteBitmap(HBITMAP bitmap, const cstr* pathname) {
 	//TODO(fran): solve limitations https://stackoverflow.com/questions/24720451/save-hbitmap-to-bmp-file-using-only-win32
 	CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 	HRESULT hr = S_OK;
@@ -105,7 +105,7 @@ HRESULT WriteBitmap(HBITMAP bitmap, const wchar_t* pathname) {
 	CoUninitialize();
 }
 #else
-HRESULT WriteBitmap(HBITMAP bitmap, const wchar_t* pathname = L"") {};
+HRESULT WriteBitmap(HBITMAP bitmap, const cstr* pathname = _t("")) {};
 #endif
 
 int FillRectAlpha(HDC dc, const RECT& r, HBRUSH br, u8 alpha) {

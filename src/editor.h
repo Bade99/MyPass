@@ -120,7 +120,7 @@ void resize_controls(State& state) {
 			MoveWindow(controls.btn_static_bk_transition, btn_static_bk_transition);
 			MoveWindow(controls.btn_static_transition, btn_static_transition);
 			MoveWindow(controls.static_transition, static_transition);
-			MoveWindow(controls.btn_confirm_transfer, btn_confirm_transfer);
+			MoveWindow(controls.btn_confirm_transfer, btn_confirm_transfer); //TODO(fran): small bug, btn doesnt automatically resize when changing languages, this is probably a general issue, look at my language learning app to see how I solved it
 			MoveWindow(controls.edit_passwords, edit_showpasswords);
 			MoveWindow(controls.icon_transition, icon_transition);
 		}
@@ -221,15 +221,15 @@ void add_controls_transition_v0(State& state) {
 		controls.edit_passwords = create_window(state.wnd, L"Edit", nil, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | ES_NOHIDESEL /*to show selection even when you dont have the focus*/);
 
 		constexpr auto EDIT_PASSWORDS_MAX_TEXT_LENGTH = 32767 * 2; //32767 is the default
-		SendMessageW(controls.edit_passwords, EM_SETLIMITTEXT, (WPARAM)EDIT_PASSWORDS_MAX_TEXT_LENGTH, NULL);
+		SendMessage(controls.edit_passwords, EM_SETLIMITTEXT, (WPARAM)EDIT_PASSWORDS_MAX_TEXT_LENGTH, NULL);
 
 		SetWindowSubclass(controls.edit_passwords, EditProc, 0, (DWORD_PTR)calloc(1, sizeof(EditProcState)));
 
-		HWND VScrollControl = CreateWindowExW(NULL, scrollbar::wndclass, NULL, WS_CHILD | WS_VISIBLE,
+		HWND VScrollControl = CreateWindowEx(NULL, scrollbar::wndclass, NULL, WS_CHILD | WS_VISIBLE,
 			0, 0, 0, 0, controls.edit_passwords, NULL, NULL, NULL);
 		SendMessage(VScrollControl, scrollbar::U_SB_SET_PLACEMENT, (WPARAM)scrollbar::Placement::right, 0);
 
-		SendMessageW(controls.edit_passwords, EM_SETVSCROLL, (WPARAM)VScrollControl, 0);
+		SendMessage(controls.edit_passwords, EM_SETVSCROLL, (WPARAM)VScrollControl, 0);
 		SetWindowFont(controls.edit_passwords, (WPARAM)fonts.General, true);
 
 		//INFO: I dont yet paint edit controls so you gotta use WM_CTLCOLOREDIT
@@ -238,14 +238,14 @@ void add_controls_transition_v0(State& state) {
 		searchinit.parent_type = search::ParentType::edit;
 		searchinit.SearchFlag_flags = 0;
 		searchinit.SearchPlacement_flags = search::Placement::bottom;
-		HWND SearchControl = CreateWindowExW(NULL, search::wndclass, NULL, WS_CHILD,
+		HWND SearchControl = CreateWindowEx(NULL, search::wndclass, NULL, WS_CHILD,
 			0, 0, 0, 0, controls.edit_passwords, NULL, NULL, &searchinit);
-		SendMessageW(controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)SearchControl, 0);
+		SendMessage(controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)SearchControl, 0);
 		SendMessage(SearchControl, WM_SETFONT, (WPARAM)fonts.General, TRUE);*/
 		
 		controls.icon_transition = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
 		button::set_theme(controls.icon_transition, themes.transition_btn);
-		SendMessage(controls.icon_transition, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.line_arrow_right);
+		SendMessage(controls.icon_transition, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.pointed_line_arrow_right);
 		add_mouseover_tooltip(controls.icon_transition, LANG_TRANSITION_V0);
 
 	}
@@ -293,7 +293,7 @@ void add_controls(State& state) {
 		.SearchFlag_flags = 0,
 		.parent_type = search::ParentType::custom,
 	};
-	controls.search = CreateWindowExW(WS_EX_COMPOSITED | WS_EX_TRANSPARENT, search::wndclass, NULL, WS_VISIBLE | WS_CHILD,
+	controls.search = CreateWindowEx(WS_EX_COMPOSITED | WS_EX_TRANSPARENT, search::wndclass, NULL, WS_VISIBLE | WS_CHILD,
 		0, 0, 0, 0, state.wnd, NULL, NULL, &global_search_init);
 	search::set_theme(controls.search, themes.base_search);
 	search::set_user_data(controls.search, &state);
@@ -322,7 +322,7 @@ void add_controls(State& state) {
 	});
 	//AWDYN(controls.search, WM_SIZE); // Make sure that the language strings for search fit in the search button, I dont need this since I do use any of the buttons with text, but could be useful in other situations
 
-	//SendMessageW(controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)controls.search, 0);
+	//SendMessage(controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)controls.search, 0);
 	
 	controls.combo_sort = create_window(state.wnd, combobox::wndclass);
 	auto combo_sort_controls = combobox::get_controls(state.controls.combo_sort);
@@ -354,7 +354,7 @@ void add_controls(State& state) {
 
 		combobox::set_cur_sel(state.controls.combo_sort, (size_t)item.value);
 
-		struct sort_alphabetic { HWND wnd; std::wstring title; };
+		struct sort_alphabetic { HWND wnd; str title; };
 		struct sort_date { HWND wnd; time_t date; };
 
 		auto& vec = state.controls.password_editors;
@@ -445,7 +445,7 @@ void add_controls(State& state) {
 		auto bmp = flags.isListboxOpen ? bmps.dropdown_up : bmps.dropdown;
 		int icon_x = urender::draw_bitmap_1bpp_right(bmp, dc, r, x_pad, theme.brushes.foreground.normal);
 
-		std::wstring txt;
+		str txt;
 		if (element) {
 			txt = RS(std::bit_cast<sort_combo_item>(element).label_id);
 			txt_br = colors.ControlTxt;
@@ -462,7 +462,7 @@ void add_controls(State& state) {
 		txt_rc.left += x_pad;
 		txt_rc.right = icon_x - x_pad;
 
-		DrawTextW(dc, txt.c_str(), txt.size(), &txt_rc, DT_EDITCONTROL | DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		DrawText(dc, txt.c_str(), txt.size(), &txt_rc, DT_EDITCONTROL | DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 	});
 	combobox::set_function_render_listbox_element(controls.combo_sort, [](HDC dc, rect_i32 r, listbox::renderflags flags, void* element, void* user_extra) {
 		int w = r.w, h = r.h;
@@ -491,7 +491,6 @@ void add_controls(State& state) {
 
 #define showpasswords_menu_base_addr	200
 #define SHOWPASSWORDS_MENU_SAVE			(showpasswords_menu_base_addr+1)
-#define SHOWPASSWORDS_MENU_SEPARATOR1	(showpasswords_menu_base_addr+2)
 #define SHOWPASSWORDS_MENU_UNDO			(showpasswords_menu_base_addr+3)
 #define SHOWPASSWORDS_MENU_REDO			(showpasswords_menu_base_addr+4)
 #define SHOWPASSWORDS_MENU_FIND			(showpasswords_menu_base_addr+5)
@@ -506,21 +505,21 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 	HMENU menu_file = CreateMenu(); state.menu_file = menu_file;
 	HMENU menu_file_lang = CreateMenu(); state.menu_file_lang = menu_file_lang;
 	HMENU menu_edit = CreateMenu(); state.menu_edit = menu_edit;
-	AppendMenuW(menu, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_file, (LPCWSTR)menu);
+	AppendMenu(menu, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_file, (LPCWSTR)menu);
 	AMT(menu, (UINT_PTR)menu_file, LANG_MENU_FILE);
 
-	AppendMenuW(menu_file, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_SAVE, (LPCWSTR)menu_file);
+	AppendMenu(menu_file, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_SAVE, (LPCWSTR)menu_file);
 	AMT(menu_file, SHOWPASSWORDS_MENU_SAVE, LANG_MENU_SAVE);
 	SetMenuItemBitmaps(menu_file, SHOWPASSWORDS_MENU_SAVE, MF_BYCOMMAND, bmps.menu_save, bmps.menu_save);
 
-	AppendMenuW(menu_file, MF_SEPARATOR | MF_OWNERDRAW, SHOWPASSWORDS_MENU_SEPARATOR1, (LPCWSTR)menu_file);
+	append_separator_to_menu(menu_file);
 
-	AppendMenuW(menu_file, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_file_lang, (LPCWSTR)menu_file);
+	AppendMenu(menu_file, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_file_lang, (LPCWSTR)menu_file);
 	AMT(menu_file, (UINT_PTR)menu_file_lang, LANG_MENU_LANGUAGE);
 	//TODO(fran): SetMenuItemInfo only accepts UINT, not the UINT_PTR of MF_POPUP, plz dont tell me I have to redo all of it a different way (LanguageManager just does it normally not caring for the extra 32 bits)
 
 #define _language_appendtomenu(member,value_expr) \
-		AppendMenuW(menu_file_lang, MF_STRING | MF_OWNERDRAW, Language::member, (LPCWSTR)menu_file_lang); \
+		AppendMenu(menu_file_lang, MF_STRING | MF_OWNERDRAW, Language::member, (LPCWSTR)menu_file_lang); \
 		SetMenuItemString(menu_file_lang, Language::member, FALSE, _t(#member)); \
 		SetMenuItemBitmaps(menu_file_lang, Language::member, MF_BYCOMMAND, NULL, bmps.circle); \
 
@@ -530,18 +529,18 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 
 	SetMenuItemBitmaps(menu_file, (UINT)(UINT_PTR)menu_file_lang, MF_BYCOMMAND, bmps.language, bmps.language);
 
-	AppendMenuW(menu, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_edit, (LPCWSTR)menu);
+	AppendMenu(menu, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_edit, (LPCWSTR)menu);
 	AMT(menu, (UINT_PTR)menu_edit, LANG_MENU_EDIT);
 
-	AppendMenuW(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_UNDO, (LPCWSTR)menu_edit);
+	AppendMenu(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_UNDO, (LPCWSTR)menu_edit);
 	AMT(menu_edit, SHOWPASSWORDS_MENU_UNDO, LANG_MENU_EDIT_UNDO);
 	SetMenuItemBitmaps(menu_edit, SHOWPASSWORDS_MENU_UNDO, MF_BYCOMMAND, bmps.menu_undo, bmps.menu_undo);
 
-	AppendMenuW(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_REDO, (LPCWSTR)menu_edit);
+	AppendMenu(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_REDO, (LPCWSTR)menu_edit);
 	AMT(menu_edit, SHOWPASSWORDS_MENU_REDO, LANG_MENU_EDIT_REDO);
 	SetMenuItemBitmaps(menu_edit, SHOWPASSWORDS_MENU_REDO, MF_BYCOMMAND, bmps.menu_redo, bmps.menu_redo);
 
-	AppendMenuW(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_FIND, (LPCWSTR)menu_edit);
+	AppendMenu(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_FIND, (LPCWSTR)menu_edit);
 	AMT(menu_edit, SHOWPASSWORDS_MENU_FIND, LANG_MENU_EDIT_FIND);
 	SetMenuItemBitmaps(menu_edit, SHOWPASSWORDS_MENU_FIND, MF_BYCOMMAND, bmps.menu_search, bmps.menu_search);
 
@@ -555,19 +554,27 @@ void save_settings(State& state) {
 	state.settings->rc = r;
 }
 
+constexpr auto& filename = _t("\\tt");
+
+str get_save_path(str username) { 
+	constexpr auto& user_prefix = _t("\\user_");
+	str res = get_general_save_folder() + user_prefix + username;
+	//INFO: appending user_ saves us from the trouble of the reserved filenames that windows has, eg COM1, LPT1, ...
+	return res;
+}
+
 ///username: serves as the user folder name
-static bool save_to_file_user(std::wstring username, void* content, u32 content_sz) {
-	constexpr wchar_t filename[] = L"\\tt";
-	constexpr wchar_t temp_filename[] = L"\\temp";
-	constexpr wchar_t last_filename[] = L"\\last"; //TODO(fran): Saving the last state of the file is good in case the new one has gotten corrupted and needs to be recovered. But on the other hand it is a security concern because it shows the state change between saves, giving away information about our type of encryption (eg making it obvious that our encryption is made in independent chunks)
+bool save_to_file_user(str username, void* content, u32 content_sz) {
+	constexpr auto& temp_filename = _t("\\temp");
+	constexpr auto& last_filename = _t("\\last"); //TODO(fran): Saving the last state of the file is good in case the new one has gotten corrupted and needs to be recovered. But on the other hand it is a security concern because it shows the state change between saves, giving away information about our type of encryption (eg making it obvious that our encryption is made in independent chunks)
 
-	std::wstring path = get_general_save_folder() + L"\\user_" + username; //INFO: appending user_ saves us from the trouble of the reserved filenames that windows has, eg COM1, LPT1, ...
+	str path = get_save_path(username);
 
-	CreateDirectoryW(path.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
+	CreateDirectory(path.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
 
-	SetFileAttributesW(path.c_str(), GetFileAttributesW(path.c_str()) | FILE_ATTRIBUTE_HIDDEN); //some very basic protection
+	SetFileAttributes(path.c_str(), GetFileAttributes(path.c_str()) | FILE_ATTRIBUTE_HIDDEN); //some very basic protection
 
-	std::wstring full_path_temp = path + temp_filename;
+	str full_path_temp = path + temp_filename;
 
 	bool res = write_entire_file(full_path_temp.c_str(), content, content_sz);
 
@@ -575,23 +582,22 @@ static bool save_to_file_user(std::wstring username, void* content, u32 content_
 		auto file_read = read_entire_file(full_path_temp.c_str()); defer{ free_file_memory(file_read.mem); };
 		res = file_read.mem && (file_read.sz == content_sz) && (memcmp(content, file_read.mem, content_sz) == 0); //TODO(fran): there's no real need to check the entirety of the contents, we could simply check a few tens of bytes from the beginning, middle and end
 		if (res) {
-			std::wstring full_path_last = path + last_filename;
+			str full_path_last = path + last_filename;
 			path += filename;
-			MoveFileExW(path.c_str(), full_path_last.c_str(), MOVEFILE_REPLACE_EXISTING);
-			res = MoveFileExW(full_path_temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
+			MoveFileEx(path.c_str(), full_path_last.c_str(), MOVEFILE_REPLACE_EXISTING);
+			res = MoveFileEx(full_path_temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
 		}
 	}
 
 	return res;
 }
 
-static read_entire_file_res load_file_user(std::wstring username /*functions as a folder*/) {
-	constexpr wchar_t filename[] = L"\\tt";
-	std::wstring path = get_general_save_folder() + L"\\user_" + username;
+read_entire_file_res load_file_user(str username /*functions as a folder*/) {
+	str path = get_save_path(username);
 
-	CreateDirectoryW(path.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
+	CreateDirectory(path.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
 
-	SetFileAttributesW(path.c_str(), GetFileAttributesW(path.c_str()) | FILE_ATTRIBUTE_HIDDEN); //some very basic protection
+	SetFileAttributes(path.c_str(), GetFileAttributes(path.c_str()) | FILE_ATTRIBUTE_HIDDEN); //some very basic protection
 
 	path += filename;
 
@@ -601,7 +607,7 @@ static read_entire_file_res load_file_user(std::wstring username /*functions as 
 
 void get_controls_data_for_saving(State& state, str& res) {
 	//TODO(fran): implement a real robust data format where we dont depend on the ':' token, since it can be used by the user
-	auto append_control_text = [](std::wstring& s, HWND wnd) {
+	auto append_control_text = [](str& s, HWND wnd) {
 		auto old_len = s.size();
 		auto added_len = GetWindowTextLength(wnd) + 1;
 		//INFO: note that this does not ever reduce the size of the string array below its capacity, so we are not wastefully having to actually resize the memory every time, it still follows the normal way std::string resizes. 
@@ -695,15 +701,15 @@ void create_password_editors(State& state, utf16* data) {
 	using chrtype = utf16;
 	using strtype = chrtype*;
 	using std::operator""sv;
-	const auto item_separator = L"\r\n\r\n"sv;
-	for (const auto& item : std::views::split(std::wstring_view(data), item_separator)) {
+	const auto item_separator = _t("\r\n\r\n"sv);
+	for (const auto& item : std::views::split(str_view(data), item_separator)) {
 		terminate_string_view(item);
-		const auto title_separator = L'\n', title_prop_separator = L':';
-		auto title_end = StrChrW(item.data(), title_separator);
+		const auto title_separator = _t('\n'), title_prop_separator = _t(':');
+		auto title_end = StrChr(item.data(), title_separator);
 		if (title_end) {
 			*title_end = 0;
 			props properties;
-			for (const auto& [i, title_prop] : std::views::split(std::wstring_view(item.data(), title_end), title_prop_separator) | std::views::enumerate) {
+			for (const auto& [i, title_prop] : std::views::split(str_view(item.data(), title_end), title_prop_separator) | std::views::enumerate) {
 				auto val = const_cast<strtype>(title_prop.data());
 				terminate_string_view(title_prop);
 				switch (i) {
@@ -722,7 +728,7 @@ void create_password_editors(State& state, utf16* data) {
 			title_end++;
 			auto password_editor = add_password_editor(state, properties, -1);
 			const auto row_separator = title_separator;
-			for (const auto& row : std::views::split(std::wstring_view(title_end), row_separator)) {
+			for (const auto& row : std::views::split(str_view(title_end), row_separator)) {
 				const auto col_separator = title_prop_separator;
 				auto description_cell = password_editor::empty_description_cell;
 				auto value_cell = password_editor::empty_value_cell;
@@ -845,7 +851,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		ZeroMemory(state.start->key, sizeof(state.start->key));
 
 		//We gotta keep this data to be able to save the file later, probably some more secure/intelligent ways exist
-		state.current_user = (wchar_t*)malloc((state.start->username.sz_chars + 1) * sizeof(*state.start->username.str));
+		state.current_user = (cstr*)malloc((state.start->username.sz_chars + 1) * sizeof(*state.start->username.str));
 		state.current_user[state.start->username.sz_chars] = 0; //append null terminator, unfortunately the rest of the code isnt yet working with the "text" struct
 		memcpy(state.current_user, state.start->username.str, state.start->username.sz_chars * sizeof(*state.start->username.str));
 		//TODO(fran): free
@@ -859,11 +865,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			else {
 				Assert(file_read.sz % 16 == 0);
 				twofish_decrypt(file_read.mem, file_read.sz, file_read.mem);
-				if (!wcsncmp(state.current_user, (wchar_t*)file_read.mem, minimum(state.start->username.sz_chars, file_read.sz / 2 /*byte to wchar*/))) { //Valid password, user inputted username matches stored username
+				if (!wcsncmp(state.current_user, (cstr*)file_read.mem, minimum(state.start->username.sz_chars, file_read.sz / 2 /*byte to wchar*/))) { //Valid password, user inputted username matches stored username
 					state.mode = mode::transition_v0; //v0 data format detected, enabling UI to facilitate user transition to the new data format from their old data
 					add_controls_transition_v0(state);
 
-					SetWindowTextW(state.controls.edit_passwords, ((cstr*)file_read.mem) + state.start->username.sz_chars); //TODO(fran): what did I decide for the data's encoding?
+					SetWindowText(state.controls.edit_passwords, ((cstr*)file_read.mem) + state.start->username.sz_chars);
 					create_password_editors(state, ((cstr*)file_read.mem) + state.start->username.sz_chars);
 					start_attempt = login::AttemptResult::success;
 				}
@@ -878,7 +884,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			passwords_need_save = signup;
 		}
 		set_passwords_need_save(state, passwords_need_save);
-		if (start_attempt == login::AttemptResult::success) set_app_shortcuts(state.wnd, ED_SHORTCUTS);
+		if (start_attempt == login::AttemptResult::success) {
+			set_app_shortcuts(state.wnd, ED_SHORTCUTS);
+
+			if (state.mode == mode::transition_v0) PostMessage(state.wnd, custom_message::show_transition_v0_msgbox, 0, 0); //Delay show the messagebox so that our window has time to be shown first
+		}
 		return (LRESULT)start_attempt;
 	} break;
 	case WM_STATE_RESET:
@@ -987,7 +997,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		auto res = DefWindowProc(hwnd, msg, wparam, lparam);
 		SetFocus(nil);
 		return res;
-	}
+	} break;
+	case custom_message::show_transition_v0_msgbox:
+	{
+		CustomMessageBox(state.wnd, RCS(LANG_MSG_TRANSITION_V0_TEXT), RCS(LANG_MSG_TRANSITION_V0_TITLE), MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND, msgbox_placement);
+	} break;
 	default: return DefWindowProc(hwnd, msg, wparam, lparam); break;
 	}
 	return 0;

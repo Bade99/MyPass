@@ -236,7 +236,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//TODO(fran): settext is redirected to the editbox
 		if (createnfo->lpszName) PostMessage(state.wnd, WM_SETTEXT, 0, (LPARAM)createnfo->lpszName);
 
-		state.controls.button = CreateWindowW(button::wndclass, NULL, WS_CHILD | WS_VISIBLE
+		state.controls.button = CreateWindow(button::wndclass, NULL, WS_CHILD | WS_VISIBLE
 			, 0, 0, 0, 0, state.wnd, 0, NULL, NULL);
 		auto hand_cursor = LoadCursor(nil, IDC_HAND);
 		button::Theme btn{}; btn.cursor = hand_cursor;

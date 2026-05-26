@@ -22,14 +22,6 @@
 //	 then we destroy the wnd
 // ------------------------------------------------------------- //
 
-// ------------------------ INTERNAL MSGS ------------------------ //
-constexpr auto NC_MINIMIZE = 100; //sent through WM_COMMAND
-constexpr auto NC_MAXIMIZE = 101; //sent through WM_COMMAND
-constexpr auto NC_CLOSE = 102; //sent through WM_COMMAND
-constexpr auto NC_RESTORE = 103; //sent through WM_COMMAND
-
-//TODO(fran): look at SetWindowLong(hWnd, GWL_STYLE, currStyles | WS_MAXIMIZE); maybe that helps with maximizing correctly?
-
 namespace nonclient {
 
 constexpr auto top_border_thickness = 1;
@@ -145,41 +137,26 @@ bool is_on_menu_bar(State& state, UINT menuitem) {
 
 //Mouse in screen coords
 void show_rclickmenu(State& state, POINT mouse) {
-	HMENU m = CreateMenu();
+	HMENU m = CreateMenu(); defer{ DestroyMenu(m); };
 	HMENU subm = CreateMenu();//IMPORTANT: you need a MF_POPUP submenu for the menu wnd to be rendered properly, thanks https://www.codeproject.com/Questions/334598/Popup-Menu-Problem-is-not-working-properly
-	AppendMenuW(m, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)subm, (LPCWSTR)m);
+	AppendMenu(m, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)subm, (LPCWSTR)m);
 
 	bool is_maximized = IsMaximized(state.wnd);
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, NC_RESTORE, (LPCWSTR)subm);
-	SetMenuItemString(subm, NC_RESTORE, FALSE, RCS(LANG_NC_RESTORE));
-	SetMenuItemBitmaps(subm, NC_RESTORE, MF_BYCOMMAND, bmps.menu_restore, nil);
-	if (!is_maximized) EnableMenuItem(subm, NC_RESTORE, MF_BYCOMMAND | MF_GRAYED);
+	append_item_to_menu(subm, menu::restore, LANG_NC_RESTORE, bmps.menu_restore, !is_maximized);
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, NC_MINIMIZE, (LPCWSTR)subm);
-	SetMenuItemString(subm, NC_MINIMIZE, FALSE, RCS(LANG_NC_MINIMIZE));
-	SetMenuItemBitmaps(subm, NC_MINIMIZE, MF_BYCOMMAND, bmps.menu_minimize, nil);
+	append_item_to_menu(subm, menu::minimize, LANG_NC_MINIMIZE, bmps.menu_minimize);
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, NC_MAXIMIZE, (LPCWSTR)subm);
-	SetMenuItemString(subm, NC_MAXIMIZE, FALSE, RCS(LANG_NC_MAXIMIZE));
-	SetMenuItemBitmaps(subm, NC_MAXIMIZE, MF_BYCOMMAND, bmps.menu_maximize, nil);
-	if (!state.settings->can_maximize || is_maximized) EnableMenuItem(subm, NC_MAXIMIZE, MF_BYCOMMAND | MF_GRAYED);
+	append_item_to_menu(subm, menu::maximize, LANG_NC_MAXIMIZE, bmps.menu_maximize, !state.settings->can_maximize || is_maximized);
 
-	AppendMenuW(subm, MF_SEPARATOR | MF_OWNERDRAW, 0, (LPCWSTR)subm);
+	append_separator_to_menu(subm);
 
-	AppendMenuW(subm, MF_STRING | MF_OWNERDRAW, NC_CLOSE, (LPCWSTR)subm);
-	SetMenuItemString(subm, NC_CLOSE, FALSE, RCS(LANG_NC_CLOSE));
-	SetMenuItemBitmaps(subm, NC_CLOSE, MF_BYCOMMAND, bmps.menu_close, nil);
+	append_item_to_menu(subm, menu::close, LANG_NC_CLOSE, bmps.menu_close);
 
-	MENUINFO mi{ sizeof(mi) };
-	mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
-	mi.hbrBack = colors.CaptionBk;
-	SetMenuInfo(m, &mi);
+	set_menu_background_color(m, colors.CaptionBk);
 
 	//NOTE: using tpm_returncmd would be a quick and simple cheat to get past msg collision problems and the like
-	//TrackPopupMenu(m, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, 0, state.wnd, 0);
 	TrackPopupMenuEx(subm, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, state.wnd, 0);
-	DestroyMenu(m);
 }
 
 void manual_maximize(State& state) {//Maximize only works correctly for WM_OVERLAPPEDWINDOW, we gotta do it by hand
@@ -497,24 +474,24 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		SetWindowText(state.wnd, createnfo->lpszName); //NOTE: for handmade classes you have to manually call setwindowtext
 
 		RECT btn_min_rc = state.settings->can_maximize ? calc_btn_min_rc(state) : calc_btn_max_rc(state);
-		state.btn_min = CreateWindow(button::wndclass, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_min_rc.left, btn_min_rc.top, RECTW(btn_min_rc), RECTH(btn_min_rc), state.wnd, (HMENU)NC_MINIMIZE, 0, 0);
+		state.btn_min = CreateWindow(button::wndclass, nil, WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_min_rc.left, btn_min_rc.top, RECTW(btn_min_rc), RECTH(btn_min_rc), state.wnd, (HMENU)menu::minimize, 0, 0);
 		SendMessage(state.btn_min, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.minimize);
 
 		if (state.settings->can_maximize) {
 			RECT btn_max_rc = calc_btn_max_rc(state);
-			state.btn_max = CreateWindow(button::wndclass, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_max_rc.left, btn_max_rc.top, RECTW(btn_max_rc), RECTH(btn_max_rc), state.wnd, (HMENU)NC_MAXIMIZE, 0, 0);
+			state.btn_max = CreateWindow(button::wndclass, nil, WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_max_rc.left, btn_max_rc.top, RECTW(btn_max_rc), RECTH(btn_max_rc), state.wnd, (HMENU)menu::maximize, 0, 0);
 			SendMessage(state.btn_max, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.maximize);
 		}
 
 		RECT btn_close_rc = calc_btn_close_rc(state);
-		state.btn_close = CreateWindow(button::wndclass, TEXT(""), WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_close_rc.left, btn_close_rc.top, RECTW(btn_close_rc), RECTH(btn_close_rc), state.wnd, (HMENU)NC_CLOSE, 0, 0);
+		state.btn_close = CreateWindow(button::wndclass, nil, WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_close_rc.left, btn_close_rc.top, RECTW(btn_close_rc), RECTH(btn_close_rc), state.wnd, (HMENU)menu::close, 0, 0);
 		SendMessage(state.btn_close, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.close);
 
 		//TODO(fran): let the user set the bitmaps, pass them in theme
 
 		if (state.settings->client_class_name) {
 			RECT rc = calc_client_rc(state);
-			state.client = CreateWindowExW(WS_EX_COMPOSITED, state.settings->client_class_name, TEXT(""), WS_CHILD | WS_VISIBLE, rc.left, rc.top, RECTW(rc), RECTH(rc), state.wnd, 0, 0, state.settings->client_lp_param);
+			state.client = CreateWindowEx(WS_EX_COMPOSITED, state.settings->client_class_name, nil, WS_CHILD | WS_VISIBLE, rc.left, rc.top, RECTW(rc), RECTH(rc), state.wnd, 0, 0, state.settings->client_lp_param);
 		}
 
 		state.toast = create_window(state.client ? state.client : state.wnd, toast::wndclass, nil, WS_CHILD);
@@ -531,7 +508,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			POINT cl_mouse = mouse; ScreenToClient(state.wnd, &cl_mouse);
 
 			if (test_pt_rc(cl_mouse, state.rc_icon)) {
-				PostMessage(state.wnd, WM_COMMAND, (WPARAM)MAKELONG(NC_CLOSE, 0), (LPARAM)state.btn_close);//TODO(fran): should I use WM_CLOSE?
+				PostMessage(state.wnd, WM_COMMAND, (WPARAM)MAKELONG(menu::close, 0), (LPARAM)state.btn_close);//TODO(fran): should I use WM_CLOSE?
 				return 0;
 			}
 
@@ -713,23 +690,23 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		// Msgs from my controls
 		switch (LOWORD(wparam))
 		{
-		case NC_RESTORE:
+		case menu::restore:
 		{
 			ShowWindow(state.wnd, SW_RESTORE);
 			return 0;
 		} break;
-		case NC_MINIMIZE: //TODO(fran): move away from WM_COMMAND and start using WM_SYSCOMMAND, that probably means getting rid of the individual nc buttons and handling all myself like with the menubar
+		case menu::minimize: //TODO(fran): move away from WM_COMMAND and start using WM_SYSCOMMAND, that probably means getting rid of the individual nc buttons and handling all myself like with the menubar
 		{
 			ShowWindow(state.wnd, SW_MINIMIZE);
 			return 0;
 		} break;
-		case NC_MAXIMIZE:
+		case menu::maximize:
 		{
 			ShowWindow(state.wnd, IsMaximized(state.wnd) ? SW_RESTORE : SW_MAXIMIZE);
 			//TODO(fran): maximize covers the whole screen, I dont want that, I want to leave the navbar visible. For this to be done automatically by windows we need the WS_MAXIMIZEBOX style, which decides to draw a maximize box when pressed, if we can hide that we are all set
 			return 0;
 		} break;
-		case NC_CLOSE:
+		case menu::close:
 		{
 			bool client_handled = SendMessage(state.client, WM_CLOSE, 0, 0);
 			if (!client_handled) DestroyWindow(state.wnd);
@@ -844,7 +821,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		case VK_F4:
 		{
 			if (!vk_was_down && alt_is_down) {
-				PostMessage(state.wnd, WM_COMMAND, (WPARAM)MAKELONG(NC_CLOSE, 0), (LPARAM)state.btn_close);//TODO(fran): should I use WM_CLOSE?
+				PostMessage(state.wnd, WM_COMMAND, (WPARAM)MAKELONG(menu::close, 0), (LPARAM)state.btn_close);
 			}
 			return 0;
 		} break;
@@ -947,7 +924,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 }
 
 void init_wndclass(HINSTANCE inst) {
-	WNDCLASSEXW wcex{ sizeof(WNDCLASSEX) };
+	WNDCLASSEX wcex{ sizeof(WNDCLASSEX) };
 	auto icon = LoadIcon(inst, MAKEINTRESOURCE(ICO_LOGO));
 	wcex.style = CS_HREDRAW | CS_VREDRAW;
 	wcex.lpfnWndProc = proc;
@@ -958,10 +935,10 @@ void init_wndclass(HINSTANCE inst) {
 	wcex.lpszClassName = wndclass;
 	wcex.hIconSm = icon;
 
-	ATOM class_atom = RegisterClassExW(&wcex); Assert(class_atom);
+	ATOM class_atom = RegisterClassEx(&wcex); Assert(class_atom);
 }
 struct pre_post_main {
-	pre_post_main() { init_wndclass(GetModuleHandleW(nil)); }
+	pre_post_main() { init_wndclass(GetModuleHandle(nil)); }
 	~pre_post_main() {}
 } static const PREMAIN_POSTMAIN;
 }
