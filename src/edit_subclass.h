@@ -28,19 +28,32 @@ struct EditProcState {
 	//NOTE: EditProc controls require the creation of a EditProcState struct with calloc, and for it to be passed as the 4th param in SetWindowSubclass, the object will now be managed by the procedure and does not need the user to handle its memory
 	//NOTE: no left-right scrolling, it is handled with line wrap
 	int get_max_visible_lines(HWND hwnd) {
-		RECT rc;
-		GetClientRect(hwnd, &rc);
-		int page_height = RECTH(rc);
+		if (Edit_GetLineCount(hwnd) > U16MAX) {
+			// Solution based on size calculations, less accurate, but always works
+			RECT rc; SendMessage(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
+			int page_height = RECTH(rc);
 
-		TEXTMETRIC tm;
-		HDC dc = GetDC(hwnd);
-		GetTextMetrics(dc, &tm);
-		ReleaseDC(hwnd, dc);
-		int line_height = tm.tmAscent + tm.tmDescent + tm.tmInternalLeading + tm.tmExternalLeading;
+			HDC dc = GetDC(hwnd);
+			TEXTMETRIC tm; GetTextMetrics(dc, &tm);
+			ReleaseDC(hwnd, dc);
+			int line_height = tm.tmAscent + tm.tmDescent + tm.tmInternalLeading + tm.tmExternalLeading;
 
-		int visible_lines = safe_ratio0(page_height, line_height);
+			int visible_lines = safe_ratio0(page_height, line_height);
+			return visible_lines;
+		}
+		else {
+			// Solution based on asking the edit control, more accurate, 
+			// but for standard edit controls it is limited to line numbers that fit in a WORD,
+			// will break on line numbers greater than 65535
+			auto first_line = SendMessage(hwnd, EM_GETFIRSTVISIBLELINE, 0, 0);
+			RECT rc; SendMessage(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
+			POINT pt = { 0, RECTH(rc) - 1};
+			auto last_char = SendMessage(hwnd, EM_CHARFROMPOS, 0, MAKELPARAM(pt.x, pt.y));
+			auto last_line = HIWORD(last_char);
+			int visible_lines = last_line - first_line + 1;
+			return visible_lines;
+		}
 
-		return visible_lines;
 	}
 	void update_scrollbar() {
 		if (this->vscrollbar) {
@@ -155,7 +168,7 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 		//MoveWindow(hwnd, TabOffset.leftOffset, TabOffset.topOffset, control_size->cx - TabOffset.rightOffset - TabOffset.leftOffset, control_size->cy - TabOffset.bottomOffset - TabOffset.topOffset, TRUE);
 		//x & y remain fixed and only width & height change
 
-		if (state.vscrollbar)SendMessage(state.vscrollbar, scrollbar::U_SB_AUTORESIZE, 0, 0);
+		if (state.vscrollbar)SendMessage(state.vscrollbar, scrollbar::custom_message::AUTORESIZE, 0, 0);
 		if (state.search)SendMessage(state.search, SRH_AUTORESIZE, 0, 0);
 
 		state.update_scrollbar(); //NOTE: actually here you just need to update nPage

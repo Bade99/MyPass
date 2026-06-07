@@ -500,7 +500,8 @@ namespace urender {
 			if (borderSize) urender::draw_round_rectangle_outline(dc, r, radius, border, borderSize);
 		}
 		else {
-			if (borderSize) {
+			static auto hollow_brush = GetStockBrush(HOLLOW_BRUSH);
+			if (borderSize && border != hollow_brush) {
 				HPEN pen = CreatePen(PS_SOLID, borderSize, ColorFromBrush(border));
 				auto oldpen = SelectPen(dc, pen); defer{ SelectPen(dc, oldpen); DeletePen(pen); };
 				auto oldbr = SelectBrush(dc, bk); defer{ SelectBrush(dc, oldbr); };

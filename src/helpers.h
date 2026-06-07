@@ -230,15 +230,15 @@ static bool rcs_overlap(RECT r1, RECT r2) {
 }
 
 static bool test_pt_rc(POINT p, const rect_i32& r) {
-	bool res = false;
-	if (p.y >= r.top &&//top
-		p.y < r.bottom() &&//bottom
-		p.x >= r.left &&//left
-		p.x < r.right())//right
-	{
-		res = true;
-	}
+	bool res = 
+		p.y >= r.top  && p.y < r.bottom() &&
+		p.x >= r.left && p.x < r.right();
 	return res;
+}
+
+static RECT get_client_rect(HWND wnd) {
+	RECT r{}; GetClientRect(wnd, &r);
+	return r;
 }
 
 static RECT get_window_rect_at(HWND wnd, HWND reference) {
@@ -537,7 +537,8 @@ static BOOL SetMenuItemString(HMENU hmenu, UINT item, BOOL fByPositon, const TCH
   */
 
 static f32 dpiCorrection(f32 val) {
-	f32 res = val * (f32)GetDpiForSystem() / 96/*default dpi*/;
+	static auto scale = GetDpiForSystem() / 96.f/*default dpi*/;
+	f32 res = val * scale;
 	return res;
 }
 static f32 DPI(f32 val) { return dpiCorrection(val); }

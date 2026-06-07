@@ -10,19 +10,19 @@
 */
 
 /*TODOs
-TODO: reduce flickering when tracking -> use double buffering, example: http://www.catch22.net/tuts/win32/flicker-free-drawing from this I understand flicker will always happen if you overdraw. Currently, since all we draw is squares we can calculate the exact area that needs bk clearing, but if we want to do rounded rectangles it's gonna be impossible to get right, we need double buffering. another example: https://docs.microsoft.com/en-us/previous-versions/ms969905(v=msdn.10)?redirectedfrom=MSDN
-
+TODO: boolean option to enable overscrolling, some controls can allow it, like well made text editors that allow you to overscroll at the bottom, while other controls like more standard lists would not want to overscroll and instead want to stop specifically on the last element and not allow to go any further
+TODO: should Placement be part of the Theme?
 */
 
 namespace scrollbar {
 
 void set_stats(HWND wnd, u32 rangemax, u32 pagesz, u32 pos) {
-	SendMessage(wnd, U_SB_SET_RANGEMAX, rangemax, 0);
-	SendMessage(wnd, U_SB_SET_PAGESZ, pagesz, 0);
-	SendMessage(wnd, U_SB_SET_POS, pos, 0);
+	SendMessage(wnd, custom_message::SET_RANGEMAX, rangemax, 0);
+	SendMessage(wnd, custom_message::SET_PAGESZ, pagesz, 0);
+	SendMessage(wnd, custom_message::SET_POS, pos, 0);
 }
 
-static void resize_wnd(State& state, i32 scrollbar_thickness) {
+void resize_wnd(State& state, i32 scrollbar_thickness) {
 	RECT r; GetClientRect(state.parent, &r);
 	i32 spacing = 2;// A few pixels of spacing so the control doesnt feel so stuck to the corners
 
@@ -70,35 +70,172 @@ bool is_vertical(State& state) {
 	return state.placement == Placement::left || state.placement == Placement::right;
 }
 
-RECT calc_scrollbar(State& state) {
-	RECT client_rc;
-	GetClientRect(state.wnd, &client_rc);
-	f32 sb_pos = safe_ratio0((f32)state.p, (f32)distance(state.range_max, state.range_min));
-	f32 sb_sz = safe_ratio0((f32)state.page_sz, (f32)distance(state.range_max, state.range_min));
-	bool vertical = is_vertical(state);
-	f32 client_extent = vertical ? RECTH(client_rc) : RECTW(client_rc);
-	f32 sb_lenght = (sb_sz * client_extent);
+void resize_controls(State& state) {
+	RECT rc; GetClientRect(state.wnd, &rc);
+	rect_i32 r = rect_i32::create_from(rc);
+	auto dim = minimum(r.w, r.h);
 
-	LONG cursor_height = GetSystemMetrics(SM_CYCURSOR);
+	rect_i32 btn_up, btn_down;
+	if (is_vertical(state)) {
+		btn_up = r.cut_top(dim);
+		btn_down = r.cut_bottom(dim);
+	}
+	else {
+		btn_up = r.cut_left(dim);
+		btn_down = r.cut_right(dim);
+	}
+
+	MoveWindow(state.controls.btn_up, btn_up);
+	MoveWindow(state.controls.btn_down, btn_down);
+}
+
+RECT get_scrollbar_work_area(State& state) {
+	RECT res{}; GetClientRect(state.wnd, &res);
+	RECT btn{}; GetClientRect(state.controls.btn_up, &btn);
+	if (is_vertical(state)) {
+		auto dim = RECTH(btn);
+		res.top += dim;
+		res.bottom -= dim;
+	}
+	else {
+		auto dim = RECTW(btn);
+		res.left += dim;
+		res.right -= dim;
+	}
+	return res;
+}
+
+RECT calc_scrollbar(State& state) {
+	RECT work_rc = get_scrollbar_work_area(state);
+
+	//TODO(fran): fix that the scrollbar does move all the way to the bottom of the work area, probly a combination of something wrong here and in WM_MOUSEMOVE
+
+	f32 sb_pos = safe_ratio0((f32)state.p, (f32)distance(state.range_max, state.range_min));
+	f32 sb_sz = clamp01(safe_ratio0((f32)state.page_sz, (f32)distance(state.range_max, state.range_min)));
+	bool vertical = is_vertical(state);
+	f32 work_extent = vertical ? RECTH(work_rc) : RECTW(work_rc);
+	f32 sb_lenght = (sb_sz * work_extent);
+
+	LONG cursor_height = DPI(GetSystemMetrics(SM_CYCURSOR));
 	if (sb_sz != 0) sb_lenght = maximum(sb_lenght, cursor_height);
 
 	RECT sb_rc;
 	if (vertical) {
-		sb_rc.left = client_rc.left;
-		sb_rc.right = client_rc.right;
-		sb_rc.top = (i32)(client_rc.top + sb_pos * (client_extent - sb_lenght));
+		sb_rc.left = work_rc.left;
+		sb_rc.right = work_rc.right;
+		sb_rc.top = (i32)(work_rc.top + sb_pos * (work_extent - sb_lenght));
 		sb_rc.bottom = (i32)(sb_rc.top + sb_lenght);
 	}
 	else {
-		sb_rc.left = (i32)(client_rc.left + sb_pos * (client_extent - sb_lenght));
+		sb_rc.left = (i32)(work_rc.left + sb_pos * (work_extent - sb_lenght));
 		sb_rc.right = (i32)(sb_rc.left + sb_lenght);
-		sb_rc.top = client_rc.top;
-		sb_rc.bottom = client_rc.bottom;
+		sb_rc.top = work_rc.top;
+		sb_rc.bottom = work_rc.bottom;
 	}
 	return sb_rc;
 }
 
+bool is_bar_visible(State& state) {
+	bool res = distance(state.range_max, state.range_min) > state.page_sz;
+	return res;
+}
+
+void _update_window_visibility(State& state) {
+	bool old_visibility = IsWindowVisible(state.wnd);
+	bool new_visibility = is_bar_visible(state);
+	if (old_visibility != new_visibility) 
+		ShowWindow(state.wnd, new_visibility ? SW_SHOW : SW_HIDE);
+}
+void update_window_visibility(State& state) { if (state.autohide) _update_window_visibility(state); }
+
 auto get_state(HWND wnd) { _control_create_function__get_state }
+
+void set_theme(HWND wnd, const Theme& src) { 
+	_control_create_function__set_theme;
+
+	if (repaint) {
+		State& state = *get_state(wnd);
+
+		auto hollow_brush = GetStockBrush(HOLLOW_BRUSH);
+
+		button::Theme btn{};
+		btn.dimensions.border_thickness = 0;
+		for (auto& b : btn.brushes.bk.all) b = hollow_brush;
+		for (auto& b : btn.brushes.border.all) b = hollow_brush;
+		btn.brushes.foreground = state.theme.brushes.bar_bk.normal != hollow_brush ? state.theme.brushes.bar_bk : state.theme.brushes.bar_border;
+
+		if (is_vertical(state)) {
+			btn.bmp = bmps.solid_arrow_up;
+			button::set_theme(state.controls.btn_up, btn);
+			btn.bmp = bmps.solid_arrow_down;
+			button::set_theme(state.controls.btn_down, btn);
+		}
+		else {
+			btn.bmp = bmps.solid_arrow_left;
+			button::set_theme(state.controls.btn_up, btn);
+			btn.bmp = bmps.solid_arrow_right;
+			button::set_theme(state.controls.btn_down, btn);
+		}
+	}
+}
+
+void add_controls(State& state) {
+	auto& controls = state.controls;
+
+	{
+		auto& control = state.controls.btn_up;
+		control = create_window(state.wnd, button::wndclass, nil, WS_CHILD | BS_BITMAP);
+		button::set_user_data(control, &state);
+		button::set_functions(control, {
+			.on_click = [](void* data, HWND wnd) {
+				auto& state = *(State*)data;
+				if (is_vertical(state))
+					SendMessage(state.parent, WM_VSCROLL, MAKELONG(SB_LINEUP, 0), (LPARAM)state.wnd);
+				else 
+					SendMessage(state.parent, WM_HSCROLL, MAKELONG(SB_LINELEFT, 0), (LPARAM)state.wnd);
+			}
+		});
+	}
+
+	{
+		auto& control = state.controls.btn_down;
+		control = create_window(state.wnd, button::wndclass, nil, WS_CHILD | BS_BITMAP);
+		button::set_user_data(control, &state);
+		button::set_functions(control, {
+			.on_click = [](void* data, HWND wnd) {
+				auto& state = *(State*)data;
+				if (is_vertical(state))
+					SendMessage(state.parent, WM_VSCROLL, MAKELONG(SB_LINEDOWN, 0), (LPARAM)state.wnd);
+				else
+					SendMessage(state.parent, WM_HSCROLL, MAKELONG(SB_LINERIGHT, 0), (LPARAM)state.wnd);
+			}
+		});
+	}
+}
+
+void update_btn_visibility(State& state) {
+	auto set_visibility = [](HWND wnd, bool new_visibility) {
+		if (IsWindowVisible(wnd) != new_visibility) ShowWindow(wnd, new_visibility ? SW_SHOW : SW_HIDE);
+	};
+	bool new_visibility = state.onLMouseClickBk || state.onMouseOverSb || state.onMouseTrackingSb || state.onMouseOverControl;
+
+	for (auto& btn : state.controls.all) set_visibility(btn, new_visibility);
+}
+
+void send_bk_click_message(State& state, POINT mouse, RECT sb_rc) {
+	if (is_vertical(state)) {
+		if (mouse.y < sb_rc.top) //mouse hit above the bar
+			SendMessage(state.parent, WM_VSCROLL, MAKELONG(SB_PAGEUP, 0), (LPARAM)state.wnd);
+		else //mouse hit below the bar
+			SendMessage(state.parent, WM_VSCROLL, MAKELONG(SB_PAGEDOWN, 0), (LPARAM)state.wnd);
+	}
+	else {
+		if (mouse.x < sb_rc.left) //mouse hit left of the bar
+			SendMessage(state.parent, WM_HSCROLL, MAKELONG(SB_PAGELEFT, 0), (LPARAM)state.wnd);
+		else //mouse hit right of the bar
+			SendMessage(state.parent, WM_HSCROLL, MAKELONG(SB_PAGERIGHT, 0), (LPARAM)state.wnd);
+	}
+}
 
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
@@ -110,60 +247,29 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_CANCELMODE:
 	{
-		if (state.OnMouseTrackingSb) {
+		if (state.onMouseTrackingSb) {
 			ReleaseCapture();
-			state.OnMouseTrackingSb = false;
+			state.onMouseTrackingSb = false;
 		}
 		state.onLMouseClickBk = false;
 		state.onMouseOverSb = false;
+		state.onMouseOverControl = false;
+		update_btn_visibility(state);
 		ask_window_for_repaint(state.wnd);
-		return 0;
 	} break;
 	case WM_CAPTURECHANGED:
 	{
 		//We lost mouse capture
 		ask_window_for_repaint(state.wnd);
-		return 0;
 	} break;
 	case WM_LBUTTONUP:
 	{
-		if (state.OnMouseTrackingSb) {
+		if (state.onMouseTrackingSb) {
 			ReleaseCapture();
-			state.OnMouseTrackingSb = false;
+			state.onMouseTrackingSb = false;
 		}
 		state.onLMouseClickBk = false;
-		return 0;
-	} break;
-	case WM_TIMER:
-	{
-		if (timer_id_bk_click_held == (UINT_PTR)wparam) {
-			KillTimer(state.wnd, timer_id_bk_click_held);
-			if (state.onLMouseClickBk) {
-				//Check the mouse is still in the bk area, it could be that it moved away or that the bar reached the timer's position
-				POINT mouse;
-				GetCursorPos(&mouse);
-				ScreenToClient(state.wnd, &mouse);
-				RECT client_rc; GetClientRect(state.wnd, &client_rc);
-				RECT sb_rc = calc_scrollbar(state);
-				if (test_pt_rc(mouse, client_rc) && !test_pt_rc(mouse, sb_rc)) {
-					//Mouse is in bk area
-					if (is_vertical(state)) {
-						if (mouse.y < sb_rc.top) //mouse hit above the bar
-							SendMessage(state.parent, WM_VSCROLL, MAKELONG(SB_PAGEUP, 0), (LPARAM)state.wnd);
-						else //mouse hit below the bar
-							SendMessage(state.parent, WM_VSCROLL, MAKELONG(SB_PAGEDOWN, 0), (LPARAM)state.wnd);
-					}
-					else {
-						if (mouse.x < sb_rc.left) //mouse hit left of the bar
-							SendMessage(state.parent, WM_HSCROLL, MAKELONG(SB_PAGELEFT, 0), (LPARAM)state.wnd);
-						else //mouse hit right of the bar
-							SendMessage(state.parent, WM_HSCROLL, MAKELONG(SB_PAGERIGHT, 0), (LPARAM)state.wnd);
-					}
-					SetTimer(state.wnd, timer_id_bk_click_held, USER_TIMER_MINIMUM, NULL);
-				}
-			}
-		}
-		return 0;
+		update_btn_visibility(state);
 	} break;
 	case WM_LBUTTONDOWN:
 	{
@@ -172,9 +278,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		if (state.onMouseOverSb) {
 			//Click happened inside the bar, so we want to capture the mouse movement in case the user starts moving the mouse trying to scroll
 
-			if (!state.OnMouseTrackingSb) { //Check that we are not already tracking to prevent shadow clicks from affecting us
+			if (!state.onMouseTrackingSb) { //Check that we are not already tracking to prevent shadow clicks from affecting us
 				SetCapture(state.wnd);//Keep capturing the mouse while the user is still pressing the button, even if the mouse leaves our client area
-				state.OnMouseTrackingSb = true;
+				state.onMouseTrackingSb = true;
 
 				RECT sb = calc_scrollbar(state);
 
@@ -188,60 +294,70 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 			//Notify parent
 			RECT sb_rc = calc_scrollbar(state);
-			if (is_vertical(state)) {
-				if (mouse.y < sb_rc.top) //mouse hit above the bar
-					SendMessage(state.parent, WM_VSCROLL, MAKELONG(SB_PAGEUP, 0), (LPARAM)state.wnd);
-				else //mouse hit below the bar
-					SendMessage(state.parent, WM_VSCROLL, MAKELONG(SB_PAGEDOWN, 0), (LPARAM)state.wnd);
-			}
-			else {
-				if (mouse.x < sb_rc.top) //mouse hit left of the bar
-					SendMessage(state.parent, WM_HSCROLL, MAKELONG(SB_PAGELEFT, 0), (LPARAM)state.wnd);
-				else //mouse hit right of the bar
-					SendMessage(state.parent, WM_HSCROLL, MAKELONG(SB_PAGERIGHT, 0), (LPARAM)state.wnd);
-			}
+			send_bk_click_message(state, mouse, sb_rc);
 			//Start timer to check if the user wants to continue scrolling
-			SetTimer(state.wnd, timer_id_bk_click_held, 500, NULL);
+			static void (*bk_scroll_proc)(HWND, UINT, UINT_PTR, DWORD) = [](HWND wnd, UINT, UINT_PTR anim_id, DWORD) {
+				KillTimer(wnd, anim_id);
+				auto& state = *get_state(wnd);
+				if (&state && state.onLMouseClickBk) {
+					//Check the mouse is still in the bk area, it could be that it moved away or that the bar reached the timer's position
+					POINT mouse; GetCursorPos(&mouse); ScreenToClient(state.wnd, &mouse);
+					RECT client_rc; GetClientRect(state.wnd, &client_rc);
+					RECT sb_rc = calc_scrollbar(state);
+					if (test_pt_rc(mouse, client_rc) && !test_pt_rc(mouse, sb_rc)) {
+						//Mouse is in bk area
+						send_bk_click_message(state, mouse, sb_rc);
+						SetTimer(state.wnd, anim_id, USER_TIMER_MINIMUM, bk_scroll_proc);
+					}
+				}
+			};
+			SetTimer(state.wnd, timer_id_bk_click_held, 500, bk_scroll_proc);
 		}
+		update_btn_visibility(state);
 		ask_window_for_repaint(state.wnd);
-		return 0;
 	} break;
 	case WM_MOUSELEAVE:
 	{
 		POINT mouse; GetCursorPos(&mouse); ScreenToClient(state.wnd, &mouse);
 		bool prev_onMouseOverSb = state.onMouseOverSb;
+		bool prev_onMouseOverControl = state.onMouseOverControl;
 		state.onMouseOverSb = test_pt_rc(mouse, calc_scrollbar(state));
-		if (prev_onMouseOverSb != state.onMouseOverSb) ask_window_for_repaint(state.wnd);
-		return 0;
+		state.onMouseOverControl = test_pt_rc(mouse, get_client_rect(state.wnd));
+		bool state_change = prev_onMouseOverSb != state.onMouseOverSb || prev_onMouseOverControl != state.onMouseOverControl;
+		if (state_change) {
+			ask_window_for_repaint(state.wnd);
+			update_btn_visibility(state);
+		}
 	} break;
 	case WM_MOUSEMOVE:
 	{
 		POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
 
 		bool prev_onMouseOverSb = state.onMouseOverSb;
-		bool prev_OnMouseTrackingSb = state.OnMouseTrackingSb;
+		bool prev_OnMouseTrackingSb = state.onMouseTrackingSb;
+		bool prev_onMouseOverControl = state.onMouseOverControl;
 
 		RECT sb_rc = calc_scrollbar(state);
 		state.onMouseOverSb = test_pt_rc(mouse, sb_rc);
+		state.onMouseOverControl = test_pt_rc(mouse, get_client_rect(state.wnd));
 
-		if (state.OnMouseTrackingSb) {
+		if (state.onMouseTrackingSb) {
 			//We are tracking the mouse to move the scrollbar
-			RECT client_rc;
-			GetClientRect(state.wnd, &client_rc);
+			RECT sb_work_area = get_scrollbar_work_area(state);
 
 			i32 mouse_location;
 			f32 sb_extent;
 			if (is_vertical(state)) {
-				mouse_location = mouse.y;
-				sb_extent = RECTH(client_rc) - RECTH(sb_rc);
+				mouse_location = mouse.y - sb_work_area.top;
+				sb_extent = RECTH(sb_work_area) - RECTH(sb_rc);
 			}
 			else {
-				mouse_location = mouse.x;
-				sb_extent = RECTW(client_rc) - RECTW(sb_rc);
+				mouse_location = mouse.x - sb_work_area.left;
+				sb_extent = RECTW(sb_work_area) - RECTW(sb_rc);
 			}
 
 			f32 mouse_p = mouse_location - state.mouseStartDeltaP; //0 to height
-			float p_ratio = clamp(0.0f, safe_ratio0(mouse_p, sb_extent), 1.0f);//0.0 to 1.0
+			float p_ratio = clamp01(safe_ratio0(mouse_p, sb_extent));//0.0 to 1.0
 			state.p = (int)(distance(state.range_max, state.range_min) * p_ratio); //min to max range
 
 			//TODO-INFO(fran): The scrollbar has additional travel distance after the text editor has already reached the end. This is because the text editor scrolls by the first visible line instead of the last one. I dont really think that this should be fixed because I like being able to over-scroll further down, but unfortunately windows' default text editor cannot do that.
@@ -253,17 +369,16 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			ask_window_for_repaint(state.wnd);
 		}
 
-		bool state_change = prev_onMouseOverSb != state.onMouseOverSb || prev_OnMouseTrackingSb != state.OnMouseTrackingSb;
+		bool state_change = prev_onMouseOverSb != state.onMouseOverSb || prev_OnMouseTrackingSb != state.onMouseTrackingSb || prev_onMouseOverControl != state.onMouseOverControl;
 		if (state_change) {
 			ask_window_for_repaint(state.wnd);
+			update_btn_visibility(state);
 			TRACKMOUSEEVENT track;
 			track.cbSize = sizeof(track);
 			track.hwndTrack = state.wnd;
 			track.dwFlags = TME_LEAVE;
 			TrackMouseEvent(&track);
 		}
-
-		return 0;
 	} break;
 	case WM_MOUSEACTIVATE:
 	{
@@ -276,15 +391,15 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		LRESULT hittest = test_pt_rc(mouse, rcWindow) ? HTCLIENT : HTNOWHERE; //HTVSCROLL
 		return hittest;
 	} break;
-	case WM_ERASEBKGND:
+	case WM_SIZE:
 	{
-		return 1; //1: say that we erased the bk | 0: bk should be painted on WM_PAINT (fErase is true)
+		LRESULT res = DefWindowProc(hwnd, msg, wparam, lparam);
+		resize_controls(state);
+		return res;
 	} break;
 	case WM_NCPAINT:
-	case WM_CREATE:
 	case WM_NCCALCSIZE: 
 	{
-		return 0;
 	} break;
 	case WM_NCCREATE: 
 	{
@@ -296,23 +411,29 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		state->wnd = hwnd;
 		return 1;
 	} break;
-	case U_SB_SET_RANGEMAX:
+	case WM_CREATE:
+	{
+		add_controls(state);
+	} break;
+	case custom_message::SET_RANGEMAX:
 	{
 		int new_range_max = wparam;
 		if (state.range_max != new_range_max) {
 			state.range_max = new_range_max;
+			update_window_visibility(state);
 			ask_window_for_repaint(state.wnd);
 		}
 	} break;
-	case U_SB_SET_PAGESZ:
+	case custom_message::SET_PAGESZ:
 	{
 		int new_page_sz = wparam;
 		if (state.page_sz != new_page_sz) {
 			state.page_sz = new_page_sz;
+			update_window_visibility(state);
 			ask_window_for_repaint(state.wnd);
 		}
 	} break;
-	case U_SB_SET_POS:
+	case custom_message::SET_POS:
 	{
 		int new_p = wparam;
 		if (state.p != new_p) {
@@ -320,58 +441,52 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			ask_window_for_repaint(state.wnd);
 		}
 	} break;
+	case WM_ERASEBKGND:
+	{
+		auto dc = (HDC)wparam;
+		RECT r; GetClientRect(state.wnd, &r);
+		auto& brushes = state.theme.brushes;
+		urender::draw_background(dc, r, brushes.bk.normal, brushes.border.normal, state.theme.dimensions);
+		return 1;
+	} break;
 	case WM_PAINT:
 	{
 		PAINTSTRUCT ps;
 		HDC dc = BeginPaint(state.wnd, &ps); defer{ EndPaint(state.wnd, &ps); };
 
-		RECT sb_rc = calc_scrollbar(state);
-		HBRUSH sb_br;
-		if (state.onMouseOverSb || state.OnMouseTrackingSb) sb_br = colors.ScrollbarMouseOver;
-		else sb_br = colors.Scrollbar;
+		if (is_bar_visible(state)) {
+			auto& brushes = state.theme.brushes;
+			RECT rc = calc_scrollbar(state);
+			HBRUSH bk, border;
+			if (state.onMouseOverSb || state.onMouseTrackingSb) {
+				border = brushes.bar_border.mouseover;
+				bk = brushes.bar_bk.mouseover;
+			}
+			else {
+				border = brushes.bar_border.normal;
+				bk = brushes.bar_bk.normal;
+			}
 
-		//Paint the bar
-#define _TRANSPARENTSB 1 /*TODO(fran): this can be made into a user definable style*/
-#if _TRANSPARENTSB
-		int sb_border_thickness = 1;
-		FillRectBorder(dc, sb_rc, sb_border_thickness, sb_br, BORDERLEFT | BORDERTOP | BORDERRIGHT | BORDERBOTTOM);
-#else
-		FillRect(dc, &sb_rc, sb_br);//TODO(fran): bilinear blend, aka subpixel precision rendering so we dont get bar hickups 
-#endif
-
-		//Clip the drawing region for the background to exclude the scrollbar itself, thus avoiding overdraw and flickering
-		{
-			HRGN restoreRegion = CreateRectRgn(0, 0, 0, 0); if (GetClipRgn(dc, restoreRegion) != 1) { DeleteObject(restoreRegion); restoreRegion = NULL; }defer{ SelectClipRgn(dc, restoreRegion); if (restoreRegion != NULL) DeleteObject(restoreRegion); };
-#if _TRANSPARENTSB
-			RECT left = rectNpxL(sb_rc, sb_border_thickness);
-			RECT top = rectNpxT(sb_rc, sb_border_thickness);
-			RECT right = rectNpxR(sb_rc, sb_border_thickness);
-			RECT bottom = rectNpxB(sb_rc, sb_border_thickness);
-			ExcludeClipRect(dc, left.left, left.top, left.right, left.bottom);
-			ExcludeClipRect(dc, top.left, top.top, top.right, top.bottom);
-			ExcludeClipRect(dc, right.left, right.top, right.right, right.bottom);
-			ExcludeClipRect(dc, bottom.left, bottom.top, bottom.right, bottom.bottom);
-#else
-			ExcludeClipRect(dc, sb_rc.left, sb_rc.top, sb_rc.right, sb_rc.bottom);
-#endif
-			//Draw bk
-			RECT rc;
-			GetClientRect(state.wnd, &rc);
-			FillRect(dc, &rc, colors.ScrollbarBk);
-			//Restore old region
+			//Paint the bar
+			urender::draw_background(dc, rc, bk, border, state.theme.dimensions);
 		}
-
-		return 0;
 	} break;
-	case U_SB_SET_PLACEMENT:
+	case custom_message::SET_PLACEMENT:
 	{
 		state.placement = (Placement)wparam;
-		SendMessage(state.wnd, U_SB_AUTORESIZE, 0, 0);
+		SendMessage(state.wnd, custom_message::AUTORESIZE, 0, 0);
 	} break;
-	case U_SB_AUTORESIZE:
+	case custom_message::AUTORESIZE:
 	{
-		int scrollbar_thickness = maximum(GetSystemMetrics(SM_CXVSCROLL) * .7f, 5);
+		int scrollbar_thickness = DPI(maximum(GetSystemMetrics(SM_CXVSCROLL) * .8f, 5));
 		resize_wnd(state, scrollbar_thickness);
+		update_window_visibility(state);
+	} break;
+	case custom_message::SET_AUTOHIDE:
+	{
+		bool new_autohide = wparam;
+		state.autohide = new_autohide;
+		update_window_visibility(state);
 	} break;
 	case WM_NCDESTROY:
 	{

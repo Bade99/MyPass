@@ -188,6 +188,97 @@ HBITMAP flip_bitmap(HBITMAP srcBitmap, bool flipHorizontal, bool flipVertical) {
     return dstBitmap;
 }
 
+enum class Rotation { CW90, CW180, CW270 };
+static HBITMAP rotate_bitmap1(HBITMAP srcBitmap, Rotation rotation) { //AI generated, unoptimized
+    auto get_bit = [](const u8* bits, int stride, int x, int y) {
+        u8 byte = bits[y * stride + (x >> 3)];
+        return (byte & (0x80 >> (x & 7))) != 0;
+    };
+
+    auto set_bit = [](u8* bits, int stride, int x, int y, bool value) {
+        u8& byte = bits[y * stride + (x >> 3)];
+
+        const u8 mask = (u8)(0x80 >> (x & 7));
+
+        if (value) byte |= mask;
+        else byte &= ~mask;
+    };
+
+    if (!srcBitmap) return nil;
+
+    BITMAP bm{};
+    if (!GetObject(srcBitmap, sizeof(bm), &bm)) return nil;
+
+    Assert(bm.bmBitsPixel == 1);
+    if (bm.bmBitsPixel != 1) return nil;
+
+    const int srcWidth = bm.bmWidth;
+    const int srcHeight = bm.bmHeight;
+
+    const int srcStride = ((srcWidth + 15) / 16) * 2;
+
+    const u32 srcSize = srcStride * srcHeight;
+
+    std::vector<u8> srcBits(srcSize);
+
+    if (GetBitmapBits(srcBitmap, srcSize, srcBits.data()) != srcSize) return nil;
+
+    int dstWidth, dstHeight;
+    switch (rotation) {
+    case Rotation::CW180:
+        dstWidth = srcWidth;
+        dstHeight = srcHeight;
+        break;
+    default:
+        dstWidth = srcHeight;
+        dstHeight = srcWidth;
+        break;
+    }
+
+    const int dstStride = ((dstWidth + 15) / 16) * 2;
+
+    const u32 dstSize = dstStride * dstHeight;
+
+    std::vector<u8> dstBits(dstSize, 0);
+
+    for (int sy = 0; sy < srcHeight; sy++) {
+        for (int sx = 0; sx < srcWidth; sx++)
+        {
+            const bool pixel = get_bit(srcBits.data(), srcStride, sx, sy);
+
+            int dx, dy;
+
+            switch (rotation) {
+            case Rotation::CW90:
+                dx = srcHeight - 1 - sy;
+                dy = sx;
+                break;
+            case Rotation::CW180:
+                dx = srcWidth - 1 - sx;
+                dy = srcHeight - 1 - sy;
+                break;
+            case Rotation::CW270:
+                dx = sy;
+                dy = srcWidth - 1 - sx;
+                break;
+            }
+
+            set_bit(dstBits.data(), dstStride, dx, dy, pixel);
+        }
+    }
+
+    HBITMAP dstBitmap = CreateBitmap(dstWidth, dstHeight, 1, 1, nil);
+
+    if (!dstBitmap) return nil;
+
+    if (SetBitmapBits(dstBitmap, dstSize, dstBits.data()) != dstSize)
+    {
+        DeleteObject(dstBitmap);
+        return nil;
+    }
+
+    return dstBitmap;
+}
 
 
 /**

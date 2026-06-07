@@ -27,6 +27,7 @@ struct Themes {
 	table::Theme base_table;
 	search::Theme base_search;
 	toast::Theme base_toast;
+	scrollbar::Theme base_scrollbar;
 } static themes{};
 
 void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
@@ -43,6 +44,9 @@ void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 	bmps.clipboard = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CLIPBOARD));
 	bmps.padlock = LoadBitmap(instance, MAKEINTRESOURCE(BMP_PADLOCK));
 	bmps.solid_arrow_right = LoadBitmap(instance, MAKEINTRESOURCE(BMP_SOLID_ARROW_RIGHT));
+	bmps.solid_arrow_left = rotate_bitmap1(bmps.solid_arrow_right, Rotation::CW180);
+	bmps.solid_arrow_up = rotate_bitmap1(bmps.solid_arrow_right, Rotation::CW270);
+	bmps.solid_arrow_down = rotate_bitmap1(bmps.solid_arrow_right, Rotation::CW90);
 	bmps.close = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CLOSE));
 	bmps.minimize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MIN));
 	bmps.maximize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MAX));
@@ -84,6 +88,7 @@ void load_styles() {
 	auto hollow_brush = (HBRUSH)GetStockObject(HOLLOW_BRUSH);
 	auto arrow_cursor = LoadCursor(nil, IDC_ARROW);
 	auto hand_cursor = LoadCursor(nil, IDC_HAND);
+	UINumber percent50 = { .type = UINumber::type::percent, .value = 50 };
 
 	themes.base_table = [&]()->auto {
 		table::Theme base_table{};
@@ -160,7 +165,7 @@ void load_styles() {
 		auto t = themes.base_btn;
 		t.brushes.bk.normal = colors.ControlBkPush;
 		t.dimensions.border_thickness = 0;
-		t.dimensions.border_radius = {.type = UINumber::type::percent, .value = 50};
+		t.dimensions.border_radius = percent50;
 		t.font = fonts.GeneralBold;
 		return t;
 	}();
@@ -259,7 +264,7 @@ void load_styles() {
 		table_toolbar_btn.brushes.bk.normal = hollow_brush;
 		table_toolbar_btn.brushes.bk.disabled = hollow_brush;
 		table_toolbar_btn.dimensions.border_thickness = 0;
-		table_toolbar_btn.dimensions.border_radius = { .type = UINumber::type::percent, .value = 50 };
+		table_toolbar_btn.dimensions.border_radius = percent50;
 		return table_toolbar_btn;
 	}();
 
@@ -270,7 +275,7 @@ void load_styles() {
 		t.brushes.bk.mouseover = colors.Btn_Delete_BkMouseOver;
 		t.brushes.bk.clicked = colors.Btn_Delete_BkPush;
 		t.dimensions.border_thickness = 0;
-		t.dimensions.border_radius = { .type = UINumber::type::percent, .value = 50 };
+		t.dimensions.border_radius = percent50;
 		return t;
 	}();
 
@@ -323,4 +328,18 @@ void load_styles() {
 
 		return base_toast;
 	}();
+
+	themes.base_scrollbar = [&]()->auto {
+		auto t = themes.base_scrollbar;
+
+		t.dimensions.border_thickness = 1;
+		t.dimensions.border_radius = percent50;
+		for (auto& b : t.brushes.bk.all) b = colors.ScrollbarBk;
+		for (auto& b : t.brushes.border.all) b = hollow_brush;
+		for (auto& b : t.brushes.bar_bk.all) b = hollow_brush;
+		for (auto& b : t.brushes.bar_border.all) b = colors.Scrollbar;
+		t.brushes.bar_border.mouseover = colors.ScrollbarMouseOver;
+
+		return t;
+		}();
 }

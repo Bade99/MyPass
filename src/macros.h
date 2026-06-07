@@ -112,8 +112,9 @@ template<typename F> Defer<F> operator+(defer_dummy, F&& f) { return makeDefer<F
 
 #define _control_create_function__set_theme \
 	State& state = *get_state(wnd); Assert(&state); \
+	bool repaint = false; \
 	if (&state) { \
-		bool repaint = state.theme.copy_from(src); \
+		repaint = state.theme.copy_from(src); \
 		if (repaint) ask_window_for_repaint(state.wnd); \
 	}
 

@@ -763,11 +763,13 @@ void add_controls_transition_v0(State& state) {
 
 		SetWindowSubclass(controls.edit_passwords, EditProc, 0, (DWORD_PTR)calloc(1, sizeof(EditProcState)));
 
-		HWND VScrollControl = CreateWindowEx(NULL, scrollbar::wndclass, NULL, WS_CHILD | WS_VISIBLE,
+		HWND vscroll = CreateWindowEx(NULL, scrollbar::wndclass, NULL, WS_CHILD,
 			0, 0, 0, 0, controls.edit_passwords, NULL, NULL, NULL);
-		SendMessage(VScrollControl, scrollbar::U_SB_SET_PLACEMENT, (WPARAM)scrollbar::Placement::right, 0);
+		SendMessage(vscroll, scrollbar::custom_message::SET_PLACEMENT, (WPARAM)scrollbar::Placement::right, 0);
+		SendMessage(vscroll, scrollbar::custom_message::SET_AUTOHIDE, true, 0);
+		scrollbar::set_theme(vscroll, themes.base_scrollbar);
 
-		SendMessage(controls.edit_passwords, EM_SETVSCROLL, (WPARAM)VScrollControl, 0);
+		SendMessage(controls.edit_passwords, EM_SETVSCROLL, (WPARAM)vscroll, 0);
 		SetWindowFont(controls.edit_passwords, (WPARAM)fonts.General, true);
 
 		//INFO: I dont yet paint edit controls so you gotta use WM_CTLCOLOREDIT
