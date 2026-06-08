@@ -108,13 +108,11 @@ RECT get_scrollbar_work_area(State& state) {
 RECT calc_scrollbar(State& state) {
 	RECT work_rc = get_scrollbar_work_area(state);
 
-	//TODO(fran): fix that the scrollbar does move all the way to the bottom of the work area, probly a combination of something wrong here and in WM_MOUSEMOVE
-
-	f32 sb_pos = safe_ratio0((f32)state.p, (f32)distance(state.range_max, state.range_min));
+	f32 sb_pos = safe_ratio0((f32)state.pos, (f32)distance(state.range_max, state.range_min));
 	f32 sb_sz = clamp01(safe_ratio0((f32)state.page_sz, (f32)distance(state.range_max, state.range_min)));
 	bool vertical = is_vertical(state);
 	f32 work_extent = vertical ? RECTH(work_rc) : RECTW(work_rc);
-	f32 sb_lenght = (sb_sz * work_extent);
+	f32 sb_lenght = sb_sz * work_extent;
 
 	LONG cursor_height = DPI(GetSystemMetrics(SM_CYCURSOR));
 	if (sb_sz != 0) sb_lenght = maximum(sb_lenght, cursor_height);
@@ -123,15 +121,28 @@ RECT calc_scrollbar(State& state) {
 	if (vertical) {
 		sb_rc.left = work_rc.left;
 		sb_rc.right = work_rc.right;
-		sb_rc.top = (i32)(work_rc.top + sb_pos * (work_extent - sb_lenght));
+		sb_rc.top = (i32)(work_rc.top + sb_pos * work_extent);
+		if (sb_rc.top + sb_lenght > work_rc.bottom) sb_rc.top = work_rc.bottom - sb_lenght;
 		sb_rc.bottom = (i32)(sb_rc.top + sb_lenght);
 	}
 	else {
-		sb_rc.left = (i32)(work_rc.left + sb_pos * (work_extent - sb_lenght));
+		sb_rc.left = (i32)(work_rc.left + sb_pos * work_extent);
+		if (sb_rc.left + sb_lenght > work_rc.right) sb_rc.left = work_rc.right - sb_lenght;
 		sb_rc.right = (i32)(sb_rc.left + sb_lenght);
 		sb_rc.top = work_rc.top;
 		sb_rc.bottom = work_rc.bottom;
 	}
+
+	//auto print_rc = [](const utf8* name, RECT r) {
+	//	printf("%s = lt(%d, %d), rb(%d, %d), wh(%d, %d)\n", name, r.left, r.top, r.right, r.bottom, RECTW(r), RECTH(r));
+	//};
+	//printf("calc_scrollbar\nsb_pos = %f\nsb_sz = %f\nsb_lenght = %f\n", sb_pos, sb_sz, sb_lenght);
+	//printf("range_min = %d\nrange_max = %d\npage_sz = %d\npos = %d\n\n", state.range_min, state.range_max, state.page_sz, state.pos);
+	//print_rc("client_rc", get_client_rect(state.wnd));
+	//print_rc("work_rc", work_rc);
+	//print_rc("sb_rc", sb_rc);
+	//printf("\n");
+
 	return sb_rc;
 }
 
@@ -347,7 +358,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 			i32 mouse_location;
 			f32 sb_extent;
-			if (is_vertical(state)) {
+			bool vertical = is_vertical(state);
+			if (vertical) {
 				mouse_location = mouse.y - sb_work_area.top;
 				sb_extent = RECTH(sb_work_area) - RECTH(sb_rc);
 			}
@@ -356,15 +368,16 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				sb_extent = RECTW(sb_work_area) - RECTW(sb_rc);
 			}
 
-			f32 mouse_p = mouse_location - state.mouseStartDeltaP; //0 to height
-			float p_ratio = clamp01(safe_ratio0(mouse_p, sb_extent));//0.0 to 1.0
-			state.p = (int)(distance(state.range_max, state.range_min) * p_ratio); //min to max range
+			//TODO(fran): BUG: there's a discrepancy in the pos calculation, making it so that if you click on the scrollbar, even if you dont move it, it will scroll a bit upwards
 
-			//TODO-INFO(fran): The scrollbar has additional travel distance after the text editor has already reached the end. This is because the text editor scrolls by the first visible line instead of the last one. I dont really think that this should be fixed because I like being able to over-scroll further down, but unfortunately windows' default text editor cannot do that.
+			f32 mouse_p = mouse_location - state.mouseStartDeltaP; //0 to height in work area coordinates
+			f32 p_ratio = clamp01(safe_ratio0(mouse_p, sb_extent));//0.0 to 1.0
+			state.pos = (int)((distance(state.range_max, state.range_min) - state.page_sz) * p_ratio); //min to max range
+			//printf("WM_MOUSEMOVE\np_ratio = %f\nrange_min = %d\nrange_max = %d\npage_sz = %d\npos = %d\n\n", p_ratio, state.range_min, state.range_max, state.page_sz, state.pos);
 
 			//Notify parent
-			SendMessage(state.parent, WM_VSCROLL, MAKELONG(SB_THUMBTRACK, state.p), (LPARAM)state.wnd);
-			//TODO(fran): I suppose we're gonna have a problem with this sometimes, since from the edit control's side I update the scrollbar too when it repaints/scrolls and all the cases I set
+			SendMessage(state.parent, vertical ? WM_VSCROLL : WM_HSCROLL, MAKELONG(SB_THUMBTRACK, state.pos), (LPARAM)state.wnd);
+			//TODO(fran): the scroll position for SB_THUMBTRACK is limited to 16bits, we should either extend the message somehow to be able to pass in more data, use a custom message, or use the technique indicated in https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getscrollinfo by standardising that receivers of this notification must call the scrollbar back with GetScrollInfo to get the real 32bit position
 
 			ask_window_for_repaint(state.wnd);
 		}
@@ -409,6 +422,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		CREATESTRUCT* creation_nfo = (CREATESTRUCT*)lparam;
 		state->parent = creation_nfo->hwndParent;
 		state->wnd = hwnd;
+		//state->range_min = 1; //1-indexed, not 0-indexed
 		return 1;
 	} break;
 	case WM_CREATE:
@@ -436,8 +450,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case custom_message::SET_POS:
 	{
 		int new_p = wparam;
-		if (state.p != new_p) {
-			state.p = new_p;
+		if (state.pos != new_p) {
+			state.pos = new_p;
 			ask_window_for_repaint(state.wnd);
 		}
 	} break;
