@@ -78,7 +78,8 @@ namespace scrollbar {
 		i32 page_sz;
 		i32 pos;
 
-		i32 mouseStartDeltaP;
+		f32 mouse_start_p;
+		i32 stored_pos;
 
 		bool onMouseOverSb;//The mouse is over our bar
 		bool onMouseOverControl;//The mouse is over our control

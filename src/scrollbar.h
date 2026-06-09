@@ -105,16 +105,29 @@ RECT get_scrollbar_work_area(State& state) {
 	return res;
 }
 
+i32 get_max_sb_pos(const State& state) {
+	i32 res = distance(state.range_max, state.range_min) - state.page_sz;
+	return res;
+}
+
+i32 clamp_pos(const State& state, i32 pos) {
+	i32 res = clamp(state.range_min, pos, get_max_sb_pos(state));
+	return res;
+}
+
+/**
+  * Result is in client coordinates
+  */
 RECT calc_scrollbar(State& state) {
 	RECT work_rc = get_scrollbar_work_area(state);
 
-	f32 sb_pos = safe_ratio0((f32)state.pos, (f32)distance(state.range_max, state.range_min));
-	f32 sb_sz = clamp01(safe_ratio0((f32)state.page_sz, (f32)distance(state.range_max, state.range_min)));
+	f32 sb_pos = safe_ratio0<f32>(state.pos, distance(state.range_max, state.range_min));
+	f32 sb_sz = clamp01(safe_ratio0<f32>(state.page_sz, distance(state.range_max, state.range_min)));
 	bool vertical = is_vertical(state);
 	f32 work_extent = vertical ? RECTH(work_rc) : RECTW(work_rc);
 	f32 sb_lenght = sb_sz * work_extent;
 
-	LONG cursor_height = DPI(GetSystemMetrics(SM_CYCURSOR));
+	f32 cursor_height = DPI(GetSystemMetrics(SM_CYCURSOR));
 	if (sb_sz != 0) sb_lenght = maximum(sb_lenght, cursor_height);
 
 	RECT sb_rc;
@@ -132,16 +145,6 @@ RECT calc_scrollbar(State& state) {
 		sb_rc.top = work_rc.top;
 		sb_rc.bottom = work_rc.bottom;
 	}
-
-	//auto print_rc = [](const utf8* name, RECT r) {
-	//	printf("%s = lt(%d, %d), rb(%d, %d), wh(%d, %d)\n", name, r.left, r.top, r.right, r.bottom, RECTW(r), RECTH(r));
-	//};
-	//printf("calc_scrollbar\nsb_pos = %f\nsb_sz = %f\nsb_lenght = %f\n", sb_pos, sb_sz, sb_lenght);
-	//printf("range_min = %d\nrange_max = %d\npage_sz = %d\npos = %d\n\n", state.range_min, state.range_max, state.page_sz, state.pos);
-	//print_rc("client_rc", get_client_rect(state.wnd));
-	//print_rc("work_rc", work_rc);
-	//print_rc("sb_rc", sb_rc);
-	//printf("\n");
 
 	return sb_rc;
 }
@@ -293,9 +296,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				SetCapture(state.wnd);//Keep capturing the mouse while the user is still pressing the button, even if the mouse leaves our client area
 				state.onMouseTrackingSb = true;
 
-				RECT sb = calc_scrollbar(state);
-
-				state.mouseStartDeltaP = is_vertical(state) ? mouse.y - sb.top : mouse.x - sb.left;
+				state.mouse_start_p = is_vertical(state) ? mouse.y : mouse.x;
+				state.stored_pos = state.pos;
 			}
 		}
 		else {
@@ -348,8 +350,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		bool prev_OnMouseTrackingSb = state.onMouseTrackingSb;
 		bool prev_onMouseOverControl = state.onMouseOverControl;
 
-		RECT sb_rc = calc_scrollbar(state);
-		state.onMouseOverSb = test_pt_rc(mouse, sb_rc);
+		state.onMouseOverSb = test_pt_rc(mouse, calc_scrollbar(state));
 		state.onMouseOverControl = test_pt_rc(mouse, get_client_rect(state.wnd));
 
 		if (state.onMouseTrackingSb) {
@@ -360,20 +361,17 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			f32 sb_extent;
 			bool vertical = is_vertical(state);
 			if (vertical) {
-				mouse_location = mouse.y - sb_work_area.top;
-				sb_extent = RECTH(sb_work_area) - RECTH(sb_rc);
+				mouse_location = mouse.y;
+				sb_extent = RECTH(sb_work_area);
 			}
 			else {
-				mouse_location = mouse.x - sb_work_area.left;
-				sb_extent = RECTW(sb_work_area) - RECTW(sb_rc);
+				mouse_location = mouse.x;
+				sb_extent = RECTW(sb_work_area);
 			}
 
-			//TODO(fran): BUG: there's a discrepancy in the pos calculation, making it so that if you click on the scrollbar, even if you dont move it, it will scroll a bit upwards
-
-			f32 mouse_p = mouse_location - state.mouseStartDeltaP; //0 to height in work area coordinates
-			f32 p_ratio = clamp01(safe_ratio0(mouse_p, sb_extent));//0.0 to 1.0
-			state.pos = (int)((distance(state.range_max, state.range_min) - state.page_sz) * p_ratio); //min to max range
-			//printf("WM_MOUSEMOVE\np_ratio = %f\nrange_min = %d\nrange_max = %d\npage_sz = %d\npos = %d\n\n", p_ratio, state.range_min, state.range_max, state.page_sz, state.pos);
+			f32 displacement = mouse_location - state.mouse_start_p; //pixels
+			f32 p_ratio = safe_ratio0(displacement, sb_extent); //percentage of total pixel size of work area
+			state.pos = clamp_pos(state, state.stored_pos + (i32)(distance(state.range_max, state.range_min) * p_ratio)); //min to max range
 
 			//Notify parent
 			SendMessage(state.parent, vertical ? WM_VSCROLL : WM_HSCROLL, MAKELONG(SB_THUMBTRACK, state.pos), (LPARAM)state.wnd);
