@@ -16,8 +16,38 @@ void set_scrolling(HWND wnd, bool does_scrolling) {
 	if (&state) state.does_scrolling = does_scrolling;
 }
 
+auto create_scrollable_area(HWND parent, const scrollbar::Theme& scrollbar_theme = themes.base_scrollbar) {
+	struct create_scrollable_area_res {
+		HWND scrollable_area;
+		struct { HWND content_area, v_scroll, h_scroll; } children;
+	} res{};
+	res.scrollable_area = create_window(parent, page::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_CLIPSIBLINGS); //TODO(fran): WS_CLIPCHILDREN?
+	page::set_scrolling(res.scrollable_area, true);
+	State& state = *get_state(res.scrollable_area);
+
+	auto create_scrollbar = [&](scrollbar::Placement placement) {
+		HWND sb = create_window(res.scrollable_area, scrollbar::wndclass, nil, WS_CHILD);
+		SendMessage(sb, scrollbar::custom_message::SET_PLACEMENT, (WPARAM)placement, 0);
+		SendMessage(sb, scrollbar::custom_message::SET_AUTOHIDE, true, 0);
+		scrollbar::set_theme(sb, scrollbar_theme);
+		return sb;
+	};
+
+	res.children.v_scroll = state.controls.v_scroll = create_scrollbar(scrollbar::Placement::right);
+	res.children.h_scroll = state.controls.h_scroll = create_scrollbar(scrollbar::Placement::bottom);
+
+	res.children.content_area = state.controls.content_area = create_window(res.scrollable_area, page::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_CLIPSIBLINGS); //TODO(fran): WS_CLIPCHILDREN?
+
+	//SetWindowPos(res.children.v_scroll, HWND_TOP, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+	//SetWindowPos(res.children.h_scroll, HWND_TOP, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+
+	//TODO(fran): add support for the scrollable_area to manage a scrollbars, eg page::set_use_v_scrollbar(controls.page, true or false); or some other way for the scrollable_area to control the scrollbars
+
+	return res;
+}
+
 void set_wnd_size(HWND wnd, HWND parent_page_space, i32 h) {
-	State& state = *get_state(wnd);
+	State& state = *get_state(parent_page_space);
 	if (&state) {
 		RECT page_space; GetClientRect(parent_page_space, &page_space);
 		RECT page_relative_to_space = get_window_rect_at(wnd, parent_page_space);
@@ -36,11 +66,16 @@ void set_wnd_size(HWND wnd, HWND parent_page_space, i32 h) {
 		};
 		state.scroll += y_correction; //Update stored scroll value as well
 		MoveWindow(wnd, page, false);
+
+		AssertAll(state.controls.all);
+
+		scrollbar::set_stats(state.controls.v_scroll, page.h, page_space_h, abs(minimum(page.y, 0)));
+		SendMessage(state.controls.v_scroll, scrollbar::custom_message::AUTORESIZE, 0, 0);
 	}
 }
 
 void smooth_scroll(State& state, int increment) {
-
+	AssertAll(state.controls.all);
 	//TODO(fran): the scrolling is now pretty good & responsive, only thing missing is a bit of smoothing across large distances (speeding up at the beginning and slowing down close to the end, possibly based on the frecuency of new scroll events?)
 	state.scroll_anim.time_between_last_two_scroll_events = (f32)EndCounter(state.scroll_anim._time_between); //TODO(fran): it may be good to calculate the 2nd derivative of this, aka the delta between the last two times between two scroll events
 	if (state.scroll_anim.time_between_last_two_scroll_events > .200f /*ms expressed in seconds*/)
@@ -57,8 +92,7 @@ void smooth_scroll(State& state, int increment) {
 	state.scroll_tasks.push_back(increment);
 
 
-	static void (*scroll_timeout)(HWND, UINT, UINT_PTR, DWORD) =
-		[](HWND hwnd, UINT, UINT_PTR anim_id, DWORD) {
+	static void (*scroll_timeout)(HWND, UINT, UINT_PTR, DWORD) = [](HWND hwnd, UINT, UINT_PTR anim_id, DWORD) {
 		State& state = *get_state(hwnd);
 		if (&state) {
 			if (state.scroll_tasks.size()) {
@@ -67,7 +101,7 @@ void smooth_scroll(State& state, int increment) {
 				state.scroll_tasks.push_back(last);
 			}
 		}
-		};
+	};
 
 	//If no new scroll events happen after X ms then stop scrolling, the user is no longer scrolling the mouse wheel and wants scrolling to stop
 	SetTimer(state.wnd, 2222, 125/*ms*/, scroll_timeout);
@@ -81,15 +115,14 @@ void smooth_scroll(State& state, int increment) {
 		state.scroll_anim.total_frames = (i32)maximum(anim_duration / (state.scroll_anim.dt * 1000.f), 1.f);
 		state.scroll_anim.current_frame = 1;
 		SetTimer(state.wnd, 1111, (u32)(state.scroll_anim.dt * 1000), scroll_animation);
-		};
+	};
 
-	static void (*scroll_anim)(HWND, UINT, UINT_PTR, DWORD) =
-		[](HWND hwnd, UINT, UINT_PTR anim_id, DWORD) {
+	static void (*scroll_anim)(HWND, UINT, UINT_PTR, DWORD) = [](HWND hwnd, UINT, UINT_PTR anim_id, DWORD) {
 		State& state = *get_state(hwnd);
 		if (&state) {
 
-			RECT r; GetWindowRect(state.wnd, &r); MapWindowPoints(0, state.parent, (POINT*)&r, 2);
-			RECT parent_r; GetWindowRect(state.parent, &parent_r);
+			RECT r = get_window_rect_at(state.controls.content_area, state.wnd);
+			RECT parent_r; GetClientRect(state.wnd, &parent_r);
 			i32 parent_h = RECTH(parent_r);
 			i32 current_h = RECTH(r);
 			const i32 min_scroll_y = 0; //prevent scrolling to go above of the page boundaries
@@ -103,7 +136,9 @@ void smooth_scroll(State& state, int increment) {
 
 			i32 new_y = clamp(max_scroll_y, (i32)(original_wnd_y + state.scroll), min_scroll_y);
 
-			MoveWindow(state.wnd, r.left, new_y, RECTW(r), RECTH(r), TRUE);
+			MoveWindow(state.controls.content_area, r.left, new_y, RECTW(r), RECTH(r), TRUE);
+
+			SendMessage(state.controls.v_scroll, scrollbar::custom_message::SET_POS, -new_y, 0);
 
 			if (state.scroll_anim.current_frame++ <= state.scroll_anim.total_frames) {
 				SetTimer(state.wnd, anim_id, (u32)(state.scroll_anim.dt * 1000), scroll_anim);
@@ -120,7 +155,7 @@ void smooth_scroll(State& state, int increment) {
 				}
 			}
 		}
-		};
+	};
 
 	if (!state.scroll_anim.active) {
 		setup_scroll_anim(state, scroll_anim);
@@ -177,27 +212,58 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_MOUSEWHEEL:
 	{
 		if (state.does_scrolling) {
+			AssertAll(state.controls.all);
 			auto zDelta = (f32)GET_WHEEL_DELTA_WPARAM(wparam) / (f32)WHEEL_DELTA;
 			int dy = avg_str_dim(fonts.General, 1).cy;
 
 			//TODO(fran): SystemParametersInfo(SPI_GETWHEELSCROLLLINES) to scroll based on windows mouse scroll sensitivity the user set?
 
 			int step = zDelta * 3 * dy;
-#if 0 //possibly better solution
-			UINT flags = MAKELONG(SW_SCROLLCHILDREN | SW_SMOOTHSCROLL, 200);
-			ScrollWindowEx(state.wnd, 0, step, nullptr, nullptr, nullptr, nullptr, flags);
-#else //handmade solution (no WM_PRINT and friends)
 			smooth_scroll(state, step);
-#endif
 			return 0;
 		}
 		else return DefWindowProc(hwnd, msg, wparam, lparam);//propagates msg to the parent
 	} break;
-	/*case WM_ASK_FOR_RESIZE:
+	case WM_VSCROLL:
 	{
-		AskForResize(state.parent); //TODO(fran): the page could get the resize info on startup and manage this without bothering the parent
-		return 0;
-	} break;*/
+		AssertAll(state.controls.all); //We're a page that manages a sub page that is scrolled (TODO: create separate control entity "scroll container", or similar)
+		auto operation = LOWORD(wparam);
+
+		switch (operation) {
+		case SB_THUMBTRACK:
+		case SB_THUMBPOSITION: //INFO: can be used to detect the end of a SB_THUMBTRACK sequence
+		{
+			auto new_scroll = HIWORD(wparam);
+			//TODO(fran): move into common logic with smooth_scroll
+			RECT r = get_window_rect_at(state.controls.content_area, state.wnd);
+			RECT parent_r; GetWindowRect(state.wnd, &parent_r);
+			i32 parent_h = RECTH(parent_r);
+			i32 current_h = RECTH(r);
+			const i32 min_scroll_y = 0; //prevent scrolling to go above of the page boundaries
+			i32 max_scroll_y = maximum(current_h - parent_h, 0); //prevent scrolling to go below of the page boundaries
+
+			i32 new_y = -clamp(min_scroll_y, (i32)(new_scroll), max_scroll_y);
+
+			MoveWindow(state.controls.content_area, r.left, new_y, RECTW(r), RECTH(r), TRUE);
+		} break;
+		case SB_LINEDOWN:
+		case SB_LINEUP:
+		case SB_PAGEDOWN:
+		case SB_PAGEUP:
+		{
+			i32 step;
+			//TODO(fran): user could configure the line height just as we do the page height
+			if (operation == SB_LINEDOWN) step = -avg_str_dim(fonts.General, 1).cy;
+			elif(operation == SB_LINEUP) step = avg_str_dim(fonts.General, 1).cy;
+			elif(operation == SB_PAGEDOWN) step = -RECTH(get_client_rect(state.wnd));
+			elif(operation == SB_PAGEUP) step = RECTH(get_client_rect(state.wnd));
+			else Assert(0);
+			smooth_scroll(state, step);
+			return 0;
+		} break;
+		default: Assert(0);
+		}
+	} break;
 	case WM_MOUSEACTIVATE:
 	{
 		return MA_ACTIVATE;

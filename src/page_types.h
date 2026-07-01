@@ -30,6 +30,16 @@ struct State {
 	HWND parent;
 	Theme theme;
 
+	union Controls {
+		struct {
+			HWND v_scroll;
+			HWND h_scroll;
+			HWND content_area;
+		};
+		HWND all[3];
+	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
+	} controls;
+
 	bool does_scrolling;
 
 	struct {

@@ -30,8 +30,10 @@
 
 #ifdef UNCAP_ASSERTIONS
 #define Assert(assertion) if(!(assertion))*(int*)NULL=0
+#define AssertAll(assertion_list) for (auto& e : assertion_list) if(!(e))*(int*)NULL=0
 #else 
 #define Assert(assertion) 
+#define AssertAll(assertion) 
 #endif
 
 //Assert guaranteed to be executed in any build configuration whether assertions are enabled or not

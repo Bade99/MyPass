@@ -226,11 +226,11 @@ void set_mode(State& state, mode new_mode) {
 void add_controls(State& state) {
 	auto& controls = state.controls;
 
-	controls.page_space = create_window(state.wnd, page::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_CLIPSIBLINGS); //TODO(fran): WS_CLIPCHILDREN?
+	auto scroll_area = page::create_scrollable_area(state.wnd);
 
-	controls.page = create_window(controls.page_space, page::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_CLIPSIBLINGS); //TODO(fran): WS_CLIPCHILDREN?
-	page::set_scrolling(controls.page, true);
-	//TODO(fran): add support for the page to manage a vertical scrollbar, add page::set_use_scrollbar(controls.page, true or false); // to allow us to select whether we want the scrollbar to be visible to the user when the page can scroll
+	controls.page_space = scroll_area.scrollable_area;
+
+	controls.page = scroll_area.children.content_area;
 
 	auto btn_add_theme = themes.editor_add_btn;
 
@@ -763,8 +763,8 @@ void add_controls_transition_v0(State& state) {
 
 		SetWindowSubclass(controls.edit_passwords, EditProc, 0, (DWORD_PTR)calloc(1, sizeof(EditProcState)));
 
-		HWND vscroll = CreateWindowEx(NULL, scrollbar::wndclass, NULL, WS_CHILD,
-			0, 0, 0, 0, controls.edit_passwords, NULL, NULL, NULL);
+		HWND vscroll = CreateWindow(scrollbar::wndclass, nil, WS_CHILD,
+			0, 0, 0, 0, controls.edit_passwords, nil, nil, nil);
 		SendMessage(vscroll, scrollbar::custom_message::SET_PLACEMENT, (WPARAM)scrollbar::Placement::right, 0);
 		SendMessage(vscroll, scrollbar::custom_message::SET_AUTOHIDE, true, 0);
 		scrollbar::set_theme(vscroll, themes.base_scrollbar);

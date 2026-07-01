@@ -73,8 +73,7 @@ namespace scrollbar {
 	struct State : WindowState {
 		Controls controls;
 		Placement placement;
-		i32 range_min;
-		i32 range_max; //1-based, NOT 0
+		i32 range_max; //TODO(fran): change to unsigned (verify correct scrolling after, tried and failed before)
 		i32 page_sz;
 		i32 pos;
 

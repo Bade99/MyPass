@@ -26,44 +26,43 @@ void resize_wnd(State& state, i32 scrollbar_thickness) {
 	RECT r; GetClientRect(state.parent, &r);
 	i32 spacing = 2;// A few pixels of spacing so the control doesnt feel so stuck to the corners
 
-	i32 scroll_x, scroll_y, scroll_w, scroll_h;
+	rect_i32 scroll;
 
 	switch (state.placement) {
 	//vertical
 	case Placement::left:
 	{
-		scroll_x = spacing;
-		scroll_y = spacing;
-		scroll_w = scrollbar_thickness;
-		scroll_h = RECTH(r) - spacing * 2;
+		scroll.x = spacing;
+		scroll.y = spacing;
+		scroll.w = scrollbar_thickness;
+		scroll.h = RECTH(r) - spacing * 2;
 	}break;
 	case Placement::right:
 	{
-		scroll_x = RECTW(r) - scrollbar_thickness - spacing;
-		scroll_y = spacing;
-		scroll_w = scrollbar_thickness;
-		scroll_h = RECTH(r) - spacing * 2;
+		scroll.x = RECTW(r) - scrollbar_thickness - spacing;
+		scroll.y = spacing;
+		scroll.w = scrollbar_thickness;
+		scroll.h = RECTH(r) - spacing * 2;
 	}break;
 	//horizontal
 	case Placement::top:
 	{
-		scroll_x = spacing;
-		scroll_y = spacing;
-		scroll_w = RECTW(r) - spacing * 2;
-		scroll_h = scrollbar_thickness;
+		scroll.x = spacing;
+		scroll.y = spacing;
+		scroll.w = RECTW(r) - spacing * 2;
+		scroll.h = scrollbar_thickness;
 	}break;
 	case Placement::bottom:
 	{
-		scroll_x = spacing;
-		scroll_y = RECTH(r) - scrollbar_thickness - spacing;
-		scroll_w = RECTW(r) - spacing * 2;
-		scroll_h = scrollbar_thickness;
+		scroll.x = spacing;
+		scroll.y = RECTH(r) - scrollbar_thickness - spacing;
+		scroll.w = RECTW(r) - spacing * 2;
+		scroll.h = scrollbar_thickness;
 	}break;
 	}
-	RECT non_clipped_rc = rectWH(scroll_x, scroll_y, scroll_w, scroll_h);
-	RECT clipped_rc = clip_fit_childs(state.parent, state.wnd, non_clipped_rc);
+	//RECT clipped_rc = clip_fit_childs(state.parent, state.wnd, scroll.to_RECT());
 
-	MoveWindow(state.wnd, clipped_rc.left, clipped_rc.top, RECTW(clipped_rc), RECTH(clipped_rc), TRUE);
+	MoveWindow(state.wnd, scroll);
 }
 
 bool is_vertical(State& state) {
@@ -106,12 +105,12 @@ RECT get_scrollbar_work_area(State& state) {
 }
 
 i32 get_max_sb_pos(const State& state) {
-	i32 res = distance(state.range_max, state.range_min) - state.page_sz;
+	i32 res = state.range_max - state.page_sz;
 	return res;
 }
 
 i32 clamp_pos(const State& state, i32 pos) {
-	i32 res = clamp(state.range_min, pos, get_max_sb_pos(state));
+	i32 res = clamp(0, pos, get_max_sb_pos(state));
 	return res;
 }
 
@@ -121,8 +120,8 @@ i32 clamp_pos(const State& state, i32 pos) {
 RECT calc_scrollbar(State& state) {
 	RECT work_rc = get_scrollbar_work_area(state);
 
-	f32 sb_pos = safe_ratio0<f32>(state.pos, distance(state.range_max, state.range_min));
-	f32 sb_sz = clamp01(safe_ratio0<f32>(state.page_sz, distance(state.range_max, state.range_min)));
+	f32 sb_pos = safe_ratio0<f32>(state.pos, state.range_max);
+	f32 sb_sz = clamp01(safe_ratio0<f32>(state.page_sz, state.range_max));
 	bool vertical = is_vertical(state);
 	f32 work_extent = vertical ? RECTH(work_rc) : RECTW(work_rc);
 	f32 sb_lenght = sb_sz * work_extent;
@@ -150,7 +149,7 @@ RECT calc_scrollbar(State& state) {
 }
 
 bool is_bar_visible(State& state) {
-	bool res = distance(state.range_max, state.range_min) > state.page_sz;
+	bool res = state.range_max > state.page_sz;
 	return res;
 }
 
@@ -193,6 +192,10 @@ void set_theme(HWND wnd, const Theme& src) {
 	}
 }
 
+HWND get_parent_to_notify(State& state) {
+	return state.manager_parent ? state.manager_parent : state.parent;
+}
+
 void add_controls(State& state) {
 	auto& controls = state.controls;
 
@@ -203,10 +206,11 @@ void add_controls(State& state) {
 		button::set_functions(control, {
 			.on_click = [](void* data, HWND wnd) {
 				auto& state = *(State*)data;
+				auto parent = get_parent_to_notify(state);
 				if (is_vertical(state))
-					SendMessage(state.parent, WM_VSCROLL, MAKELONG(SB_LINEUP, 0), (LPARAM)state.wnd);
+					SendMessage(parent, WM_VSCROLL, MAKELONG(SB_LINEUP, 0), (LPARAM)state.wnd);
 				else 
-					SendMessage(state.parent, WM_HSCROLL, MAKELONG(SB_LINELEFT, 0), (LPARAM)state.wnd);
+					SendMessage(parent, WM_HSCROLL, MAKELONG(SB_LINELEFT, 0), (LPARAM)state.wnd);
 			}
 		});
 	}
@@ -218,10 +222,11 @@ void add_controls(State& state) {
 		button::set_functions(control, {
 			.on_click = [](void* data, HWND wnd) {
 				auto& state = *(State*)data;
+				auto parent = get_parent_to_notify(state);
 				if (is_vertical(state))
-					SendMessage(state.parent, WM_VSCROLL, MAKELONG(SB_LINEDOWN, 0), (LPARAM)state.wnd);
+					SendMessage(parent, WM_VSCROLL, MAKELONG(SB_LINEDOWN, 0), (LPARAM)state.wnd);
 				else
-					SendMessage(state.parent, WM_HSCROLL, MAKELONG(SB_LINERIGHT, 0), (LPARAM)state.wnd);
+					SendMessage(parent, WM_HSCROLL, MAKELONG(SB_LINERIGHT, 0), (LPARAM)state.wnd);
 			}
 		});
 	}
@@ -237,17 +242,18 @@ void update_btn_visibility(State& state) {
 }
 
 void send_bk_click_message(State& state, POINT mouse, RECT sb_rc) {
+	auto parent = get_parent_to_notify(state);
 	if (is_vertical(state)) {
 		if (mouse.y < sb_rc.top) //mouse hit above the bar
-			SendMessage(state.parent, WM_VSCROLL, MAKELONG(SB_PAGEUP, 0), (LPARAM)state.wnd);
+			SendMessage(parent, WM_VSCROLL, MAKELONG(SB_PAGEUP, 0), (LPARAM)state.wnd);
 		else //mouse hit below the bar
-			SendMessage(state.parent, WM_VSCROLL, MAKELONG(SB_PAGEDOWN, 0), (LPARAM)state.wnd);
+			SendMessage(parent, WM_VSCROLL, MAKELONG(SB_PAGEDOWN, 0), (LPARAM)state.wnd);
 	}
 	else {
 		if (mouse.x < sb_rc.left) //mouse hit left of the bar
-			SendMessage(state.parent, WM_HSCROLL, MAKELONG(SB_PAGELEFT, 0), (LPARAM)state.wnd);
+			SendMessage(parent, WM_HSCROLL, MAKELONG(SB_PAGELEFT, 0), (LPARAM)state.wnd);
 		else //mouse hit right of the bar
-			SendMessage(state.parent, WM_HSCROLL, MAKELONG(SB_PAGERIGHT, 0), (LPARAM)state.wnd);
+			SendMessage(parent, WM_HSCROLL, MAKELONG(SB_PAGERIGHT, 0), (LPARAM)state.wnd);
 	}
 }
 
@@ -257,7 +263,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	switch (msg) {
 	case WM_MOUSEWHEEL:
 	{
-		return SendMessage(state.parent, msg, wparam, lparam);
+		return SendMessage(get_parent_to_notify(state), msg, wparam, lparam);
 	} break;
 	case WM_CANCELMODE:
 	{
@@ -371,10 +377,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 			f32 displacement = mouse_location - state.mouse_start_p; //pixels
 			f32 p_ratio = safe_ratio0(displacement, sb_extent); //percentage of total pixel size of work area
-			state.pos = clamp_pos(state, state.stored_pos + (i32)(distance(state.range_max, state.range_min) * p_ratio)); //min to max range
+			state.pos = clamp_pos(state, state.stored_pos + (i32)(state.range_max * p_ratio)); //min to max range
 
 			//Notify parent
-			SendMessage(state.parent, vertical ? WM_VSCROLL : WM_HSCROLL, MAKELONG(SB_THUMBTRACK, state.pos), (LPARAM)state.wnd);
+			SendMessage(get_parent_to_notify(state), vertical ? WM_VSCROLL : WM_HSCROLL, MAKELONG(SB_THUMBTRACK, state.pos), (LPARAM)state.wnd);
 			//TODO(fran): the scroll position for SB_THUMBTRACK is limited to 16bits, we should either extend the message somehow to be able to pass in more data, use a custom message, or use the technique indicated in https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getscrollinfo by standardising that receivers of this notification must call the scrollbar back with GetScrollInfo to get the real 32bit position
 
 			ask_window_for_repaint(state.wnd);
@@ -420,7 +426,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		CREATESTRUCT* creation_nfo = (CREATESTRUCT*)lparam;
 		state->parent = creation_nfo->hwndParent;
 		state->wnd = hwnd;
-		//state->range_min = 1; //1-indexed, not 0-indexed
+		state->manager_parent = (HWND)creation_nfo->lpCreateParams;
 		return 1;
 	} break;
 	case WM_CREATE:

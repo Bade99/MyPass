@@ -41,13 +41,13 @@
 
 #include "style.h"
 
-#include "page.h"
 #include "button.h"
+#include "scrollbar.h"
+#include "page.h"
 #include "text.h"
 #include "search.h"
 #include "nonclient.h"
 #include "toast.h"
-#include "scrollbar.h"
 #include "table.h"
 #include "password_editor.h"
 #include "list.h"
