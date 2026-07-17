@@ -23,7 +23,7 @@ static read_entire_file_res read_entire_file(const cstr* filename) {
 		defer{ CloseHandle(hFile); };
 		if (LARGE_INTEGER sz; GetFileSizeEx(hFile, &sz)) {
 			u32 sz32 = safe_u64_to_u32(sz.QuadPart);
-			void* mem = VirtualAlloc(0, sz32, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);//TOOD(fran): READONLY?
+			void* mem = VirtualAlloc(0, sz32, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 			if (mem) {
 				if (DWORD bytes_read; ReadFile(hFile, mem, sz32, &bytes_read, 0) && sz32 == bytes_read) {
 					//SUCCESS

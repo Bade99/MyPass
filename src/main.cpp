@@ -9,7 +9,7 @@
 
 #define WM_STATE_NEXT (WM_USER+5000) //proceed to the next window in the state machine
 #define WM_STATE_RESET (WM_USER+5001) //clear critical information
-#define WM_STATE_START (WM_USER+5002) //you are all set up, start whatever it is you do, this is always a SendMessage, you must use all the init data right there, it's not guaranteed to be there after this msg finishes (return 1 if sucessfully started, 0 otherwise to go back to the prior wnd)
+#define WM_STATE_START (WM_USER+5002) //you are all set up, start whatever it is you do, this is always a SendMessage, you must use all the init data right there, it's not guaranteed to be there after this msg finishes (return 1 if sucessfully started, 0 otherwise to go back to the prior wnd). wparam = const pointer to Start object of the corresponding type based on what's being started
 #define WM_STATE_START_ATTEMPT (WM_USER+5003) //login was attempted but failed, this is always a PostMessage. wparam = login::AttemptResult failure mode
 
 #include "win_sdk.h"
@@ -200,10 +200,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
         .can_maximize = false,
     };
 
-    editor::Start editor_start{0};
     editor::Data editor_data{
         .settings = &editor_cl,
-        .start = &editor_start,
     };
 
     nonclient::LpParam show_nclpparam{
@@ -279,12 +277,10 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
             case wnd_task::show_passwords:
             {
                 SetCursor(loading_cursor); defer{ SetCursor(arrow_cursor); };
-                sha256(login_results.password.str, login_results.password.sz_chars * sizeof(*login_results.password.str), editor_start.key);
-                editor_data.start->username = login_results.username;
-                editor_data.start->signup = login_results.signup;
+                const editor::Start editor_start{ .username = login_results.username, .password = login_results.password, .signup = login_results.signup };
 
                 // Attempt to start the next state
-                auto start_attempt = (login::AttemptResult)SendMessage(nonclient::get_state(new_state.wnd)->client, WM_STATE_START, 0, 0);
+                auto start_attempt = (login::AttemptResult)SendMessage(nonclient::get_state(new_state.wnd)->client, WM_STATE_START, (WPARAM)&editor_start, 0);
 
                 if (start_attempt == login::AttemptResult::success) {
                     PostMessage(nonclient::get_state(old_state.wnd)->client, WM_STATE_RESET, 0, 0);

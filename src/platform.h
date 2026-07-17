@@ -11,6 +11,8 @@
 #include <ranges>
 #include <set>
 #include <string>
+#include <string_view>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -41,6 +43,8 @@ constexpr i32 I32MIN = std::numeric_limits<i32>::min();
 constexpr i64 I64MAX = std::numeric_limits<i64>::max();
 constexpr i64 I64MIN = std::numeric_limits<i64>::min();
 
+typedef i64 time64;
+
 typedef float  f32;
 typedef double f64;
 
@@ -48,9 +52,8 @@ constexpr f32 F32INFINITY = std::numeric_limits<f32>::infinity();
 constexpr f32 F64INFINITY = std::numeric_limits<f64>::infinity();
 
 typedef char     utf8;
-typedef wchar_t  utf16;
+typedef wchar_t  utf16; //TODO(fran): wchar_t is 4bytes in unix systems, switch to char16_t
 typedef char32_t utf32;
-
 
 #ifndef UNICODE
 #error "Must use Unicode (UTF16 in Windows)"
@@ -63,12 +66,20 @@ typedef std::wstring str;
 typedef std::wstring_view str_view;
 typedef wchar_t cstr;
 
+static_assert(sizeof(wchar_t) == 2, "We expect wchar_t to be 16bits");
 
 struct text { //A NON null terminated cstring
 	cstr* str;
 	size_t sz_chars; //TODO(fran): better is probably size in bytes
 };
 
+#if !defined(__x86_64__) && !defined(_M_X64)
+#error "Unsupported architecture. Please validate functionality, then add it here."
+// Areas of concern to test in the new arch:
+// - raw_buffer encoding methodology: 
+//  + we try to standardise it with padding for 2 and 4 byte alignment for some types, but allocators for data that is passed to the raw_buffer_reader should also provide aligned memory
+//  + we dont handle different endianness, we assume little-endian, which should be fine for most use cases
+#endif
 
 //TODO(fran): this probably can be replaced by std string view
 template<typename T>
@@ -113,6 +124,7 @@ using multiflag = u32;
 template <typename T>
 requires std::same_as<T, u32>
 void set_flag_bit(T& flags, bool set, T flag) {
+	static_assert(std::is_unsigned_v<T>, "Flag value type needs to be unsigned for the bit trick we do for branchless assignment");
 	using signedt = std::make_signed_t<T>;
 	flags ^= flag & ((-(signedt)set) ^ flags);
 }

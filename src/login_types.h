@@ -20,6 +20,8 @@ constexpr auto invalid_password_message_duration_ms = 3000;
 
 constexpr auto max_input_chars = 32;
 
+constexpr auto msgbox_placement = MBP::center | MBP::top;
+
 struct Settings {
 
 #define foreach_LoginSettings_member(op) \
@@ -70,7 +72,6 @@ struct State {
 };
 
 enum class AttemptResult {
-	success, fail_password, fail_username, fail_signup_username_exists
-	//TODO: on fail_username then we should display a signup message, if the user wants to sing up then in our login result we should add a boolean signup, so that the editor knows that it should pass the user as a valid new signup if it doesnt exist
+	success, fail_password, fail_username, fail_signup_username_exists, fail_newer_version, fail_corrupted
 };
 }

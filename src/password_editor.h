@@ -157,23 +157,18 @@ void set_is_editing(State& state, bool is_editing) {
 
 void on_properties_changed(State& state) {
 	//TODO(fran): update tip text on change to modified state (at least this way we dont have to use the msg queue and the proc)
-	using namespace std::chrono;
 	TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
 	toolInfo.hwnd = state.controls.btn_dates;
 	toolInfo.uId = (UINT_PTR)state.controls.btn_dates;
-	constexpr auto date_format = L"{:%F %T}"; //TODO(fran): we could try to use the local date format of the user
-	auto created = std::format(
-		date_format,
-		zoned_time{ current_zone(), sys_seconds{ seconds(state.properties.date_created) } }
-	);
-	auto modified = std::format(
-		date_format,
-		zoned_time{ current_zone(), sys_seconds{ seconds(state.properties.date_modified) } }
-	);
-	auto dates_msg = std::vformat(
-		RS(LANG_PWD_ED_DATES),
-		std::make_wformat_args(created, modified)
-	);
+	auto format_datetime = [](time_t date) {
+		using namespace std::chrono;
+		constexpr auto date_format = L"{:%Y/%m/%d %H:%M}"; //TODO(fran): config so the user can set the date format they want, depending on the system or any other locale based calculation is not good enough
+		auto date_string = std::format( date_format, zoned_time{ current_zone(), sys_seconds{ seconds(date) } });
+		return date_string;
+	};
+	auto created = format_datetime(state.properties.date_created);
+	auto modified = format_datetime(state.properties.date_modified);
+	auto dates_msg = std::vformat(RS(LANG_PWD_ED_DATES), std::make_wformat_args(created, modified));
 	toolInfo.lpszText = dates_msg.data();
 	SendMessage(state.controls.tooltip_btn_dates, TTM_UPDATETIPTEXT, 0, (LPARAM)&toolInfo);
 
@@ -204,7 +199,7 @@ void create_controls(State& state) {
 	
 	//TODO(fran): this controls being dynamic, with the possibility of the parent being eliminated and thus them too, poses a big issue for the language_manager, it could be setting the text of another control without knowing. We would need to manually unregister the control from the language_manager on delete, a huge pain.
 
-	controls.edo_title = create_window(controls.btn_card, edit_oneline::wndclass);
+	controls.edo_title = create_window(controls.btn_card, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
 	auto hollow_brush = (HBRUSH)GetStockObject(HOLLOW_BRUSH);
 	edit_oneline::set_theme(controls.edo_title, themes.clear_editoneline);
 
@@ -271,7 +266,7 @@ void create_controls(State& state) {
 		}
 	});
 
-	controls.tbl_values = create_window(controls.btn_card, table::wndclass);
+	controls.tbl_values = create_window(controls.btn_card, table::wndclass, nil, WS_VISIBLE | WS_CHILD, WS_EX_CONTROLPARENT); //TODO(fran): pass a single struct parameter to create_window to allow to modify only the desired fields, so I dont have to add "..., nil, WS_VISIBLE | WS_CHILD, ..." everywhere
 	set_window_manager_parent(controls.tbl_values, state.manager_parent); //TODO: this does not look like a good solution, again depends on the parent properly managing the resizing, meaning that we again are inverting the responsibility, the control shouldnt know who resizes it. On the other hand, if we expand the manager_parent all the way through the window stack then it would be ok, here we would do: table::set_manager_parent(controls.tbl_values, state.manager_parent);
 	table::Functions tbl_values_functions{
 		.create_control = [](u32 column_idx, HWND parent, const void* data) -> HWND {
@@ -283,7 +278,7 @@ void create_controls(State& state) {
 				case 0: 
 				{
 					auto& cell = *(const DescriptionCell*)data;
-					auto wnd = create_window(parent, edit_oneline::wndclass);
+					auto wnd = create_window(parent, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
 					SetWindowText(wnd, cell.text);
 					edit_oneline::set_theme(wnd, themes.clear_editoneline);
 					AWDT(wnd, LANG_PWD_ED_TBL_FIELD);
@@ -298,12 +293,12 @@ void create_controls(State& state) {
 
 					auto& state = *(value_cell::State*)calloc(1, sizeof(value_cell::State));
 					state.parent = parent;
-					state.wnd = create_window(parent, value_cell::wndclass);
+					state.wnd = create_window(parent, value_cell::wndclass, nil, WS_VISIBLE | WS_CHILD, WS_EX_CONTROLPARENT); //TODO(fran): WS_EX_CONTROLPARENT allow recursive window traversal when the user hits tab, I think that create window should set WS_EX_CONTROLPARENT by default and allow to pass a parameter to not use the flag (also check the implementation in text.h, we are very limited in which controls we can access)
 					state.cell_data = cell;
 					
 					auto& controls = state.controls;
 
-					controls.text = create_window(state.wnd, edit_oneline::wndclass);
+					controls.text = create_window(state.wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
 					AWDT(controls.text, LANG_PWD_ED_TBL_VALUE);
 					SetWindowText(controls.text, cell.text);
 					edit_oneline::set_theme(controls.text, themes.clear_editoneline);

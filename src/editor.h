@@ -5,6 +5,7 @@
 #include "edit_subclass.h"
 #include "language_manager.h"
 #include "search.h"
+#include "raw_buffer.h"
 
 namespace editor {
 
@@ -13,7 +14,7 @@ auto get_state(HWND wnd) { return get_window_state<State>(wnd); }
 void set_passwords_need_save(State& state, bool new_val) {
 	state.passwords_need_save = new_val;
 	str txt;
-	if (state.current_user) txt = state.current_user;
+	if (!state.current_user.empty()) txt = state.current_user;
 	if (state.passwords_need_save) txt += L" ●";
 	SetText_txt_app(state.nc_parent, txt.c_str(), app_name);
 }
@@ -193,7 +194,7 @@ void resize_controls(State& state) {
 		MoveWindow(controls.btn_add_end, DPI(-100), 0, btn_add_dim, btn_add_dim, true); //HACK: hide end button without having to worry about restoring visibility states
 	}
 	offset_y += spacing;
-	page::set_wnd_size(controls.page, controls.page_space, offset_y); //TODO(fran): it may be better to resize the page before all of its children, so that we dont cause issues where the children cant re-render because they arent within the visible area of the parent (this may be a non issue though, and by tracking scrolling events and making visible and rendering the proper children this may fix itself)
+	page::set_wnd_size(controls.page_space, offset_y); //TODO(fran): it may be better to resize the page before all of its children, so that we dont cause issues where the children cant re-render because they arent within the visible area of the parent (this may be a non issue though, and by tracking scrolling events and making visible and rendering the proper children this may fix itself)
 }
 
 void add_controls_transition_v0(State& state); //forward declaration to solve circular dependency with set_mode
@@ -464,6 +465,7 @@ void add_controls(State& state) {
 #define SHOWPASSWORDS_MENU_UNDO			(showpasswords_menu_base_addr+3)
 #define SHOWPASSWORDS_MENU_REDO			(showpasswords_menu_base_addr+4)
 #define SHOWPASSWORDS_MENU_FIND			(showpasswords_menu_base_addr+5)
+#define SHOWPASSWORDS_MENU_SAVE_V0		(showpasswords_menu_base_addr+6) // Debug only
 
 void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), toolbars are kinda stupid, just useful till you learn shortcuts https://docs.microsoft.com/en-us/windows/win32/controls/create-toolbars
 	//NOTE: each menu gets its parent HMENU stored in the itemData part of the struct
@@ -481,6 +483,16 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 	AppendMenu(menu_file, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_SAVE, (LPCWSTR)menu_file);
 	AMT(menu_file, SHOWPASSWORDS_MENU_SAVE, LANG_MENU_SAVE);
 	SetMenuItemBitmaps(menu_file, SHOWPASSWORDS_MENU_SAVE, MF_BYCOMMAND, bmps.menu_save, bmps.menu_save);
+
+	#ifdef _DEBUG
+	AppendMenu(menu_file, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_SAVE_V0, (LPCWSTR)menu_file);
+	AMT(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, LANG_MENU_SAVE);
+	MENUITEMINFO menu_setter{ sizeof(MENUITEMINFO) };
+	menu_setter.fMask = MIIM_STRING;
+	menu_setter.dwTypeData = (cstr*)_t("Save V0");
+	SetMenuItemInfo(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, FALSE, &menu_setter);
+	SetMenuItemBitmaps(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, MF_BYCOMMAND, bmps.menu_save, bmps.menu_save);
+	#endif
 
 	append_separator_to_menu(menu_file);
 
@@ -573,72 +585,118 @@ read_entire_file_res load_file_user(str username /*functions as a folder*/) {
 	return res;
 }
 
-void get_controls_data_for_saving(State& state, str& res) {
-	//TODO(fran): implement a real robust data format where we dont depend on the ':' token, since it can be used by the user
-	auto append_control_text = [](str& s, HWND wnd) {
-		auto old_len = s.size();
+void get_controls_data_for_saving(State& state, raw_buffer& out) {
+	//data structure: editors count (u64) | each editor
+	// editor: title (str, all str are null terminated utf16) | date created (u64) | date modified (u64) | multiflag (u32) | table row count (u64) | each table row
+	//  table row: desc (str) | val (str) | multiflag (u32)
+	auto append_control_text_to_buffer = [](raw_buffer& out, HWND wnd) {
+		//TODO(fran): is there a way we can normalize this behaviour into another append_to_buffer() reusable function in raw_buffer.h?
+		auto old_len_bytes = out.size();
 		auto added_len = GetWindowTextLength(wnd) + 1;
-		//INFO: note that this does not ever reduce the size of the string array below its capacity, so we are not wastefully having to actually resize the memory every time, it still follows the normal way std::string resizes. 
-		// Even still: //TODO(fran): verify behaviour when the string s has become large: will a request to resize just resize the array a little bit more than requested, eg going from 512 to 530, or will it be more efficient and go from 512 to 768 or more, for a small resize request of lets say 10 characters?
-		s.resize_and_overwrite(old_len + added_len,
-			[&](utf16* buf, size_t buf_size) { return old_len + GetWindowText(wnd, buf + old_len, added_len); }
+		auto added_len_bytes = added_len * sizeof(cstr);
+		
+		//TODO(fran): boolean to strip the text, though it will need another copy if stripping is needed unfortunately. Currently we instead do stripping when reading the data instead of when writing it
+
+		out.resize_and_overwrite(old_len_bytes + added_len_bytes,
+			[&](char* buf, size_t new_size) {
+				GetWindowText(wnd, (cstr*)(buf + old_len_bytes), added_len);
+				return new_size;
+			}
 		);
 	};
 
-	bool has_content = state.controls.password_editors.size();
+	//TODO(fran): we have arch dependent sizes for types, size_t time_t, normalize to 64bit and 32bit depending on needs
+
+	append_to_buffer(out, state.controls.password_editors.size());
 	for (auto& e : state.controls.password_editors) {
 		//TODO(fran): we may want to move the data extraction logic inside password_editor. Though that would mean that either it would also need to be aware of the data format we expect; or we would need to create an intermediate data format that we would then parse into the final output
 		auto& ed = *password_editor::get_state(e);
 		auto title = ed.controls.edo_title;
-		append_control_text(res, title);
+		
+		append_control_text_to_buffer(out, title);
 		//TODO: im just using \r\n for compatibility with the text format, remove the stupid \r later if I end up actually using a text based encoding format with line jumps
 		
 		multiflag<password_editor::ItemFlag> pwed_flags = 0;
 		//TODO(fran): should we maintain ed.properties.flags up to date and use it directly instead?
 		bool pin = button::get_state(ed.controls.btn_pin)->selected;
 		set_flag_bit(pwed_flags, pin, password_editor::ItemFlag::pin);
-		res += std::format(L":{}:{}:{}\r\n", ed.properties.date_created, ed.properties.date_modified, pwed_flags);
+
+		append_to_buffer(out, ed.properties.date_created);
+		append_to_buffer(out, ed.properties.date_modified);
+		append_to_buffer(out, pwed_flags);
 
 		auto& tbl = *table::get_state(ed.controls.tbl_values);
+
+		append_to_buffer(out, tbl.rows.size());
 		for (auto& r : tbl.rows) {
 			auto& description_cell = r[0];
-			append_control_text(res, description_cell);
-			res += L":";
+			append_control_text_to_buffer(out, description_cell);
+			
 			auto& value_cell = *password_editor::value_cell::get_state(r[1]);
-			append_control_text(res, value_cell.controls.text);
-			res += L":";
+			append_control_text_to_buffer(out, value_cell.controls.text);
+
 			multiflag<password_editor::ValueCellFlag> flags = 0;
 			bool lock = button::get_state(value_cell.controls.btn_lock)->selected;
-			static_assert(std::is_unsigned_v<password_editor::ValueCellFlag::type>, 
-				"Flag value type needs to be unsigned for the bit trick we do for branchless assignment"
-			);
 			set_flag_bit(flags, lock, password_editor::ValueCellFlag::lock);
-			res += to_str(flags);
-			res += L"\r\n";
+
+			append_to_buffer(out, flags);
 		}
-		res += L"\r\n";
 	}
-	if (has_content) {
-		res.pop_back(); res.pop_back(); res.pop_back(); res.pop_back(); //remove the extra \r\n\r\n from the end
-	}
-	else res += L'\0'; //Adding an empty content character just in case //TODO(fran): review if this is necessary
 }
 
 void save_passwords_v0(State& state) {
 	auto& controls = state.controls.transition_v0;
-	int user_len_chars = (int)wcslen(state.current_user);
+	int user_len_chars = (int)state.current_user.size();
+	Assert(controls.edit_passwords);
 	int len_chars = user_len_chars + GetWindowTextLength(controls.edit_passwords) + 1;
 	// Pad with extra garbage bytes to get blocks of 16 bytes for encryption
 	int len_bytes = next_multiple_of_16(len_chars * sizeof(cstr)); 
 	void* mem = malloc(len_bytes); defer{ free(mem); };
 	Assert(sizeof(cstr) > 1);
-	wcscpy_s((cstr*)mem, user_len_chars + 1, state.current_user); //append username so we can check against it in later logins
+	wcscpy_s((cstr*)mem, user_len_chars + 1, state.current_user.c_str()); //append username so we can check against it in later logins
 	GetWindowText(controls.edit_passwords, ((cstr*)mem) + user_len_chars, len_chars - user_len_chars);
 	twofish_encrypt(mem, len_bytes, mem);
 
 	bool res = save_to_file_user(state.current_user, mem, len_bytes);
 	set_passwords_need_save(state, !res);
 	if (!res) CustomMessageBox(state.wnd, RCS(LANG_ERROR_SAVEFILE_PASSWORDS), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement);
+}
+
+void generate_salt(utf16 (&salt)[8]) {
+	static_assert(sizeof(salt) == 16);
+	std::srand(std::time(nil));
+	for (i32 i = 0; i < 8; i++) salt[i] = std::rand();
+}
+
+raw_buffer generate_save_data_v1(State& state) {
+	//V1
+	//header: [magic(4bytes "myps" ascii no terminator) | version(4bytes u32) | salt(16bytes, random, new one generated on every login)]
+	//data: [structured block data | padding | integrity hash(header + unencrypted data)]
+
+	file_header_v1 header;
+	static_assert(sizeof(header.salt) == sizeof(state.salt));
+	memcpy(header.salt, state.salt, sizeof(header.salt));
+
+	file_footer_v1 footer;
+	static_assert(sizeof(file_footer_v1) % 16 == 0, "Footer size must be a multiple of 16 bytes for encryption");
+
+	raw_buffer data;
+	append_to_buffer(data, header);
+	get_controls_data_for_saving(state, data);
+
+	// Pad with extra garbage bytes to get blocks of 16 bytes for encryption
+	auto size_for_encryption = sizeof(header) + next_multiple_of_16(data.size() - sizeof(header));
+	data.resize(size_for_encryption);
+
+	sha256(data.data(), data.size(), footer.auth_integrity_hash);
+	append_to_buffer(data, footer);
+
+	//if constexpr (debug_text_view) SetWindowText(state.controls.transition_v0.edit_passwords, data.c_str() + wcslen(state.current_user));
+
+	auto data_ptr = data.data() + sizeof(header);
+	twofish_encrypt(data_ptr, data.size() - sizeof(header), data_ptr);
+
+	return data;
 }
 
 bool save_passwords(State& state, bool complete_version_transition = false) {
@@ -650,21 +708,9 @@ bool save_passwords(State& state, bool complete_version_transition = false) {
 		return res;
 	}
 
-	// Append username so we can check against it in later logins (another idea is to append the key structure that twofish stores ) //TODO(fran): this aint the most clever, there could be collisions, but it's at least a way of checking integrity for now
-	str data = state.current_user;
-	get_controls_data_for_saving(state, data);
-
-	if constexpr (debug_text_view) SetWindowText(state.controls.transition_v0.edit_passwords, data.c_str() + wcslen(state.current_user));
-
-	// Pad with extra garbage bytes to get blocks of 16 bytes for encryption
-	auto size_for_encryption = next_multiple_of_16(data.size() * sizeof(cstr)) / sizeof(cstr);
-	data.reserve(size_for_encryption);
+	auto data = generate_save_data_v1(state);
 	
-	auto data_ptr = &data[0];
-	auto data_cnt_bytes = size_for_encryption * sizeof(cstr);
-	twofish_encrypt(data.c_str(), data_cnt_bytes, data_ptr);
-	
-	res = save_to_file_user(state.current_user, data_ptr, data_cnt_bytes);
+	res = save_to_file_user(state.current_user, data.data(), data.size());
 	set_passwords_need_save(state, !res);
 	if (!res) CustomMessageBox(state.wnd, RCS(LANG_ERROR_SAVEFILE_PASSWORDS), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement);
 	return res;
@@ -675,56 +721,61 @@ void terminate_string_view(const T& str) {
 	*const_cast<utf16*>(str.data() + str.size()) = 0;
 }
 
-void create_password_editors(State& state, utf16* data) {
-	using chrtype = utf16;
-	using strtype = chrtype*;
-	using std::operator""sv;
-	const auto item_separator = _t("\r\n\r\n"sv);
-	for (const auto& item : std::views::split(str_view(data), item_separator)) {
-		terminate_string_view(item);
-		const auto title_separator = _t('\n'), title_prop_separator = _t(':');
-		auto title_end = StrChr(item.data(), title_separator);
-		if (title_end) {
-			*title_end = 0;
-			props properties;
-			for (const auto& [i, title_prop] : std::views::split(str_view(item.data(), title_end), title_prop_separator) | std::views::enumerate) {
-				auto val = const_cast<strtype>(title_prop.data());
-				terminate_string_view(title_prop);
-				switch (i) {
-				case 0: properties.title = strip(val); continue;
-				case 1: properties.date_created = wcstoll(val, nil, 10); continue;
-				case 2: properties.date_modified = wcstoll(val, nil, 10); continue;
-				case 3: properties.flags = wcstoul(val, nil, 10); continue;
-				}
-				break;
-			}
-			if (properties.date_created == 0 || properties.date_created == I64MAX || properties.date_created == I64MIN)
-				properties.date_created = std::time(nil);
-			if (properties.date_modified == 0 || properties.date_modified == I64MAX || properties.date_modified == I64MIN)
-				properties.date_modified = properties.date_created;
+bool create_password_editors_v1(State& state, raw_buffer_reader& data) {
+	/*struct pwd_ed_trivial_v1 {
+		time_t date_created;
+		time_t date_modified;
+		multiflag<password_editor::ItemFlag> flags;
+	};*/
 
-			title_end++;
-			auto password_editor = add_password_editor(state, properties, -1);
-			const auto row_separator = title_separator;
-			for (const auto& row : std::views::split(str_view(title_end), row_separator)) {
-				const auto col_separator = title_prop_separator;
-				auto description_cell = password_editor::empty_description_cell;
-				auto value_cell = password_editor::empty_value_cell;
-				for (const auto& [i, col] : std::views::split(row, col_separator) | std::views::enumerate) {
-					auto val = const_cast<strtype>(col.data());
-					terminate_string_view(col);
-					switch (i) {
-					case 0: description_cell.text = strip(val); continue;
-					case 1: value_cell.text = val; continue; //TODO(fran): not sure if we want to stript characters from a potential password or not, idk if it is common for apps to allow them (either really using them or ignoring them)
-					case 2: value_cell.flags = wcstoul(val, nil, 10); continue;
-					}
-					break;
-				}
-				password_editor::table_add_row(password_editor, &description_cell, &value_cell);
-			}
+	struct pwd_ed_v1 /*: pwd_ed_trivial_v1*/ {
+		str_view title; //TODO: consider switching to span<utf16> which does allow for mutations of the underlying
+		time64 date_created;
+		time64 date_modified;
+		multiflag<password_editor::ItemFlag> flags;
+	};
+
+	/*struct pwd_ed_row_trivial_v1 {
+		multiflag<password_editor::ValueCellFlag> flags = 0;
+	};*/
+
+	struct pwd_ed_row_v1 /*: pwd_ed_row_trivial_v1*/ {
+		str_view description, value;
+		multiflag<password_editor::ValueCellFlag> flags = 0;
+	};
+
+	u64 editor_cnt;
+	if (!data.read(editor_cnt)) return false; //TODO(fran): for complex data reading it may be a good idea to use exceptions to make the code simpler and avoid if checks all over
+	for (u64 e = 0; e < editor_cnt; e++) {
+		pwd_ed_v1 editor;
+		if (!(data.read(editor.title) && data.read(editor.date_created) && data.read(editor.date_modified) && data.read(editor.flags)))
+			return false;
+		//if (!data.read((pwd_ed_trivial_v1&)editor)) return false; //TODO(fran): this will fail due to structure padding, when we save we do it element by element of the struct, but here we read the whole struct at once, which has extra padding, breaking everything, decide whether to both save and load the struct, or to do save and load element by element of the struct
+		props properties{ 
+			.title = editor.title.data(),
+			.date_created = editor.date_created, 
+			.date_modified = editor.date_modified, 
+			.flags = editor.flags 
+		};
+
+		auto password_editor = add_password_editor(state, properties, -1);
+
+		u64 row_cnt;
+		if (!data.read(row_cnt)) return false;
+		for (u64 r = 0; r < row_cnt; r++) {
+			pwd_ed_row_v1 row;
+			if (!(data.read(row.description) && data.read(row.value) && data.read(row.flags))) return false;
+
+			auto description_cell = password_editor::empty_description_cell;
+			auto value_cell = password_editor::empty_value_cell;
+			description_cell.text = strip(const_cast<utf16*>(row.description.data())); //TODO(fran): I think we should strip on data save not data load
+			value_cell.text = row.value.data(); // We dont strip the value/secret cell
+			value_cell.flags = row.flags;
+			password_editor::table_add_row(password_editor, &description_cell, &value_cell);
 		}
 	}
 	resize_controls(state);
+	return true;
 }
 
 void add_controls_transition_v0(State& state) {
@@ -792,6 +843,12 @@ void add_controls_transition_v0(State& state) {
 	resize_controls(state);
 }
 
+u32 detect_save_version(void* data, u32 sz_bytes) {
+	raw_buffer_reader r(data, sz_bytes);
+	file_header_base header;
+	return r.read(header) && !memcmp(header.magic, file_header_base{}.magic, sizeof(file_header_base::magic)) ? header.version : 0;
+}
+
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	State& state = *get_state(hwnd);
 	switch (msg) {
@@ -807,7 +864,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		st->nc_parent = GetParent(hwnd);
 
 		st->settings = ((Data*)creation_nfo->lpCreateParams)->settings;
-		st->start = ((Data*)creation_nfo->lpCreateParams)->start;
 		set_window_state(hwnd, st);
 		return 1;
 	} break;
@@ -847,6 +903,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				save_passwords(state);
 				return 0;
 			} break;
+			#ifdef _DEBUG
+			case SHOWPASSWORDS_MENU_SAVE_V0:
+			{
+				save_passwords_v0(state);
+				return 0;
+			} break;
+			#endif
 #define _generate_enum_cases_language(member,value_expr) case Language::member:
 			_foreach_language(_generate_enum_cases_language)
 			{
@@ -882,54 +945,117 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		/**
 		  * Data Formats:
+		  * 
 		  * V0:
 		  *  - file structure: [username | data + null terminator | padding]
 		  *  - file encryption: twofish (whole file encrypted)
 		  *  - password hashing: sha256
 		  *  - integrity/authorization check: username retrieved from file is compared against the username entered by the user
 		  *  - data format: plain text, retrieved from a single edit control
-		  * V1:
-		  *  - TODO(fran)
+		  * 
+		  * V1: (first extendible structure, no major encryption changes)
+		  *  - file structure: 
+		  *    - header: [magic(4bytes "myps" ascii no terminator) | version (4bytes u32) | salt (16bytes, random, new one generated on every login)]
+		  *    - data: [structured block data | padding | integrity hash (header + unencrypted data)]
+		  *  - file encryption: twofish (only data section encrypted)
+		  *  - password hashing: sha256 (+ salt)
+		  *  - integrity hashing: sha256 (header + whole unencrypted data section (data + padding))
+		  *  - integrity/authorization check: check match against decrypted integrity hash, entire file (header + data section except for integrity hash itself)
+		  *  - data format: combination of null terminated strings and multiflags, retrieved from a list of password_editor controls
+		  *    - TODO(fran): how to know when a block ends and another begins?
+		  * 
+		  * V2: 
+		  *  - TODO: new random salt generated after every save, not only after every login
+		  *  - TODO: v2 should be the security improvement (using Argon/AES-256-GCM, or similar, have previously encrypted chunks affect the encryption of the next chunk, proper authentication and integrity checking, proper password hashing also)
 		  */
+		auto start = (const Start*)wparam; Assert(start);
 		login::AttemptResult start_attempt;
-		twofish_setkey(state.start->key, sizeof(state.start->key));
-		ZeroMemory(state.start->key, sizeof(state.start->key));
-
+		
 		//We gotta keep this data to be able to save the file later, probably some more secure/intelligent ways exist
-		state.current_user = (cstr*)malloc((state.start->username.sz_chars + 1) * sizeof(*state.start->username.str));
-		state.current_user[state.start->username.sz_chars] = 0; //append null terminator, unfortunately the rest of the code isnt yet working with the "text" struct
-		memcpy(state.current_user, state.start->username.str, state.start->username.sz_chars * sizeof(*state.start->username.str));
-		//TODO(fran): free
+		state.current_user = str(start->username.str, start->username.sz_chars);
 
-		auto file_read = load_file_user(state.current_user); defer{ free_file_memory(file_read.mem); };//TODO(fran): zero
+		auto file_read = load_file_user(state.current_user); defer{ free_file_memory(file_read.mem); };
 		bool passwords_need_save = false;
 		if (file_read.mem) {
-			if (state.start->signup) { // Can't signup, user already exists
+			if (start->signup) { // Can't signup, user already exists
 				start_attempt = login::AttemptResult::fail_signup_username_exists;
 			}
 			else {
-				Assert(file_read.sz % 16 == 0);
-				twofish_decrypt(file_read.mem, file_read.sz, file_read.mem);
-				if (!wcsncmp(state.current_user, (cstr*)file_read.mem, minimum(state.start->username.sz_chars, file_read.sz / 2 /*byte to wchar*/))) { //Valid password, user inputted username matches stored username
-					set_mode(state, mode::transition_v0);
+				auto version = detect_save_version(file_read.mem, file_read.sz);
 
-					SetWindowText(state.controls.transition_v0.edit_passwords, ((cstr*)file_read.mem) + state.start->username.sz_chars);
-					create_password_editors(state, ((cstr*)file_read.mem) + state.start->username.sz_chars);
-					start_attempt = login::AttemptResult::success;
-				}
-				else { //Invalid password
-					start_attempt = login::AttemptResult::fail_password;
+				switch (version) {
+				case 0:
+				{
+					Assert(file_read.sz % 16 == 0);
+					u32 key[8];
+					sha256(start->password.str, start->password.sz_chars * sizeof(*start->password.str), key);
+					twofish_setkey(key, sizeof(key));
+					ZeroMemory(key, sizeof(key));
+					twofish_decrypt(file_read.mem, file_read.sz, file_read.mem);
+					
+					if (auto file_read_chars = file_read.sz / sizeof(state.current_user[0]);
+						file_read_chars >= state.current_user.size() && !wcsncmp(state.current_user.c_str(), (cstr*)file_read.mem, state.current_user.size())
+					) { //Valid password, provided username matches stored username
+						set_mode(state, mode::transition_v0);
+
+						SetWindowText(state.controls.transition_v0.edit_passwords, ((cstr*)file_read.mem) + start->username.sz_chars);
+						ZeroMemory(file_read.mem, file_read.sz);
+						start_attempt = login::AttemptResult::success;
+					}
+					else { //Invalid password
+						start_attempt = login::AttemptResult::fail_password;
+					}
+				} break;
+				case 1:
+				{
+					raw_buffer_reader r(file_read.mem, file_read.sz);
+					if (file_header_v1 header; r.read(header)) {
+						u32 key[8];
+						hash_pwd_and_salt(start->password, header.salt, sizeof(header.salt), key);
+						twofish_setkey(key, sizeof(key));
+						ZeroMemory(key, sizeof(key));
+						auto data_and_footer_section = r.get_current_subspan();
+						Assert(data_and_footer_section.size() % 16 == 0);
+						auto section_ptr = const_cast<u8*>(data_and_footer_section.data());
+						twofish_decrypt(section_ptr, data_and_footer_section.size(), section_ptr);
+						
+						if (file_footer_v1 footer; r.cut_from_end(footer)) {
+							r.restart_position();
+							u8 auth_integrity_hash[32]; 
+							static_assert(sizeof(auth_integrity_hash) == sizeof(footer.auth_integrity_hash));
+							sha256(r.bytes.data(), r.bytes.size(), auth_integrity_hash);
+							r.skip(sizeof(header));
+							if (!memcmp(footer.auth_integrity_hash, auth_integrity_hash, sizeof(footer.auth_integrity_hash))) {
+								if (create_password_editors_v1(state, r))
+									start_attempt = login::AttemptResult::success;
+								else 
+									start_attempt = login::AttemptResult::fail_corrupted;
+								ZeroMemory(file_read.mem, file_read.sz);
+							} else 
+								start_attempt = login::AttemptResult::fail_password;
+						} else 
+							start_attempt = login::AttemptResult::fail_corrupted;
+					} else 
+						start_attempt = login::AttemptResult::fail_corrupted;
+				} break;
+				default:
+					start_attempt = login::AttemptResult::fail_newer_version;
 				}
 			}
 		} else {
 			//NOTE: if the user previously created an account but didnt save then it will not count as a created account and next time they will be prompted to create the account again, this is a limitation of the fact that we dont save anything inside the user folder till the first time they save what they wrote, therefore we cannot currently do this any other way since there's no information inside the folder to allow us to check whether the second time the user input the same password as the first time
-			bool signup = state.start->signup;
+			bool signup = start->signup;
 			start_attempt = signup ? login::AttemptResult::success : login::AttemptResult::fail_username;
 			passwords_need_save = signup;
 		}
 		set_passwords_need_save(state, passwords_need_save);
 		if (start_attempt == login::AttemptResult::success) {
 			set_app_shortcuts(state.wnd, ED_SHORTCUTS);
+			generate_salt(state.salt); // New salt to be used for all future saves during the current session
+			u32 key[8];
+			hash_pwd_and_salt(start->password, state.salt, sizeof(state.salt), key);
+			twofish_setkey(key, sizeof(key));
+			ZeroMemory(key, sizeof(key));
 
 			if (state.mode == mode::transition_v0) PostMessage(state.wnd, custom_message::show_transition_v0_msgbox, 0, 0); //Delay show the messagebox so that our window has time to be shown first
 		}
@@ -937,10 +1063,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_STATE_RESET:
 	{
-		if (state.current_user) {
-			free(state.current_user);//No real need to zero the memory before freeing
-			state.current_user = nullptr;
-		}
+		state.current_user.clear();
 		SetWindowText(state.controls.transition_v0.edit_passwords, nil);//TODO(fran): yet again, we need to zero the mem also
 		return 0;
 	} break;
@@ -972,10 +1095,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		save_settings(state);
 		if (&state) {
 			state.uninit();
-			if (state.current_user) {
-				free(state.current_user);
-				state.current_user = nullptr;
-			}
 			set_window_state(state.wnd, nil);
 			free(&state);
 		}

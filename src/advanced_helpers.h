@@ -314,3 +314,11 @@ static bool set_menu_background_color(HMENU menu, HBRUSH color) {
 	res = SetMenuInfo(menu, &mi);
 	return res;
 }
+
+/**
+  * Shell
+  */
+
+void open_link(const cstr* url){
+    ShellExecute(nil, _t("open"), url, nil, nil, SW_SHOWNORMAL);
+}

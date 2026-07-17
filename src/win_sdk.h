@@ -50,6 +50,7 @@
 #include <windowsx.h>
 //#include <uxtheme.h>
 #include <Shlwapi.h>
+#include <shellapi.h>
 #include <CommCtrl.h>
 #include "win_msg_mapper.h"
 
@@ -61,6 +62,7 @@
 //#pragma comment(lib,"UxTheme.lib") // setwindowtheme
 #pragma comment(lib,"Imm32.lib") // IME related stuff
 #pragma comment(lib,"Msimg32.lib") // AlphaBlend
+#pragma comment(lib,"Shell32.lib") // ShellExecute
 
 //#pragma comment(linker,"/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"") //for multiline edit control
 

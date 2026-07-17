@@ -38,19 +38,16 @@ auto create_scrollable_area(HWND parent, const scrollbar::Theme& scrollbar_theme
 
 	res.children.content_area = state.controls.content_area = create_window(res.scrollable_area, page::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_CLIPSIBLINGS); //TODO(fran): WS_CLIPCHILDREN?
 
-	//SetWindowPos(res.children.v_scroll, HWND_TOP, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
-	//SetWindowPos(res.children.h_scroll, HWND_TOP, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
-
-	//TODO(fran): add support for the scrollable_area to manage a scrollbars, eg page::set_use_v_scrollbar(controls.page, true or false); or some other way for the scrollable_area to control the scrollbars
-
 	return res;
 }
 
-void set_wnd_size(HWND wnd, HWND parent_page_space, i32 h) {
-	State& state = *get_state(parent_page_space);
+void set_wnd_size(HWND scrollable_area, i32 h) {
+	State& state = *get_state(scrollable_area);
 	if (&state) {
-		RECT page_space; GetClientRect(parent_page_space, &page_space);
-		RECT page_relative_to_space = get_window_rect_at(wnd, parent_page_space);
+		AssertAll(state.controls.all);
+
+		RECT page_space; GetClientRect(scrollable_area, &page_space);
+		RECT page_relative_to_space = get_window_rect_at(state.controls.content_area, scrollable_area);
 
 		auto page_space_w = RECTW(page_space), page_w = RECTW(page_relative_to_space);
 		auto page_space_h = RECTH(page_space), page_h = RECTH(page_relative_to_space);
@@ -65,9 +62,7 @@ void set_wnd_size(HWND wnd, HWND parent_page_space, i32 h) {
 			.h = maximum(page_space_h, h),
 		};
 		state.scroll += y_correction; //Update stored scroll value as well
-		MoveWindow(wnd, page, false);
-
-		AssertAll(state.controls.all);
+		MoveWindow(state.controls.content_area, page, false);
 
 		scrollbar::set_stats(state.controls.v_scroll, page.h, page_space_h, abs(minimum(page.y, 0)));
 		SendMessage(state.controls.v_scroll, scrollbar::custom_message::AUTORESIZE, 0, 0);

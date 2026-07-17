@@ -170,6 +170,7 @@
     <ClInclude Include="combo.h" />
     <ClInclude Include="combo_types.h" />
     <ClInclude Include="debug.h" />
+    <ClInclude Include="raw_buffer.h" />
     <ClInclude Include="editor_types.h" />
     <ClInclude Include="language_manager.h" />
     <ClInclude Include="list.h" />

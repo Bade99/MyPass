@@ -328,6 +328,20 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			ask_window_for_repaint(state.wnd);
 			SetTimer(state.wnd, (UINT_PTR)&hide_error_text, invalid_password_message_duration_ms, hide_error_text);
 		} break;
+		case AttemptResult::fail_newer_version:
+		{
+			auto url = _t("https://github.com/Bade99/MyPass/releases");
+			if (CustomMessageBox(state.wnd, std::vformat(RS(LANG_ERROR_FILE_VERSION_TEXT), std::make_wformat_args(url)).c_str(),
+				RCS(LANG_ERROR_FILE_VERSION_TITLE), MB_YESNO | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement) == IDYES)
+				open_link(url);
+		} break;
+		case AttemptResult::fail_corrupted:
+		{
+			auto url = _t("https://github.com/Bade99/MyPass/issues");
+			if (CustomMessageBox(state.wnd, std::vformat(RS(LANG_ERROR_FILE_CORRUPT_TEXT), std::make_wformat_args(url)).c_str(),
+				RCS(LANG_ERROR_FILE_CORRUPT_TITLE), MB_YESNO | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement) == IDYES)
+				open_link(url);
+		} break;
 		}
 	} break;
 	case WM_STATE_RESET:

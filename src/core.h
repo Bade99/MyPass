@@ -31,16 +31,24 @@ u64 next_multiple_of_16(u64 n) {
 }
 
 //TODO(fran): check output size
-void sha256(void* input, size_t len_bytes,void* output /*32 bytes*/) { //TODO(fran): SHA3-256
+void sha256(const void* input, size_t len_bytes, void* output /*32 bytes*/) { //TODO(fran): SHA3-256
 	sha256_ctx context;
 	__sha256_init_ctx(&context);
 	__sha256_process_bytes(input,len_bytes,&context);
 	__sha256_finish_ctx(&context,output);
 }
 
+void hash_pwd_and_salt(text password, void* salt, size_t salt_len_bytes, u32(&output)[8]) {
+	sha256_ctx context;
+	__sha256_init_ctx(&context);
+	__sha256_process_bytes(password.str, password.sz_chars * sizeof(*password.str), &context);
+	__sha256_process_bytes(salt, salt_len_bytes, &context);
+	__sha256_finish_ctx(&context, output);
+}
+
 //TWOFISH USAGE: set the key with twofish_setkey(), then encrypt with twofish_encrypt() or decrypt with twofish_decrypt()
 
-//After setting the key you can and should destroy in_key, we store it internally in a more secure form for posterior encryptions and decryptions
+//After setting the key you can and should destroy in_key, we store it internally in a more secure form for future encryptions and decryptions
 void twofish_setkey(u32 in_key[], u32 len_bytes /*16, 24 or 32 bytes*/) {
 	Assert(len_bytes == 16 || len_bytes == 24 || len_bytes == 32);
 	set_key(in_key, len_bytes * 8); //for some reason it requests lenght in bits
