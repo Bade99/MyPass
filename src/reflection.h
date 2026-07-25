@@ -1,5 +1,4 @@
 #pragma once
-#include "platform.h"
 
 //
 //Here we establish the standard for implementing reflection in this project
@@ -12,10 +11,9 @@
 //	foreach_nc_member(_generate_member);
 //	}
 
-//TODO(fran): define enum standard
-
 #ifdef UNICODE
-#define _t(quote) L##quote
+#define __t(quote) L##quote
+#define _t(quote) __t(quote)
 #else
 #define _t(quote) quote
 #endif

@@ -187,7 +187,7 @@ void table_add_row(State& state, DescriptionCell* description, ValueCell* value)
 void create_controls(State& state) {
 	//TODO(fran): this is an interesting case where I would not want password_editor itself to be and hwnd at all, just a manager for this btn_card which should be the main hwnd from which others are created inside of. Can I just have this object not exist and be just a handler, or maybe a worse solution would be have it be a subclass of button?
 	auto& controls = state.controls;
-	controls.btn_card = create_window(state.wnd, button::wndclass);
+	controls.btn_card = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD, WS_EX_CONTROLPARENT);
 	button::set_theme(controls.btn_card, themes.password_editor_card_btn);
 	button::set_user_data(controls.btn_card, &state);
 	button::set_functions(controls.btn_card, {

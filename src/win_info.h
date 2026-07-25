@@ -144,7 +144,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_MOUSEACTIVATE: //When the user clicks on us this is 1st msg received
 	{
 		//Sent to us when we're still an inactive window and we get a mouse press
-		//TODO(fran): we could also ask our parent (wparam) what it wants to do with us
+		//TODO(fran): we could also ask our parent (wparam) what it wants to do with us, though this is the top level parent
 		HWND parent = (HWND)wparam;
 		WORD hittest = LOWORD(lparam);
 		WORD mouse_msg = HIWORD(lparam);
@@ -181,6 +181,32 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			WORD notif = HIWORD(wparam);
 		}
 	} break;
+	case WM_STYLECHANGING:
+	{
+		// SetWindowLong... related, we can check the proposed new styles and change them
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
+	case WM_STYLECHANGED:
+	{
+		// Notifies that the style was changed, you cant do nothing here
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
+	case WM_CANCELMODE:
+	{
+		//We got canceled/deactivated, but doc says we should cancel everything mouse capture related, so stop tracking
+		if (state.OnMouseTracking) {
+			ReleaseCapture();//stop capturing the mouse
+			state.OnMouseTracking = false;
+		}
+		state.onLMouseClick = false;
+		state.onMouseOver = false;
+		ask_window_for_repaint(state.wnd);
+		return 0;
+	} break;
+	case WM_LBUTTONDOWN:
+	{
+		//Left click is down
+	} break;
 	default:
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	}
@@ -196,6 +222,26 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		// Check https://chromium.googlesource.com/chromium/chromium/+/5db69ae220c803e9c1675219b5cc5766ea3bb698/chrome/views/window.cc they block drawing so windows doesnt draw on top of them, cause the non client area is also painted in other msgs like settext
 		// Also https://social.msdn.microsoft.com/Forums/windows/en-US/a407591a-4b1e-4adc-ab0b-3c8b3aec3153/the-evil-wmncpaint?forum=windowsuidevelopment I took the implementation from there, but there's also two others I can try
+	} break;
+	case WM_SETTEXT:
+	{
+		//This function is insane, it actually does painting on it's own without telling nobody, so we need a way to kill that
+		//I think there are a couple approaches that work, I took this one which works since windows 95 (from what the article says)
+		//Many thanks for yet another hack http://www.catch22.net/tuts/win32/custom-titlebar
+		LONG_PTR  dwStyle = GetWindowLongPtr(state.wnd, GWL_STYLE);
+		// turn off WS_VISIBLE
+		SetWindowLongPtr(state.wnd, GWL_STYLE, dwStyle & ~WS_VISIBLE);
+
+		// perform the default action, minus painting
+		LRESULT ret = DefWindowProc(state.wnd, msg, wparam, lparam);
+
+		// turn on WS_VISIBLE
+		SetWindowLongPtr(state.wnd, GWL_STYLE, dwStyle);
+
+		// perform custom painting, aka dont and do what should be done, repaint, it's really not that expensive for our case, we barely call WM_SETTEXT, and it can be optimized out later
+		RedrawWindow(state.wnd, NULL, NULL, RDW_INVALIDATE);
+
+		return ret;
 	} break;
 	default:
 		return DefWindowProc(hwnd, msg, wparam, lparam);

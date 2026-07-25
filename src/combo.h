@@ -135,7 +135,7 @@ LRESULT CALLBACK hookmouseclick(int code, WPARAM wparam, LPARAM lparam) {
 			if (&state) {
 				//check if the mouse is inside our controls
 #if 0
-				POINT mouse = ((MSLLHOOKSTRUCT*)lparam)->pt;//TODO(fran): _per-monitor-aware_ screen coordinates (idk I that changes something)
+				POINT mouse = ((MSLLHOOKSTRUCT*)lparam)->pt;//TODO(fran): _per-monitor-aware_ screen coordinates (idk if that changes something)
 #else
 				POINT mouse = ((MOUSEHOOKSTRUCT*)lparam)->pt;//screen coordinates
 #endif
@@ -168,7 +168,7 @@ void show_listbox(State& state, bool show) {
 #endif
 		//We need to know when the user clicks outside of our editbox/listbox to be able to hide the listbox
 		if (!state.impl.hookmouseclick) {
-			//TODO(fran): maybe this should be standar implementation in the listbox
+			//TODO(fran): maybe this should be standard implementation in the listbox
 			__hookmouseclick_store_hwnd(state.wnd);
 			state.impl.hookmouseclick = SetWindowsHookEx(WH_MOUSE, hookmouseclick, 0, GetCurrentThreadId()); //attach the hook
 			//state.impl.hookmouseclick = SetWindowsHookEx(WH_MOUSE_LL, hookmouseclick, 0, GetCurrentThreadId()); //TODO(fran): I wanted to use this one but apparently low level hooks cannot be run on debug threads, the docs recommend using raw input instead //https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-rawmouse
@@ -185,7 +185,6 @@ void show_listbox(State& state, bool show) {
 	}
 }
 
-//TODO(fran): im pretty sure every single button now has to go through this, if that is the case we need to implement stricter checks, also in that case setwindowsubclass sucks
 LRESULT CALLBACK ButtonPaintProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lParam, UINT_PTR /*uIdSubclass*/, DWORD_PTR /*dwRefData*/) {
 	HWND parent = GetParent(hwnd);
 	auto& button_state = *button::get_state(hwnd);
@@ -195,12 +194,13 @@ LRESULT CALLBACK ButtonPaintProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lPar
 	case WM_PAINT:
 	{
 		if (combo_state.render_combobox) {
-			PAINTSTRUCT ps; //TODO(fran): we arent using the rectangle from the ps, I think we should for performance
+			PAINTSTRUCT ps;
 			HDC dc = BeginPaint(button_state.wnd, &ps); defer{ EndPaint(button_state.wnd, &ps); };
 			RECT rc; GetClientRect(button_state.wnd, &rc);
 
 			render_flags flags;
 			flags.onClicked = button_state.onMouseOver && button_state.onLMouseClick;
+			//NOTE: on button focus here we mark the button flags as onMouseover, I think that this is a good solution to avoid having to include an additional render step to render something like what we do with buttons, showing a thick focus border
 			flags.onMouseover = button_state.onMouseOver || button_state.OnMouseTracking || (GetFocus() == button_state.wnd);
 			flags.isEnabled = IsWindowEnabled(button_state.wnd);
 			flags.isListboxOpen = is_listbox_open(parent);
@@ -250,18 +250,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 		return DefWindowProc(hwnd, msg, wparam, lparam);//TODO(fran): remove once we know all the things this does
 	} break;
-	case WM_NCCALCSIZE: { //2nd msg received https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-nccalcsize
-		if (wparam) {
-			//Indicate part of current client area that is valid
-			NCCALCSIZE_PARAMS* calcsz = (NCCALCSIZE_PARAMS*)lparam;
-			return 0; //causes the client area to resize to the size of the window, including the window frame
-		}
-		else {
-			RECT* client_rc = (RECT*)lparam;
-			//TODO(fran): make client_rc cover the full window area
-			return 0;
-		}
-	} break;
 	case WM_SIZE: //4th, sent _after_ the wnd has been resized
 	{
 		//TODO(fran): do I resize the listbox here, or only when I want to show it?
@@ -274,34 +262,17 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
-	case WM_MOVE: //5th, This msg is received _after_ the window was moved
+	case WM_DESIRED_SIZE:
 	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_WINDOWPOSCHANGING:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_WINDOWPOSCHANGED:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_SHOWWINDOW: //6th. On startup you receive this cause of WS_VISIBLE flag
-	{
-		//Sent when window is about to be hidden or shown, doesnt let it clear if we are in charge of that or it's going to happen no matter what we do
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_NCPAINT://7th
-	{
-		//Paint non client area, we shouldnt have any
-		//HDC hdc = GetDCEx(hwnd, (HRGN)wparam, DCX_WINDOW | DCX_USESTYLE);
-		//ReleaseDC(hwnd, hdc);
-		return 0; //we process this message, for now
-	} break;
-	case WM_ERASEBKGND://8th, you receive this msg if you didnt specify hbrBackground when you registered the class, now it's up to you to draw the background
-	{
-		HDC dc = (HDC)wparam;
-		return 0; //If you return 0 then on WM_PAINT fErase will be true, aka paint the background there
+		//state.measure_combobox(,state.user_extra);
+		SIZE* min = (decltype(min))wparam;
+		SIZE* max = (decltype(max))lparam;
+
+		if (state.desired_size_combobox) {
+			HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd,dc); };
+			return state.desired_size_combobox(min, max, dc, listbox::get_sel_element(state.controls.listbox), state.user_extra);
+		}
+		else return 0;
 	} break;
 	case WM_SETFONT:
 	{
@@ -311,14 +282,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//SendMessage(state.controls.listbox, msg, wparam, lparam);
 		if (redraw) ask_window_for_repaint(state.wnd);
 		return 0;
-	} break;
-	case WM_GETFONT:
-	{
-		return 0;// SendMessage(state.controls.editbox, msg, wparam, lparam);
-	} break;
-	case WM_DESTROY:
-	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	case WM_NCDESTROY://Last msg. Sent _after_ WM_DESTROY
 	{
@@ -333,61 +296,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		return handle_wm_nchittest(state.wnd, lparam);
 	} break;
-	case WM_SETCURSOR://When the mouse goes over us this is 2nd msg received
+	case WM_MOUSEACTIVATE:
 	{
-		//DefWindowProc passes this to its parent to see if it wants to change the cursor settings, we'll make a decision, setting the mouse cursor, and halting proccessing so it stays like that
-		//Sent after getting the result of WM_NCHITTEST, mouse is inside our window and mouse input is not being captured
-
-		/* https://docs.microsoft.com/en-us/windows/win32/learnwin32/setting-the-cursor-image
-			if we pass WM_SETCURSOR to DefWindowProc, the function uses the following algorithm to set the cursor image:
-			1. If the window has a parent, forward the WM_SETCURSOR message to the parent to handle.
-			2. Otherwise, if the window has a class cursor, set the cursor to the class cursor.
-			3. If there is no class cursor, set the cursor to the arrow cursor.
-		*/
-		//NOTE: I think this is good enough for now
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_MOUSEMOVE /*WM_MOUSEFIRST*/://When the mouse goes over us this is 3rd msg received
-	{
-		//wparam = test for virtual keys pressed
-		POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };//Client coords, relative to upper-left corner of client area
-		return DefWindowProc(hwnd, msg, wparam, lparam);
-	} break;
-	case WM_MOUSEACTIVATE://When the user clicks on us this is 1st msg received
-	{
-		HWND parent = (HWND)wparam;
-		WORD hittest = LOWORD(lparam);
-		WORD mouse_msg = HIWORD(lparam);
-		return MA_ACTIVATE; //Activate our window and post the mouse msg
-	} break;
-	case WM_LBUTTONDOWN:
-	{
-		//wparam = test for virtual keys pressed
-		POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };//Client coords, relative to upper-left corner of client area
-		return 0;
-	} break;
-	case WM_LBUTTONUP:
-	{
-		return 0;
-	} break;
-	case WM_IME_SETCONTEXT://Sent after SetFocus to us
-	{
-		BOOL is_active = (BOOL)wparam;
-		u32 disp_flags = (u32)lparam;
-		return 0; //We dont want IME
-	}break;
-	case WM_PAINT:
-	{
-		PAINTSTRUCT ps;
-		RECT rc; GetClientRect(state.wnd, &rc);
-		int w = RECTW(rc), h = RECTH(rc);
-		//ps.rcPaint
-		HDC dc = BeginPaint(state.wnd, &ps);
-		bool window_enabled = IsWindowEnabled(state.wnd);
-		LONG_PTR style = GetWindowLongPtr(state.wnd, GWL_STYLE);
-		//TODO(fran): maybe draw a user defined image (on the right if ES_LEFT or ES_CENTER, on the left otherwise)
-		EndPaint(hwnd, &ps);
-		return 0;
+		return handle_wm_mouseactivate();
 	} break;
 	case WM_PARENTNOTIFY:
 	{
@@ -564,41 +475,40 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	//	//NOTE: there is more than one stupid thing about this msg, first the paramaters are REVERSED compared to WM_GETTEXT, and second there's no CB_GETCUEBANNERLENGTH!
 	//	return SendMessage(state.controls.editbox, WM_GETDEFAULTTEXT, lparam, wparam);
 	//} break;
-	//Msgs redirected to editbox
+	case WM_SETFOCUS:
+	{
+		SetFocus(state.controls.button);
+		return 0;
+	} break;
 	case WM_SETDEFAULTTEXT:
 	case WM_SETTEXT:
 	case WM_GETTEXT:
 	case WM_GETTEXTLENGTH:
-	{
-		return 0;// SendMessage(state.controls.editbox, msg, wparam, lparam);
-	} break;
-	case WM_SETFOCUS:
-	{
-		return 0;
-	} break;
 	case WM_KILLFOCUS:
+	case WM_NCCALCSIZE:
+	case WM_NCPAINT: //we process this message, for now
+	case WM_ERASEBKGND: //If you return 0 then on WM_PAINT fErase will be true, aka paint the background there
+	case WM_GETFONT: // or SendMessage(state.controls.editbox, msg, wparam, lparam);
+	case WM_LBUTTONDOWN:
+	case WM_LBUTTONUP:
+	case WM_IME_SETCONTEXT: //We dont want IME
 	{
 		return 0;
 	} break;
-	case WM_DESIRED_SIZE:
+	#ifdef _DEBUG_HWND_MESSAGES
+	case WM_PAINT:
+	case WM_SETCURSOR:
+	case WM_MOUSEMOVE:
+	case WM_MOVE:
+	case WM_WINDOWPOSCHANGING:
+	case WM_WINDOWPOSCHANGED:
+	case WM_SHOWWINDOW:
+	case WM_MOUSEWHEEL: //No reason for processing mousewheel input, some comboboxes change their index when being scrolled, I hate that behaviour since the user always ends up doing that by accident when trying to scroll the page
+	case WM_DESTROY:
 	{
-		//state.measure_combobox(,state.user_extra);
-		SIZE* min = (decltype(min))wparam;
-		SIZE* max = (decltype(max))lparam;
-
-		if (state.desired_size_combobox) {
-			HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd,dc); };
-			return state.desired_size_combobox(min, max, dc, listbox::get_sel_element(state.controls.listbox), state.user_extra);
-		}
-		else return 0;
-
+		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
-	case WM_MOUSEWHEEL:
-	{
-		//no reason for processing mousewheel input, some comboboxes change their index when being scrolled, I hate that behaviour since the user always ends up doing that by accident when trying to scroll the page
-		return DefWindowProc(hwnd, msg, wparam, lparam);//propagates the msg to the parent
-	} break;
-
+	#endif
 	default:
 #ifdef _DEBUG_HWND_MESSAGES
 		Assert(0);

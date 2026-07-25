@@ -4,6 +4,8 @@ namespace nonclient {
 
 	constexpr auto& wndclass = wndclass_name("nonclient");
 
+	static ATOM wndclass_atom{}; //useful for checking window class without the need for string comparing the class name
+
 	namespace menu { enum menu { minimize = 100, maximize, close, restore }; }
 
 	struct LpParam {//NOTE: pass a pointer to LpParam to set up the client area, if client_class_name is null no client is created
@@ -52,4 +54,6 @@ namespace nonclient {
 
 		bool is_maximized;
 	};
+
+	State* get_state(HWND wnd); // Forward declaration
 }

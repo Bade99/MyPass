@@ -366,6 +366,9 @@ void add_controls(State& state) {
 	controls.btn_find_prev = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
 	AWT(controls.btn_find_prev, LANG_SEARCH_FINDPREV);
 
+	controls.edit_match = create_window(state.wnd, edit_oneline::wndclass, L"", WS_VISIBLE | WS_CHILD | WS_TABSTOP);
+	AWDT(controls.edit_match, LANG_SEARCH);
+
 	//TODO(fran): this should be the new button, rendering text when possible or an img otherwise
 	controls.btn_find_next = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_BITMAP);
 	SendMessage(controls.btn_find_next, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.search);
@@ -375,8 +378,6 @@ void add_controls(State& state) {
 	controls.btn_close = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_BITMAP);
 	SendMessage(controls.btn_close, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.close);
 
-	controls.edit_match = create_window(state.wnd, edit_oneline::wndclass, L"", WS_VISIBLE | WS_CHILD | WS_TABSTOP);
-	AWDT(controls.edit_match, LANG_SEARCH);
 }
 
 void on_style_changed(State& state) {
@@ -384,6 +385,7 @@ void on_style_changed(State& state) {
 	ShowWindow(state.controls.btn_case_sensitive, !check_trool(state.theme.styles.btn_case_sensitive_off) ? SW_SHOW : SW_HIDE);
 	ShowWindow(state.controls.btn_whole_word, !check_trool(state.theme.styles.btn_whole_word_off) ? SW_SHOW : SW_HIDE);
 	ShowWindow(state.controls.btn_wrap, !check_trool(state.theme.styles.btn_wrap_off) ? SW_SHOW : SW_HIDE);
+	ShowWindow(state.controls.btn_find_prev, !check_trool(state.theme.styles.btn_find_prev_off) ? SW_SHOW : SW_HIDE);
 }
 
 void set_theme(HWND wnd, const Theme& src) {

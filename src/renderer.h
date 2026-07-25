@@ -474,7 +474,20 @@ namespace urender {
 		SetUpRenderSettings(graphics);
 		auto diameter = radius * 2;
 		Gdiplus::Pen pen(HbrushToGdiplusColor(color_br), thickness);
+		pen.SetLineJoin(Gdiplus::LineJoinRound); // Helps slightly degenerate roundrects to still render properly. This happens as radius approaches 50%, my roundrect calculation in GetRoundRectPath can generate an empty space between each corner arc of the roundrect, LineJoinRound connects this disjointed sections in a way that makes it unnoticeable
 		Gdiplus::GraphicsPath path;
+
+		if (thickness > 1) {
+			i32 inset = thickness / 2.f;
+			i32 integer_thickness = inset * 2;
+			i32 w = RECTW(r), h = RECTH(r);
+			r.left += inset;
+			r.top += inset;
+			r.right = r.left + w - integer_thickness;
+			r.bottom = r.top + h - integer_thickness;
+			diameter = (radius - inset) * 2; // not sure this is necessary
+		}
+
 		GetRoundRectPath(&path, r, diameter);
 		graphics.DrawPath(&pen, &path);
 	}
@@ -502,7 +515,7 @@ namespace urender {
 		else {
 			static auto hollow_brush = GetStockBrush(HOLLOW_BRUSH);
 			if (borderSize && border != hollow_brush) {
-				HPEN pen = CreatePen(PS_SOLID, borderSize, ColorFromBrush(border));
+				HPEN pen = CreatePen(PS_SOLID | PS_INSIDEFRAME, borderSize, ColorFromBrush(border));
 				auto oldpen = SelectPen(dc, pen); defer{ SelectPen(dc, oldpen); DeletePen(pen); };
 				auto oldbr = SelectBrush(dc, bk); defer{ SelectBrush(dc, oldbr); };
 

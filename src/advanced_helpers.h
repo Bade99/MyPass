@@ -54,19 +54,21 @@ namespace MBP {
 		center = 1 << 5,
 	};
 }
-//INFO: flags defaults: left (if left or right or center isnt selected) and top (if top or bottom or center isnt selected)
-static auto __msgbox_store_placement(HWND relative_to = (HWND)I32MIN, multiflag<MBP::MBP> flags = I32MIN) { //TODO(fran): look for more elegant ways to send data from MessageBox to Hook_MsgBox
-	struct MsgBoxPlacement { HWND relative_to; multiflag<MBP::MBP> flags; } static placement{ 0 };
-	if ((relative_to != (HWND)I32MIN) && (flags != I32MIN)) {
-		//Set defaults
-		if (!(flags & MBP::left || flags & MBP::right || flags & MBP::center)) flags |= MBP::left;
-		if (!(flags & MBP::top || flags & MBP::bottom || flags & MBP::center)) flags |= MBP::top;
+struct MsgBoxPlacement { 
+    HWND relative_to; multiflag<MBP::MBP> flags; bool processed; 
 
-		placement.relative_to = relative_to;
-		placement.flags = flags;
-	}
-	return placement;
-}
+    //INFO: flags defaults: left (if left or right or center isnt selected) and top (if top or bottom or center isnt selected)
+    void set(HWND relative_to, multiflag<MBP::MBP> flags) {
+        //Set defaults
+        if (!(flags & MBP::left || flags & MBP::right || flags & MBP::center)) flags |= MBP::left;
+        if (!(flags & MBP::top || flags & MBP::bottom || flags & MBP::center)) flags |= MBP::top;
+
+        this->relative_to = relative_to;
+        this->flags = flags;
+        this->processed = false;
+    }
+
+} static msgbox_placement{ 0 };
 static LRESULT CALLBACK __msgbox_hook(int code, WPARAM wparam, LPARAM lparam)
 {
 	//Thanks https://stackoverflow.com/questions/1530561/set-location-of-messagebox
@@ -75,11 +77,12 @@ static LRESULT CALLBACK __msgbox_hook(int code, WPARAM wparam, LPARAM lparam)
 	{
 		CREATESTRUCT* pcs = ((CBT_CREATEWND*)lparam)->lpcs;
 
-		if ((pcs->style & WS_DLGFRAME) || (pcs->style & WS_POPUP))//TODO(fran): this checks dont seem too robust
+		if (auto& placement = msgbox_placement; ((pcs->style & WS_DLGFRAME) || (pcs->style & WS_POPUP)) && !placement.processed)
 		{
+            placement.processed = true;
+
 			HWND wnd = (HWND)wparam;//Msgbox
 
-			auto placement = __msgbox_store_placement();
 			RECT rw; GetWindowRect(placement.relative_to, &rw);
 			int rel_x = rw.left;
 			int rel_y = rw.top;
@@ -118,7 +121,7 @@ static LRESULT CALLBACK __msgbox_hook(int code, WPARAM wparam, LPARAM lparam)
 }
 
 static int CustomMessageBox(HWND relative_to, const cstr* lpText, const cstr* lpCaption, UINT uType, multiflag<MBP::MBP> placement) {
-	__msgbox_store_placement(relative_to, placement);
+    msgbox_placement.set(relative_to, placement);
 	HHOOK hook_proc = SetWindowsHookEx(WH_CBT, __msgbox_hook, 0, GetCurrentThreadId()); defer{ UnhookWindowsHookEx(hook_proc); };
 	int res = MessageBox(relative_to, lpText, lpCaption, uType);
 	return res;

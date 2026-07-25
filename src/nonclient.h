@@ -31,7 +31,7 @@ constexpr auto menu_bottom_border_thickness = 1;
 
 constexpr auto maximized_offset_y = 4;
 
-auto get_state(HWND wnd) { _control_create_function__get_state }
+State* get_state(HWND wnd) { _control_create_function__get_state }
 
 void calc_caption(State& state) {
 	GetClientRect(state.wnd, &state.rc_caption);
@@ -936,6 +936,7 @@ void init_wndclass(HINSTANCE inst) {
 	wcex.hIconSm = icon;
 
 	ATOM class_atom = RegisterClassEx(&wcex); Assert(class_atom);
+	wndclass_atom = class_atom;
 }
 struct pre_post_main {
 	pre_post_main() { init_wndclass(GetModuleHandle(nil)); }

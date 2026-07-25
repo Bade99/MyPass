@@ -74,6 +74,7 @@ void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 	bmps.menu_save = load_bitmap8(instance, BMP_SAVE);
 	bmps.menu_paste = load_bitmap8(instance, BMP_MENU_PASTE);
 	bmps.menu_select_all = load_bitmap8(instance, BMP_MENU_SELECT_ALL);
+	bmps.menu_update = load_bitmap8(instance, BMP_UPDATE);
 	bmps.pin = load_bitmap8(instance, BMP_PIN);
 	bmps.cut = load_bitmap8(instance, BMP_CUT);
 	bmps.paste = load_bitmap8(instance, BMP_PASTE);

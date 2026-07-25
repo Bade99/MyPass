@@ -163,13 +163,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		save_settings(state);
 		if (&state) {
 			if (state.results->password.str) {
-				ZeroMemory(state.results->password.str, state.results->password.sz_chars * sizeof(*state.results->password.str));
+				SecureZeroMemory(state.results->password.str, state.results->password.sz_chars * sizeof(*state.results->password.str));
 				free(state.results->password.str);
 				state.results->password.str = nullptr;
 				state.results->password.sz_chars = 0;
 			}
 			if (state.results->username.str) {
-				ZeroMemory(state.results->username.str, state.results->username.sz_chars * sizeof(*state.results->username.str));
+				SecureZeroMemory(state.results->username.str, state.results->username.sz_chars * sizeof(*state.results->username.str));
 				free(state.results->username.str);
 				state.results->username.str = nullptr;
 				state.results->username.sz_chars = 0;
@@ -246,8 +246,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				}
 
 				if (check_failed) {
-					ZeroMemory(username_buf, username_sz);//TODO(fran): this two should be a mini function or macro (zero_free())
-					ZeroMemory(password_buf, password_sz);
+					SecureZeroMemory(username_buf, username_sz);//TODO(fran): this two should be a mini function or macro (zero_free())
+					SecureZeroMemory(password_buf, password_sz);
 					free(username_buf);
 					free(password_buf);
 					return 0;
@@ -330,14 +330,14 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		} break;
 		case AttemptResult::fail_newer_version:
 		{
-			auto url = _t("https://github.com/Bade99/MyPass/releases");
+			auto url = releases_url;
 			if (CustomMessageBox(state.wnd, std::vformat(RS(LANG_ERROR_FILE_VERSION_TEXT), std::make_wformat_args(url)).c_str(),
 				RCS(LANG_ERROR_FILE_VERSION_TITLE), MB_YESNO | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement) == IDYES)
 				open_link(url);
 		} break;
 		case AttemptResult::fail_corrupted:
 		{
-			auto url = _t("https://github.com/Bade99/MyPass/issues");
+			auto url = issues_url;
 			if (CustomMessageBox(state.wnd, std::vformat(RS(LANG_ERROR_FILE_CORRUPT_TEXT), std::make_wformat_args(url)).c_str(),
 				RCS(LANG_ERROR_FILE_CORRUPT_TITLE), MB_YESNO | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement) == IDYES)
 				open_link(url);
@@ -347,13 +347,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_STATE_RESET:
 	{
 		if (state.results->password.str) {
-			ZeroMemory(state.results->password.str, state.results->password.sz_chars * sizeof(*state.results->password.str));
+			SecureZeroMemory(state.results->password.str, state.results->password.sz_chars * sizeof(*state.results->password.str));
 			free(state.results->password.str);
 			state.results->password.str = nullptr;
 			state.results->password.sz_chars = 0;
 		}
 		if (state.results->username.str) {
-			ZeroMemory(state.results->username.str, state.results->username.sz_chars * sizeof(*state.results->username.str));
+			SecureZeroMemory(state.results->username.str, state.results->username.sz_chars * sizeof(*state.results->username.str));
 			free(state.results->username.str);
 			state.results->username.str = nullptr;
 			state.results->username.sz_chars = 0;

@@ -108,6 +108,11 @@ static bool operator!=(SIZE s1, SIZE s2) {
 	return res;
 }
 
+static SIZE operator+(SIZE s1, SIZE s2) {
+	SIZE res{ .cx = s1.cx + s2.cx, .cy = s1.cy + s2.cy };
+	return res;
+}
+
 
 static bool operator==(RECT r1, RECT r2) {
 	bool res = r1.bottom == r2.bottom && r1.left == r2.left && r1.right == r2.right && r1.top == r2.top;

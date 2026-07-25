@@ -39,6 +39,8 @@
 #include "login_types.h"
 #include "editor_types.h"
 
+#include "control_helpers.h"
+
 #include "style.h"
 
 #include "button.h"
@@ -127,20 +129,6 @@ void setup_dpi_awareness() {
     //TODO(fran): currently we only support "system dpi aware", we get the current dpi value, but it never changes (GetDpiForSystem always returns the same value), therefore if dpi changes afterwards then our windows will be stretched by Windows, but at least we look correct as long as the user doesnt change their current dpi. Next goal is PerMonitorV2 aware, which allows us to adapt realtime to dpi changes, but of course does need us to regenerate at least our fonts, and provide a stateful DPI object that you can generate when resizing so that you can get the dpi for the current window you are resizing
     //https://docs.microsoft.com/en-us/windows/win32/hidpi/setting-the-default-dpi-awareness-for-a-process
     //https://github.com/tringi/win32-dpi/blob/master/win32-dpi.cpp
-}
-
-void ensure_close_windows(HWND login, HWND editor) {
-    /**
-     * When a window is closed we destroy it and send the quit message to the app.
-     * That does not mean that other open windows are automatically destroyed,
-     * so we do it manually to allow them to exit gracefully.
-     */
-    constexpr auto& nonclient = nonclient::wndclass;
-    constexpr auto sz = ARRAYSIZE(nonclient);
-    cstr test_class[sz];
-    for (auto w : {login, editor})
-        if (IsWindow(w) && GetClassName(w, &test_class[0], sz) && !wcsncmp(test_class, nonclient, sz))
-            DestroyWindow(w);
 }
 
 void setup_debug_console() {
@@ -314,8 +302,11 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
         default:
         {
             if (!(app_shortcuts.table && TranslateAccelerator(app_shortcuts.listener_wnd ? app_shortcuts.listener_wnd : msg.hwnd, app_shortcuts.table, &msg))) {
-                TranslateMessage(&msg);
-                DispatchMessage(&msg);
+                bool needs_dialog_parsing = msg.message == WM_KEYDOWN && msg.wParam == VK_TAB; //TODO(fran): controls that use tab, eg multiline text editor, need to process WM_GETDLGCODE and return DLGC_WANTTAB
+                if (!needs_dialog_parsing || !IsDialogMessage(get_dialog_root(msg.hwnd), &msg)) {
+                    TranslateMessage(&msg);
+                    DispatchMessage(&msg);
+                }
             }
         } break;
         }

@@ -15,9 +15,13 @@
 #include <span>
 #include <utility>
 #include <vector>
+#include "reflection.h"
+#include "version.h"
 
-#define _APP_NAME L"MyPass"
+#define _APP_NAME _t(SOLUTION_PRODUCTNAME)
+#define _APP_VERSION _t(SOLUTION_PRODUCTVERSION_STRING)
 constexpr auto& app_name = _APP_NAME;
+constexpr auto& app_name_with_version = _APP_NAME _t(" ") _APP_VERSION;
 
 typedef uint8_t  u8;
 typedef uint16_t u16;

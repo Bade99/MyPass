@@ -1558,17 +1558,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		case VK_TAB://Tab
 		{
 			if (style & WS_TABSTOP) {//TODO(fran): I think we should specify a style that specifically says on tab pressed change to next control, since this style is just to say I want that to happen to me
-				bool shift_is_down = HIBYTE(GetKeyState(VK_SHIFT));
-				
-				HWND parent = state.wnd;
-				for (int i = 0; i < 2; i++) {
-					parent = GetParent(parent);
-					auto next = GetNextDlgTabItem(parent, state.wnd, shift_is_down);
-					if (next && next != state.wnd) {
-						SetFocus(next);
-						break;
-					}
-				}
+				//handle_tabstop_transition(state.wnd);
 			}
 			else {
 				//We dont handle tabs for now

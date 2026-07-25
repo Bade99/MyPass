@@ -231,6 +231,12 @@
     <ClInclude Include="raw_buffer.h">
       <Filter>Header Files\Utils</Filter>
     </ClInclude>
+    <ClInclude Include="version.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="control_helpers.h">
+      <Filter>Header Files\Utils</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -363,5 +369,13 @@
     <Image Include="..\icons\PointedLineArrowRight16.bmp">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="..\icons\Update_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="versioninfo.rc2">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

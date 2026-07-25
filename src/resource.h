@@ -79,6 +79,7 @@
 #define LANG_PWD_ED_TBL_FIELD           168
 #define BMP_POINTED_LINE_ARROW_RIGHT    168
 #define LANG_PWD_ED_TBL_VALUE           169
+#define BMP_UPDATE                      169
 #define LANG_SEARCH                     170
 #define LANG_COPY_TO_CLIPBOARD          171
 #define LANG_COPY_TO_CLIPBOARD_ERROR    172
@@ -113,6 +114,9 @@
 #define LANG_ERROR_FILE_VERSION_TITLE   201
 #define LANG_ERROR_FILE_CORRUPT_TEXT    202
 #define LANG_ERROR_FILE_CORRUPT_TITLE   203
+#define LANG_MENU_CHECK_FOR_UPDATES     204
+#define LANG_MSG_USED_BACKUP_TITLE      205
+#define LANG_MSG_USED_BACKUP_TEXT       206
 #define WMN_FIND                        32774
 #define WMN_SAVE                        32776
 
@@ -121,7 +125,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        169
+#define _APS_NEXT_RESOURCE_VALUE        170
 #define _APS_NEXT_COMMAND_VALUE         32778
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           110

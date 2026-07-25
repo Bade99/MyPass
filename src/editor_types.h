@@ -75,7 +75,8 @@ enum class mode {
 
 namespace custom_message {
 	enum custom_message {
-		show_transition_v0_msgbox = WM_USER + 1, 
+		show_transition_v0_msgbox = WM_USER + 1,
+		show_used_backup_msgbox,
 	};
 };
 

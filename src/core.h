@@ -58,6 +58,7 @@ void twofish_setkey(u32 in_key[], u32 len_bytes /*16, 24 or 32 bytes*/) {
 
 //INFO: input and output size will be the same. input and output can point to the same memory
 void twofish_encrypt(const void* input, size_t len_bytes /*must be a multiple of 16 bytes*/, void* output) {
+	//TODO(fran): Switch to better encryption method for the next version of the program, prior chunks must alter the content of the later chunks, our encryption right now is made in independent chunks
 	Assert(len_bytes % 16 == 0);
 
 	for (size_t i = 0, t = len_bytes / 16; i < t; i++) {

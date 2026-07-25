@@ -16,7 +16,7 @@ void set_passwords_need_save(State& state, bool new_val) {
 	str txt;
 	if (!state.current_user.empty()) txt = state.current_user;
 	if (state.passwords_need_save) txt += L" ●";
-	SetText_txt_app(state.nc_parent, txt.c_str(), app_name);
+	SetText_txt_app(state.nc_parent, txt.c_str(), app_name_with_version);
 }
 
 void on_password_editors_cnt_changed(State& state) {
@@ -38,7 +38,11 @@ static const auto on_password_editor_change = [](void* data, HWND wnd) {
 
 struct props { const utf16* title = nil; time_t date_created = 0, date_modified = 0; multiflag<password_editor::ItemFlag> flags = 0; };
 password_editor::State& add_password_editor(State& state, const props& properties, size_t at_idx) {
-	auto wnd = create_window(state.controls.page, password_editor::wndclass, nil, WS_VISIBLE | WS_CHILD, 0, 0, state.wnd);
+	auto wnd = create_window(state.controls.page, password_editor::wndclass, nil, WS_VISIBLE | WS_CHILD, WS_EX_CONTROLPARENT, 0, state.wnd);
+
+	//TODO(fran): I have to manually move the btn_add_end to the end of the Z order so traversal through pressing tab remains correct, a better solution would actually be to put the password_editors inside yet another empty page container, so that they are placed inside of it, removing the need to update the z-order of btn_add_end which would be on a different layer of the hierarchy
+	SetWindowPos(state.controls.btn_add_end, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW);
+
 	password_editor::set_user_data(wnd, &state);
 	password_editor::set_properties(wnd, {.date_created = properties.date_created, .date_modified = properties.date_modified, .flags = properties.flags});
 	auto& res = *password_editor::get_state(wnd);
@@ -227,44 +231,12 @@ void set_mode(State& state, mode new_mode) {
 void add_controls(State& state) {
 	auto& controls = state.controls;
 
-	auto scroll_area = page::create_scrollable_area(state.wnd);
-
-	controls.page_space = scroll_area.scrollable_area;
-
-	controls.page = scroll_area.children.content_area;
-
-	auto btn_add_theme = themes.editor_add_btn;
-
-	controls.btn_add_start = create_window(controls.page, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
-	button::set_theme(controls.btn_add_start, btn_add_theme);
-	SendMessage(controls.btn_add_start, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.add);
-	button::set_user_data(controls.btn_add_start, &state);
-	button::set_functions(controls.btn_add_start, {
-		.on_click = [](void* data, HWND wnd) {
-			auto& state = *(State*)data;
-			add_preset_password_editor(state, 0);
-		}
-	});
-	add_mouseover_tooltip(controls.btn_add_start, LANG_EDITOR_ADD);
-
-	controls.btn_add_end = create_window(controls.page, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
-	button::set_theme(controls.btn_add_end, btn_add_theme);
-	SendMessage(controls.btn_add_end, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.add);
-	button::set_user_data(controls.btn_add_end, &state);
-	button::set_functions(controls.btn_add_end, {
-		.on_click = [](void* data, HWND wnd) {
-			auto& state = *(State*)data;
-			add_preset_password_editor(state, -1);
-		}
-	});
-	add_mouseover_tooltip(controls.btn_add_end, LANG_EDITOR_ADD);
-
 	search::Init global_search_init {
 		.SearchPlacement_flags = search::Placement::top,
 		.SearchFlag_flags = 0,
 		.parent_type = search::ParentType::custom,
 	};
-	controls.search = CreateWindowEx(WS_EX_COMPOSITED | WS_EX_TRANSPARENT, search::wndclass, NULL, WS_VISIBLE | WS_CHILD,
+	controls.search = CreateWindowEx(WS_EX_COMPOSITED | WS_EX_TRANSPARENT | WS_EX_CONTROLPARENT, search::wndclass, NULL, WS_VISIBLE | WS_CHILD,
 		0, 0, 0, 0, state.wnd, NULL, NULL, &global_search_init);
 	search::set_theme(controls.search, themes.base_search);
 	search::set_user_data(controls.search, &state);
@@ -295,7 +267,7 @@ void add_controls(State& state) {
 
 	//SendMessage(controls.edit_passwords, EM_SETSEARCHWND, (WPARAM)controls.search, 0);
 	
-	controls.combo_sort = create_window(state.wnd, combobox::wndclass);
+	controls.combo_sort = create_window(state.wnd, combobox::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
 	auto combo_sort_controls = combobox::get_controls(state.controls.combo_sort);
 	AWDYN(combo_sort_controls.button, WM_PAINT);
 	AWDYN(combo_sort_controls.listbox, WM_SIZE); // triggers a full backbuffer redraw of all its items
@@ -455,6 +427,38 @@ void add_controls(State& state) {
 		urender::draw_text(dc, txt_rc, to_utf_str(txt), font, txt_br, urender::txt_align::left, avg_str_dim(font, 1).cx);
 	});
 
+	auto scroll_area = page::create_scrollable_area(state.wnd);
+
+	controls.page_space = scroll_area.scrollable_area;
+
+	controls.page = scroll_area.children.content_area;
+
+	auto btn_add_theme = themes.editor_add_btn;
+
+	controls.btn_add_start = create_window(controls.page, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP | WS_TABSTOP);
+	button::set_theme(controls.btn_add_start, btn_add_theme);
+	SendMessage(controls.btn_add_start, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.add);
+	button::set_user_data(controls.btn_add_start, &state);
+	button::set_functions(controls.btn_add_start, {
+		.on_click = [](void* data, HWND wnd) {
+			auto& state = *(State*)data;
+			add_preset_password_editor(state, 0);
+		}
+		});
+	add_mouseover_tooltip(controls.btn_add_start, LANG_EDITOR_ADD);
+
+	controls.btn_add_end = create_window(controls.page, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP | WS_TABSTOP);
+	button::set_theme(controls.btn_add_end, btn_add_theme);
+	SendMessage(controls.btn_add_end, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.add);
+	button::set_user_data(controls.btn_add_end, &state);
+	button::set_functions(controls.btn_add_end, {
+		.on_click = [](void* data, HWND wnd) {
+			auto& state = *(State*)data;
+			add_preset_password_editor(state, -1);
+		}
+	});
+	add_mouseover_tooltip(controls.btn_add_end, LANG_EDITOR_ADD);
+
 	for (auto ctl : controls.all_fixed) SetWindowFont(ctl, (WPARAM)fonts.General, true);
 
 	resize_controls(state);
@@ -466,6 +470,7 @@ void add_controls(State& state) {
 #define SHOWPASSWORDS_MENU_REDO			(showpasswords_menu_base_addr+4)
 #define SHOWPASSWORDS_MENU_FIND			(showpasswords_menu_base_addr+5)
 #define SHOWPASSWORDS_MENU_SAVE_V0		(showpasswords_menu_base_addr+6) // Debug only
+#define SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES (showpasswords_menu_base_addr+7)
 
 void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), toolbars are kinda stupid, just useful till you learn shortcuts https://docs.microsoft.com/en-us/windows/win32/controls/create-toolbars
 	//NOTE: each menu gets its parent HMENU stored in the itemData part of the struct
@@ -508,8 +513,11 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 	_foreach_language(_language_appendtomenu)
 #undef _language_appendtomenu
 	CheckMenuItem(menu_file_lang, LanguageManager::Instance().GetCurrentLanguage(), MF_BYCOMMAND | MF_CHECKED);
-
 	SetMenuItemBitmaps(menu_file, (UINT)(UINT_PTR)menu_file_lang, MF_BYCOMMAND, bmps.language, bmps.language);
+
+	AppendMenu(menu_file, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, (LPCWSTR)menu_file);
+	AMT(menu_file, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, LANG_MENU_CHECK_FOR_UPDATES);
+	SetMenuItemBitmaps(menu_file, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, MF_BYCOMMAND, bmps.menu_update, bmps.menu_update);
 
 	AppendMenu(menu, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_edit, (LPCWSTR)menu);
 	AMT(menu, (UINT_PTR)menu_edit, LANG_MENU_EDIT);
@@ -534,7 +542,9 @@ void save_settings(State& state) {
 	state.settings->rc = r;
 }
 
-constexpr auto& filename = _t("\\tt");
+constexpr auto& primary_filename = _t("\\tt");
+constexpr auto& temp_filename = _t("\\temp");
+constexpr auto& last_filename = _t("\\last");
 
 str get_save_path(str username) { 
 	constexpr auto& user_prefix = _t("\\user_");
@@ -545,41 +555,56 @@ str get_save_path(str username) {
 
 ///username: serves as the user folder name
 bool save_to_file_user(str username, void* content, u32 content_sz) {
-	constexpr auto& temp_filename = _t("\\temp");
-	constexpr auto& last_filename = _t("\\last"); //TODO(fran): Saving the last state of the file is good in case the new one has gotten corrupted and needs to be recovered. But on the other hand it is a security concern because it shows the state change between saves, giving away information about our type of encryption (eg making it obvious that our encryption is made in independent chunks)
 
 	str path = get_save_path(username);
 
-	CreateDirectory(path.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
+	//Create the folder where info will be stored, since windows wont do it
+	if (!CreateDirectory(path.c_str(), nil)) 
+		if (GetLastError() != ERROR_ALREADY_EXISTS)
+			return false;
 
-	SetFileAttributes(path.c_str(), GetFileAttributes(path.c_str()) | FILE_ATTRIBUTE_HIDDEN); //some very basic protection
+	if (DWORD attrs = GetFileAttributes(path.c_str()); attrs != INVALID_FILE_ATTRIBUTES && attrs & FILE_ATTRIBUTE_DIRECTORY)
+		SetFileAttributes(path.c_str(), attrs | FILE_ATTRIBUTE_HIDDEN); //surface level protection, we do not fail if we cant do this since it's not essential
 
 	str full_path_temp = path + temp_filename;
 
-	bool res = write_entire_file(full_path_temp.c_str(), content, content_sz);
+	if (!write_entire_file(full_path_temp.c_str(), content, content_sz, true))
+		return false;
 
-	if (res) {
-		auto file_read = read_entire_file(full_path_temp.c_str()); defer{ free_file_memory(file_read.mem); };
-		res = file_read.mem && (file_read.sz == content_sz) && (memcmp(content, file_read.mem, content_sz) == 0); //TODO(fran): there's no real need to check the entirety of the contents, we could simply check a few tens of bytes from the beginning, middle and end
-		if (res) {
-			str full_path_last = path + last_filename;
-			path += filename;
-			MoveFileEx(path.c_str(), full_path_last.c_str(), MOVEFILE_REPLACE_EXISTING);
-			res = MoveFileEx(full_path_temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
-		}
+	//For security critical data such as what we save in this app we re-validate the entirety of the saved content
+	//This is mostly a just a defensive guard since we are likely just reading from the cache and not from disk
+	if (!file_matches_memory(full_path_temp.c_str(), content, content_sz))
+		return false;
+
+	str full_path_last = path + last_filename;
+	str full_path_primary = path + primary_filename;
+
+	bool replace_ok = false;
+
+	if (file_exists(full_path_primary.c_str())) {
+		replace_ok = ReplaceFile(full_path_primary.c_str(), full_path_temp.c_str(), full_path_last.c_str(),
+			REPLACEFILE_IGNORE_MERGE_ERRORS, 0, 0);
+
+		if (replace_ok) replace_ok = flush_existing_file(full_path_primary.c_str());
+	}
+	else {
+		replace_ok = MoveFileEx(full_path_temp.c_str(), full_path_primary.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
 	}
 
-	return res;
+	if (!replace_ok) return false;
+
+	//re-validate again now on the moved file
+	return file_matches_memory(full_path_primary.c_str(), content, content_sz);
 }
 
-read_entire_file_res load_file_user(str username /*functions as a folder*/) {
-	str path = get_save_path(username);
+read_entire_file_res load_file_user(str username, bool load_backup = false) {
+	str path = get_save_path(username); //username functions as the folder name
 
 	CreateDirectory(path.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
 
 	SetFileAttributes(path.c_str(), GetFileAttributes(path.c_str()) | FILE_ATTRIBUTE_HIDDEN); //some very basic protection
 
-	path += filename;
+	path += load_backup ? last_filename : primary_filename;
 
 	auto res = read_entire_file(path.c_str());
 	return res;
@@ -721,6 +746,13 @@ void terminate_string_view(const T& str) {
 	*const_cast<utf16*>(str.data() + str.size()) = 0;
 }
 
+void cleanup_password_editors_v1(State& state) {
+	// If while loading password editors we find a corrupted section then we destroy any controls that were created in the process
+	auto& vec = state.controls.password_editors;
+	for (auto& ed : vec) DestroyWindow(ed);
+	vec.clear();
+}
+
 bool create_password_editors_v1(State& state, raw_buffer_reader& data) {
 	/*struct pwd_ed_trivial_v1 {
 		time_t date_created;
@@ -849,6 +881,98 @@ u32 detect_save_version(void* data, u32 sz_bytes) {
 	return r.read(header) && !memcmp(header.magic, file_header_base{}.magic, sizeof(file_header_base::magic)) ? header.version : 0;
 }
 
+login::AttemptResult startup(State& state, const Start* start, bool start_from_backup) {
+	login::AttemptResult start_attempt;
+	bool passwords_need_save = false;
+
+	auto file_read = load_file_user(state.current_user, start_from_backup); defer{ free_file_memory(file_read.mem); };
+	if (file_read.mem) {
+		if (start->signup) { // Can't signup, user already exists
+			start_attempt = login::AttemptResult::fail_signup_username_exists;
+		}
+		else {
+			auto version = detect_save_version(file_read.mem, file_read.sz);
+
+			switch (version) {
+			case 0:
+			{
+				if (file_read.sz % 16 == 0) {
+					u32 key[8];
+					sha256(start->password.str, start->password.sz_chars * sizeof(*start->password.str), key);
+					twofish_setkey(key, sizeof(key));
+					SecureZeroMemory(key, sizeof(key));
+					twofish_decrypt(file_read.mem, file_read.sz, file_read.mem);
+
+					if (auto file_read_chars = file_read.sz / sizeof(state.current_user[0]);
+						file_read_chars >= state.current_user.size() && !wcsncmp(state.current_user.c_str(), (cstr*)file_read.mem, state.current_user.size())
+						) { //Valid password, provided username matches stored username
+						set_mode(state, mode::transition_v0);
+
+						SetWindowText(state.controls.transition_v0.edit_passwords, ((cstr*)file_read.mem) + start->username.sz_chars);
+						SecureZeroMemory(file_read.mem, file_read.sz);
+						start_attempt = login::AttemptResult::success;
+					}
+					else
+						start_attempt = login::AttemptResult::fail_password;
+				} 
+				else 
+					start_attempt = login::AttemptResult::fail_corrupted;
+			} break;
+			case 1:
+			{
+				raw_buffer_reader r(file_read.mem, file_read.sz);
+				if (file_header_v1 header; r.read(header)) {
+					u32 key[8];
+					hash_pwd_and_salt(start->password, header.salt, sizeof(header.salt), key);
+					twofish_setkey(key, sizeof(key));
+					SecureZeroMemory(key, sizeof(key));
+					auto data_and_footer_section = r.get_current_subspan();
+					if (data_and_footer_section.size() % 16 == 0) {
+						auto section_ptr = const_cast<u8*>(data_and_footer_section.data());
+						twofish_decrypt(section_ptr, data_and_footer_section.size(), section_ptr);
+
+						if (file_footer_v1 footer; r.cut_from_end(footer)) {
+							r.restart_position();
+							u8 auth_integrity_hash[32];
+							static_assert(sizeof(auth_integrity_hash) == sizeof(footer.auth_integrity_hash));
+							sha256(r.bytes.data(), r.bytes.size(), auth_integrity_hash);
+							r.skip(sizeof(header));
+							if (!memcmp(footer.auth_integrity_hash, auth_integrity_hash, sizeof(footer.auth_integrity_hash))) {
+								if (create_password_editors_v1(state, r))
+									start_attempt = login::AttemptResult::success;
+								else {
+									cleanup_password_editors_v1(state);
+									start_attempt = login::AttemptResult::fail_corrupted;
+								}
+								SecureZeroMemory(file_read.mem, file_read.sz);
+							}
+							else
+								start_attempt = login::AttemptResult::fail_password;
+						}
+						else
+							start_attempt = login::AttemptResult::fail_corrupted;
+					} else
+						start_attempt = login::AttemptResult::fail_corrupted;
+				}
+				else
+					start_attempt = login::AttemptResult::fail_corrupted;
+			} break;
+			default:
+				start_attempt = login::AttemptResult::fail_newer_version;
+			}
+		}
+	}
+	else {
+		//NOTE: if the user previously created an account but didnt save then it will not count as a created account and next time they will be prompted to create the account again, this is a limitation of the fact that we dont save anything inside the user folder till the first time they save what they wrote, therefore we cannot currently do this any other way since there's no information inside the folder to allow us to check whether the second time the user input the same password as the first time
+		bool signup = start->signup;
+		start_attempt = signup ? login::AttemptResult::success : login::AttemptResult::fail_username;
+		passwords_need_save = signup;
+	}
+	if (passwords_need_save && start_attempt == login::AttemptResult::success)
+		set_passwords_need_save(state, passwords_need_save);
+	return start_attempt;
+}
+
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	State& state = *get_state(hwnd);
 	switch (msg) {
@@ -936,6 +1060,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				edit_oneline::select_all(text);
 				return 0;
 			} break;
+			case SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES:
+			{
+				//In the spirit of being totally a offline app we will not provide an automatic updater
+				open_link(releases_url);
+			} break;
 			default: return DefWindowProc(hwnd, msg, wparam, lparam);
 			}
 		}
@@ -968,96 +1097,34 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		  *  - TODO: new random salt generated after every save, not only after every login
 		  *  - TODO: v2 should be the security improvement (using Argon/AES-256-GCM, or similar, have previously encrypted chunks affect the encryption of the next chunk, proper authentication and integrity checking, proper password hashing also)
 		  */
+		login::AttemptResult start_attempt = login::AttemptResult::fail_username;
 		auto start = (const Start*)wparam; Assert(start);
-		login::AttemptResult start_attempt;
 		
-		//We gotta keep this data to be able to save the file later, probably some more secure/intelligent ways exist
-		state.current_user = str(start->username.str, start->username.sz_chars);
+		if (start) {
+			//We gotta keep this data to be able to save the file later, probably some more secure/intelligent ways exist
+			state.current_user = str(start->username.str, start->username.sz_chars);
 
-		auto file_read = load_file_user(state.current_user); defer{ free_file_memory(file_read.mem); };
-		bool passwords_need_save = false;
-		if (file_read.mem) {
-			if (start->signup) { // Can't signup, user already exists
-				start_attempt = login::AttemptResult::fail_signup_username_exists;
+			auto should_try_backup = [](login::AttemptResult attempt) { return attempt != login::AttemptResult::fail_signup_username_exists; };
+			
+			bool used_backup = false;
+
+			start_attempt = startup(state, start, false);
+			if (start_attempt != login::AttemptResult::success && should_try_backup(start_attempt)) {
+				used_backup = true;
+				start_attempt = startup(state, start, true);
 			}
-			else {
-				auto version = detect_save_version(file_read.mem, file_read.sz);
+		
+			if (start_attempt == login::AttemptResult::success) {
+				set_app_shortcuts(state.wnd, ED_SHORTCUTS);
+				generate_salt(state.salt); // New salt to be used for all future saves during the current session
+				u32 key[8];
+				hash_pwd_and_salt(start->password, state.salt, sizeof(state.salt), key);
+				twofish_setkey(key, sizeof(key));
+				SecureZeroMemory(key, sizeof(key));
 
-				switch (version) {
-				case 0:
-				{
-					Assert(file_read.sz % 16 == 0);
-					u32 key[8];
-					sha256(start->password.str, start->password.sz_chars * sizeof(*start->password.str), key);
-					twofish_setkey(key, sizeof(key));
-					ZeroMemory(key, sizeof(key));
-					twofish_decrypt(file_read.mem, file_read.sz, file_read.mem);
-					
-					if (auto file_read_chars = file_read.sz / sizeof(state.current_user[0]);
-						file_read_chars >= state.current_user.size() && !wcsncmp(state.current_user.c_str(), (cstr*)file_read.mem, state.current_user.size())
-					) { //Valid password, provided username matches stored username
-						set_mode(state, mode::transition_v0);
-
-						SetWindowText(state.controls.transition_v0.edit_passwords, ((cstr*)file_read.mem) + start->username.sz_chars);
-						ZeroMemory(file_read.mem, file_read.sz);
-						start_attempt = login::AttemptResult::success;
-					}
-					else { //Invalid password
-						start_attempt = login::AttemptResult::fail_password;
-					}
-				} break;
-				case 1:
-				{
-					raw_buffer_reader r(file_read.mem, file_read.sz);
-					if (file_header_v1 header; r.read(header)) {
-						u32 key[8];
-						hash_pwd_and_salt(start->password, header.salt, sizeof(header.salt), key);
-						twofish_setkey(key, sizeof(key));
-						ZeroMemory(key, sizeof(key));
-						auto data_and_footer_section = r.get_current_subspan();
-						Assert(data_and_footer_section.size() % 16 == 0);
-						auto section_ptr = const_cast<u8*>(data_and_footer_section.data());
-						twofish_decrypt(section_ptr, data_and_footer_section.size(), section_ptr);
-						
-						if (file_footer_v1 footer; r.cut_from_end(footer)) {
-							r.restart_position();
-							u8 auth_integrity_hash[32]; 
-							static_assert(sizeof(auth_integrity_hash) == sizeof(footer.auth_integrity_hash));
-							sha256(r.bytes.data(), r.bytes.size(), auth_integrity_hash);
-							r.skip(sizeof(header));
-							if (!memcmp(footer.auth_integrity_hash, auth_integrity_hash, sizeof(footer.auth_integrity_hash))) {
-								if (create_password_editors_v1(state, r))
-									start_attempt = login::AttemptResult::success;
-								else 
-									start_attempt = login::AttemptResult::fail_corrupted;
-								ZeroMemory(file_read.mem, file_read.sz);
-							} else 
-								start_attempt = login::AttemptResult::fail_password;
-						} else 
-							start_attempt = login::AttemptResult::fail_corrupted;
-					} else 
-						start_attempt = login::AttemptResult::fail_corrupted;
-				} break;
-				default:
-					start_attempt = login::AttemptResult::fail_newer_version;
-				}
+				if (state.mode == mode::transition_v0) PostMessage(state.wnd, custom_message::show_transition_v0_msgbox, 0, 0); //Delay show the messagebox so that our window has time to be shown first
+				if (used_backup) PostMessage(state.wnd, custom_message::show_used_backup_msgbox, 0, 0);
 			}
-		} else {
-			//NOTE: if the user previously created an account but didnt save then it will not count as a created account and next time they will be prompted to create the account again, this is a limitation of the fact that we dont save anything inside the user folder till the first time they save what they wrote, therefore we cannot currently do this any other way since there's no information inside the folder to allow us to check whether the second time the user input the same password as the first time
-			bool signup = start->signup;
-			start_attempt = signup ? login::AttemptResult::success : login::AttemptResult::fail_username;
-			passwords_need_save = signup;
-		}
-		set_passwords_need_save(state, passwords_need_save);
-		if (start_attempt == login::AttemptResult::success) {
-			set_app_shortcuts(state.wnd, ED_SHORTCUTS);
-			generate_salt(state.salt); // New salt to be used for all future saves during the current session
-			u32 key[8];
-			hash_pwd_and_salt(start->password, state.salt, sizeof(state.salt), key);
-			twofish_setkey(key, sizeof(key));
-			ZeroMemory(key, sizeof(key));
-
-			if (state.mode == mode::transition_v0) PostMessage(state.wnd, custom_message::show_transition_v0_msgbox, 0, 0); //Delay show the messagebox so that our window has time to be shown first
 		}
 		return (LRESULT)start_attempt;
 	} break;
@@ -1164,6 +1231,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case custom_message::show_transition_v0_msgbox:
 	{
 		CustomMessageBox(state.wnd, RCS(LANG_MSG_TRANSITION_V0_TEXT), RCS(LANG_MSG_TRANSITION_V0_TITLE), MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND, msgbox_placement);
+	} break;
+	case custom_message::show_used_backup_msgbox:
+	{
+		CustomMessageBox(state.wnd, RCS(LANG_MSG_USED_BACKUP_TEXT), RCS(LANG_MSG_USED_BACKUP_TITLE), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement);
 	} break;
 	default: return DefWindowProc(hwnd, msg, wparam, lparam); break;
 	}

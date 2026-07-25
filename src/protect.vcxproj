@@ -169,6 +169,7 @@
     <ClInclude Include="advanced_helpers.h" />
     <ClInclude Include="combo.h" />
     <ClInclude Include="combo_types.h" />
+    <ClInclude Include="control_helpers.h" />
     <ClInclude Include="debug.h" />
     <ClInclude Include="raw_buffer.h" />
     <ClInclude Include="editor_types.h" />
@@ -212,6 +213,7 @@
     <ClInclude Include="serialization.h" />
     <ClInclude Include="nonclient.h" />
     <ClInclude Include="vector.h" />
+    <ClInclude Include="version.h" />
     <ClInclude Include="win_info.h" />
     <ClInclude Include="win_msg_mapper.h" />
     <ClInclude Include="win_sdk.h" />
@@ -264,6 +266,10 @@
     <Image Include="..\icons\Search_A.bmp" />
     <Image Include="..\icons\SolidArrowRight16.bmp" />
     <Image Include="..\icons\Undo_A.bmp" />
+    <Image Include="..\icons\Update_A.bmp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="versioninfo.rc2" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

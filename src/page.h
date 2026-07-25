@@ -21,7 +21,7 @@ auto create_scrollable_area(HWND parent, const scrollbar::Theme& scrollbar_theme
 		HWND scrollable_area;
 		struct { HWND content_area, v_scroll, h_scroll; } children;
 	} res{};
-	res.scrollable_area = create_window(parent, page::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_CLIPSIBLINGS); //TODO(fran): WS_CLIPCHILDREN?
+	res.scrollable_area = create_window(parent, page::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_CLIPSIBLINGS, WS_EX_CONTROLPARENT); //TODO(fran): WS_CLIPCHILDREN?
 	page::set_scrolling(res.scrollable_area, true);
 	State& state = *get_state(res.scrollable_area);
 
@@ -36,7 +36,7 @@ auto create_scrollable_area(HWND parent, const scrollbar::Theme& scrollbar_theme
 	res.children.v_scroll = state.controls.v_scroll = create_scrollbar(scrollbar::Placement::right);
 	res.children.h_scroll = state.controls.h_scroll = create_scrollbar(scrollbar::Placement::bottom);
 
-	res.children.content_area = state.controls.content_area = create_window(res.scrollable_area, page::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_CLIPSIBLINGS); //TODO(fran): WS_CLIPCHILDREN?
+	res.children.content_area = state.controls.content_area = create_window(res.scrollable_area, page::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_CLIPSIBLINGS, WS_EX_CONTROLPARENT); //TODO(fran): WS_CLIPCHILDREN?
 
 	return res;
 }

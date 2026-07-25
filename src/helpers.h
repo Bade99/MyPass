@@ -8,12 +8,27 @@
 #include "vector.h"
 
 /**
+  * URLs
+  */
+
+constexpr auto& releases_url = _t("https://github.com/Bade99/MyPass/releases");
+constexpr auto& issues_url = _t("https://github.com/Bade99/MyPass/issues");
+
+
+/**
   * File Handling
   */
+
+static bool file_exists(const cstr* filename) {
+	// Check if a file, NOT a directory, exits
+	DWORD attrs = GetFileAttributes(filename);
+	return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
 
 static void free_file_memory(void* memory) {
 	if (memory) VirtualFree(memory, 0, MEM_RELEASE);
 }
+
 struct read_entire_file_res { void* mem; u32 sz;/*bytes*/ };
 //NOTE: free the memory with free_file_memory()
 static read_entire_file_res read_entire_file(const cstr* filename) {
@@ -38,35 +53,50 @@ static read_entire_file_res read_entire_file(const cstr* filename) {
 	}
 	return res;
 }
-static bool write_entire_file(const cstr* filename, void* memory, u32 mem_sz) {
+
+static bool write_entire_file(const cstr* filename, const void* memory, u32 mem_sz, bool immediate_flush = false) {
 	bool res = false;
-	HANDLE hFile = CreateFile(filename, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
+	DWORD flags_and_attributes = 0;
+	if (immediate_flush) flags_and_attributes |= FILE_FLAG_WRITE_THROUGH;
+	HANDLE hFile = CreateFile(filename, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, flags_and_attributes, 0);
 	if (hFile != INVALID_HANDLE_VALUE) {
-		defer{ CloseHandle(hFile); };
-		if (DWORD bytes_written; WriteFile(hFile, memory, mem_sz, &bytes_written, 0)) {
-			//SUCCESS
+		if (DWORD bytes_written; WriteFile(hFile, memory, mem_sz, &bytes_written, 0))
 			res = mem_sz == bytes_written;
-		}
-		else {
-			//TODO(fran): log
-		}
+		auto close_ok = CloseHandle(hFile);
+		res = res && close_ok;
 	}
+	//TODO(fran): log on failure cases
 	return res;
 }
-static bool append_to_file(const cstr* filename, void* memory, u32 mem_sz) {
+
+static bool append_to_file(const cstr* filename, const void* memory, u32 mem_sz) {
 	bool res = false;
 	HANDLE hFile = CreateFile(filename, FILE_APPEND_DATA, FILE_SHARE_READ, 0, OPEN_ALWAYS, 0, 0);
 	if (hFile != INVALID_HANDLE_VALUE) {
-		defer{ CloseHandle(hFile); };
-		if (DWORD bytes_written; WriteFile(hFile, memory, mem_sz, &bytes_written, 0)) {
-			//SUCCESS
+		if (DWORD bytes_written; WriteFile(hFile, memory, mem_sz, &bytes_written, 0))
 			res = mem_sz == bytes_written;
-		}
-		else {
-			//TODO(fran): log
-		}
+		auto close_ok = CloseHandle(hFile);
+		res = res && close_ok;
 	}
+	//TODO(fran): log on failure cases
 	return res;
+}
+
+static bool file_matches_memory(const cstr* filename, const void* memory, u32 mem_sz) {
+	auto file_read = read_entire_file(filename); defer{ free_file_memory(file_read.mem); };
+
+	return file_read.mem && file_read.sz == mem_sz && !memcmp(memory, file_read.mem, mem_sz);
+}
+
+static bool flush_existing_file(const cstr* filename) {
+	HANDLE hFile = CreateFile(filename, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, 0,
+		OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, 0);
+
+	if (hFile == INVALID_HANDLE_VALUE) return false;
+
+	BOOL flush_ok = FlushFileBuffers(hFile);
+	BOOL close_ok = CloseHandle(hFile);
+	return flush_ok && close_ok;
 }
 
 
@@ -708,7 +738,7 @@ static void set_window_state(HWND wnd, void* state) {
 	SetWindowLongPtr(wnd, 0, (LONG_PTR)state);
 }
 
-static void ask_window_for_repaint(HWND wnd) { InvalidateRect(wnd, nullptr, true); }
+static void ask_window_for_repaint(HWND wnd) { InvalidateRect(wnd, nil, true); }
 
 static void ask_window_for_resize(HWND wnd) { PostMessage(wnd, WM_SIZE, 0, 0); }
 

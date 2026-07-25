@@ -123,21 +123,6 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 	case EM_GET_MAX_VISIBLE_LINES: {
 		return state.get_max_visible_lines(hwnd);
 	} break;
-	/*case EM_GET_MAX_VISIBLE_CHARS_PER_LINE: {
-		RECT rc;
-		GetClientRect(hwnd, &rc);
-		int line_width = RECTW(rc);
-
-		TEXTMETRIC tm;
-		HDC dc = GetDC(hwnd);
-		GetTextMetrics(dc, &tm);
-		ReleaseDC(hwnd, dc);
-		int char_width = tm.tmAveCharWidth; //TODO(fran): better approximation
-
-		int char_count = line_width / char_width;
-
-		return char_count;
-	} break;*/
 	case EM_SETVSCROLL: 
 	{
 		state.vscrollbar = (HWND)wparam;
@@ -147,19 +132,6 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 		state.search = (HWND)wparam;
 		return 0;
 	} break;
-	/*case TCM_RESIZE: //TODO(fran): get rid of this, our parent should tell us our new size, after that this control can be sent to a separate .h file
-	{
-		SIZE* control_size = (SIZE*)wparam;
-
-		MoveWindow(hwnd, TabOffset.leftOffset, TabOffset.topOffset, control_size->cx - TabOffset.rightOffset - TabOffset.leftOffset, control_size->cy - TabOffset.bottomOffset - TabOffset.topOffset, TRUE);
-		//x & y remain fixed and only width & height change
-
-		SendMessage(state.vscrollbar, U_SB_AUTORESIZE, 0, 0);
-
-		EDIT_update_scrollbar(state); //NOTE: actually here you just need to update nPage
-
-		return TRUE;
-	}*/
 	case WM_SIZE:
 	{
 		LRESULT res = DefSubclassProc(hwnd, msg, wparam, lparam);
