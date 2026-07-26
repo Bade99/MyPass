@@ -258,11 +258,10 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 			FillRect(item->hDC, &item->rcItem, bk_br);
 			RECT separator_rc;
 			separator_rc.top = item->rcItem.top + RECTH(item->rcItem) / 2;
-			separator_rc.bottom = separator_rc.top + 1; //TODO(fran): fancier calc and position
+			separator_rc.bottom = separator_rc.top + 1;
 			separator_rc.left = item->rcItem.left + separator_x_padding;
 			separator_rc.right = item->rcItem.right - separator_x_padding;
 			FillRect(item->hDC, &separator_rc, colors.ControlTxt);
-			//TODO(fran): clipping
 		}
 		default: return DefWindowProc(wnd, msg, wparam, lparam);
 		}

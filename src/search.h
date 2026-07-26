@@ -250,7 +250,7 @@ void resize_controls(State& state) {
 	if (state.placement_flags & Placement::left || state.placement_flags & Placement::right) { //control is in small state
 		int h_half = h / 2;
 
-		//TODO(fran): this UI isnt great, we should do like visual studio and have to levels, on top the edit control and on the bottom all the flag button and find
+		//TODO(fran): this UI isnt great, we should do like visual studio and have two levels, on top the edit control and on the bottom all the flag button and find
 
 		//"case sensitive", "whole word", "wrap" go on the left, one on top of the other
 		btn_case_sensitive_x = 0;

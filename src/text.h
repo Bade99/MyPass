@@ -229,7 +229,7 @@ void reposition_caret(State& state, bool nocheck = false) {
 		POINT p = state.caret.pos;
 		p.x -= state.scroll.x;
 		p.y -= state.scroll.y;
-		SetCaretPos(p); //TODO(fran): only the focussed element should move the caret
+		if (GetFocus() == state.wnd) SetCaretPos(p);
 	}
 	//if(GetFocus() == state.wnd) SetCaretPos(state.caret.pos); //NOTE: this introduced a bug with settext where calling settext with a null string on the focussed editbox would place the caret on the wrong place
 }
@@ -503,7 +503,7 @@ void maintain_placerholder_when_focussed(HWND wnd, bool maintain) {//TODO(fran):
 	State& state = *get_state(wnd);
 	if (&state) {
 		state.maintain_placerholder_on_focus = maintain;
-		ask_window_for_repaint(state.wnd);//TODO(fran): only ask for repaint when it's actually necessary
+		if (is_placeholder_visible(state)) ask_window_for_repaint(state.wnd);
 	}
 }
 
@@ -645,7 +645,7 @@ size_t find_stopper(utf16_str s, size_t start_p, int direction/*should be +1 or 
 				}
 				else {//else find first character of the word
 
-					size_t last_valid_i;//TODO(fran): initialize?
+					size_t last_valid_i = 0;
 					for (size_t i = start_p; i < s.sz_char(); i += direction) {
 						last_valid_i = i;
 						if (!iswalnum(s[i])) {//find first character not in the current word
@@ -992,7 +992,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_NCDESTROY:
 	{
-		stop_caret_blinking(state);//TODO(fran): not sure I need this
+		stop_caret_blinking(state);
 		if (state.caret.bmp) {
 			DeleteBitmap(state.caret.bmp);
 			state.caret.bmp = nil;
@@ -1057,8 +1057,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//TODO(fran): BUG: vertical centering doesnt automatically occur when going from 2 lines to 1 by deleting the \n character, it remains with top centering until another letter is written by the user
 			int yPos = state.padding.y;
 			int xPos;
-
-			//TODO(fran): create clip region so the text cant go over the border
 
 			//TODO(fran): continue exploring world transformations for scrolling, 
 			POINT old_origin; SetViewportOrgEx(dc, -state.scroll.x, -state.scroll.y, &old_origin); defer{ SetViewportOrgEx(dc, old_origin.x, old_origin.y, 0); };
@@ -1158,8 +1156,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_ENABLE:
 	{//Here we get the new enabled state
 		BOOL now_enabled = (BOOL)wparam;
-		InvalidateRect(state.wnd, NULL, TRUE);
-		//TODO(fran): Hide caret
+		ask_window_for_repaint(state.wnd);
+		//TODO(fran): Hide caret on now_enabled == false? not sure we need to, since that should also trigger a WM_KILLFOCUS which removes the caret
 		return 0;
 	} break;
 	case WM_CANCELMODE:
@@ -1215,7 +1213,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_LBUTTONDBLCLK:
 	{
-		//TODO(fran): select entire word
 		auto text = to_utf_str(state.char_text);
 		//HACK: We assume the mouse hasnt moved much since the first click, therefore we do not need to check the mouse position to find out where the cursor is since the first click already set the cursor position
 		auto left = find_stopper(text, state.selection.cursor + 1, -1);
@@ -1300,7 +1297,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//Vertical Selection Stored Width:
 		bool reset_v_sel_stored_w = true;
 
-		//TODO(fran): here we process things like VK_HOME VK_NEXT VK_LEFT VK_RIGHT VK_DELETE
+		//TODO(fran): process VK_NEXT VK_PREV
 		//NOTE: there are some keys that dont get sent to WM_CHAR, we gotta handle them here, also there are others that get sent to both, TODO(fran): it'd be nice to have all the key things in only one place
 		//NOTE: for things like _shortcuts_ you wanna handle them here cause on WM_CHAR things like Ctrl+V get translated to something else
 		//		also you want to use the uppercase version of the letter, eg case _t('V'):
@@ -1441,7 +1438,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				SendMessage(state.wnd, WM_CUT, 0, 0);
 			}
 		} break;
-		case (char)VK_PROCESSKEY://TODO(fran): WTF if you dont cast to (char) vk doesnt match ?!
+		case (char)VK_PROCESSKEY: //NOTE: you must cast to (char) for this value to match
 		{
 			//UINT conv_vk = MapVirtualKey(lparam>>16, MAPVK_VSC_TO_VK_EX);//doesnt work for arrow keys, thanks windows
 			u16 scancode = (decltype(scancode))(lparam >> 16);
@@ -1557,7 +1554,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		}break;
 		case VK_TAB://Tab
 		{
-			if (style & WS_TABSTOP) {//TODO(fran): I think we should specify a style that specifically says on tab pressed change to next control, since this style is just to say I want that to happen to me
+			if (style & WS_TABSTOP) {
 				//handle_tabstop_transition(state.wnd);
 			}
 			else {
@@ -1649,20 +1646,21 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		default: return DefWindowProc(hwnd, msg, wparam, lparam);
 		}
 	} break;
-	case WM_GETTEXT://the specified char count must include null terminator, since windows' defaults to force writing it to you
+	case WM_GETTEXT: //the specified char count must include null terminator, since windows' defaults to force writing it to you
 	{
-		LRESULT res;
-		auto char_cnt_with_null = maximum((i32)wparam, 0); // Includes null char
-		auto char_text_cnt_with_null = (i32)(state.char_text.length() + 1);
-		if (char_cnt_with_null > char_text_cnt_with_null) char_cnt_with_null = char_text_cnt_with_null;
-		cstr* buf = (cstr*)lparam;
-		if (buf) {//should I check?
-			StrCpyN(buf, state.char_text.c_str(), char_cnt_with_null);
-			if (char_cnt_with_null < char_text_cnt_with_null) buf[char_cnt_with_null - 1] = (cstr)0;
-			res = char_cnt_with_null - 1;
-		}
-		else res = 0;
-		return res;
+		auto dst_cap = maximum((i32)wparam, 0); // includes null terminator
+		cstr* dst = (cstr*)lparam;
+
+		if (!dst || dst_cap <= 0) return 0;
+
+		auto src_len = (i32)state.char_text.length();
+		auto copy_cnt = minimum(src_len, dst_cap - 1);
+
+		if (copy_cnt > 0) std::copy_n(state.char_text.c_str(), copy_cnt, dst);
+
+		dst[copy_cnt] = (cstr)0;
+
+		return copy_cnt;
 	} break;
 	case WM_GETTEXTLENGTH://does not include null terminator
 	{
@@ -1799,7 +1797,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 		if (state.hide_IME_wnd && lparam & GCS_RESULTSTR) {//the content of the IME has been accepted by the user
 			SendMessage(state.wnd, EM_SETSEL, state.selection.cursor, state.selection.cursor);//clear selection
-			//TODO(fran): I think I should do state.ignore_IME_candidates = false; here
 			state.ignore_IME_candidates = false;
 			return 0;//we already have the result string in the editbox
 		}
@@ -1812,7 +1809,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				defer{ ImmReleaseContext(state.wnd, imc); };
 				//we wanna restore the IME's comp string to what it was before the candidate change, we do it by simulating an ESC key press which tells the IME to cancel the candidate selection
 
-				//auto simres = ImmSimulateHotKey(state.wnd, IME_JHOTKEY_CLOSE_OPEN); Assert(simres);//TODO(fran): there-s only this one hotkey for jp, really?
+				//auto simres = ImmSimulateHotKey(state.wnd, IME_JHOTKEY_CLOSE_OPEN); Assert(simres);//TODO(fran): there's only this one hotkey for jp, really?
 
 				INPUT ip;
 
@@ -1898,7 +1895,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		cstr* text = (cstr*)lparam;
 
 		memcpy_s(state.placeholder, sizeof(state.placeholder), text, (cstr_len(text) + 1) * sizeof(*text));
-		//TODO(fran): check whether we need to redraw
+		if (is_placeholder_visible(state)) ask_window_for_repaint(state.wnd);
 		return 1;
 	} break;
 	//case EM_SETINVALIDCHARS:
@@ -2057,7 +2054,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_MOUSEWHEEL:
 	{
-		//no reason for processing mousewheel input. TODO(fran): we may want to process it if the text is longer than what fits on our box, we could provide sideways scrolling
+		// No reason for processing mousewheel input for single line editors
+		// TODO(fran): we do want to process it for multi-line editors, vertical scrolling definitely and possibly horizontal too depending on whether word wrapping is enabled
 		return DefWindowProc(hwnd, msg, wparam, lparam);//propagates the msg to the parent
 	} break;
 

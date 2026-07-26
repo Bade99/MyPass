@@ -130,8 +130,6 @@ namespace search {
 		u32 parent_type;
 		multiflag<Flag> search_flags;
 
-		//HBRUSH br_border, br_bk, br_fore, br_bkpush, br_bkmouseover, br_edit_bk, bkr_edit_txt, br_bkselected;//TODO(fran): no real need to store all, only the childs need most of them
-
 		Theme theme;
 		Functions functions;
 

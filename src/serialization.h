@@ -144,7 +144,7 @@ static str load_file_serialized(str folder = _t("\\unCap"), str filename = _t("\
 	return res;
 }
 
-static void save_to_file_serialized(str content, str folder = _t("\\unCap"), str filename = _t("\\serialized.txt")) {
+static void save_to_file_serialized(str content, str folder, str filename = _t("\\serialized.txt")) {
 	cstr* general_folder;
 	SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &general_folder);
 	str dir = general_folder + folder;

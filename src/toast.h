@@ -70,9 +70,6 @@ namespace toast {
 				}
 				auto pad = DPI(8);
 				
-				//TODO: im sure there's some completely mathematical way to describe this parabola type animation
-				const auto time_fully_visible = animation.duration_ms / 2;
-
 				auto t = clamp01(EndCounter(animation.counter) / animation.duration_ms);
 
 				constexpr auto transition_duration_ms = 200;

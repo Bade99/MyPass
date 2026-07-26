@@ -72,6 +72,16 @@ typedef wchar_t cstr;
 
 static_assert(sizeof(wchar_t) == 2, "We expect wchar_t to be 16bits");
 
+template<typename Char, size_t N>
+void string_copy(Char(&dst)[N], std::basic_string_view<Char> src) {
+	// Guaranteed null termination on all cases, can truncate
+	static_assert(N > 0);
+
+	size_t count = std::min(src.size(), N - 1);
+	std::copy_n(src.data(), count, dst);
+	dst[count] = Char{};
+}
+
 struct text { //A NON null terminated cstring
 	cstr* str;
 	size_t sz_chars; //TODO(fran): better is probably size in bytes

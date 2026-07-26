@@ -106,7 +106,7 @@ template<typename F> Defer<F> operator+(defer_dummy, F&& f) { return makeDefer<F
 	TCHAR test[50]; \
 	auto cnt = GetClassName(wnd, test, ARRAYSIZE(test)); \
 	Assert(cnt && ARRAYSIZE(wndclass)); \
-	Assert(!StrCmpN(wndclass, test, ++cnt)); \
+	Assert(!wcsncmp(wndclass, test, cnt+1)); \
 	return get_window_state<State>(wnd);
 #else
 #define _control_create_function__get_state return get_window_state<State>(wnd);

@@ -49,7 +49,7 @@
 #include <windows.h>
 #include <windowsx.h>
 //#include <uxtheme.h>
-#include <Shlwapi.h>
+//#include <Shlwapi.h>
 #include <shellapi.h>
 #include <CommCtrl.h>
 #include "win_msg_mapper.h"
@@ -58,7 +58,7 @@
   * Linker Configuration
   */
 #pragma comment(lib, "comctl32.lib" ) //common controls lib
-#pragma comment(lib,"shlwapi.lib") //strcpynw //TODO(fran): use strcpy options from some other lib we dont need to manually link to
+//#pragma comment(lib,"shlwapi.lib") //strcpynw 
 //#pragma comment(lib,"UxTheme.lib") // setwindowtheme
 #pragma comment(lib,"Imm32.lib") // IME related stuff
 #pragma comment(lib,"Msimg32.lib") // AlphaBlend

@@ -715,6 +715,12 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		default: return SendMessage(state.client, msg, wparam, lparam);
 		}
 	} break;
+	case WM_CLOSE:
+	{
+		bool client_handled = SendMessage(state.client, WM_CLOSE, 0, 0);
+		if (!client_handled) return DefWindowProc(hwnd, msg, wparam, lparam);
+		else return 0;
+	} break;
 	case WM_DESTROY: {
 		PostQuitMessage(0);
 	} break;
@@ -886,7 +892,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_GETTEXT:
 	case WM_GETICON:
 	case WM_DWMNCRENDERINGCHANGED:
-	case WM_KILLFOCUS: //TODO(fran): in case I should stop tracking the mouse or things the like
+	case WM_KILLFOCUS:
 	case WM_SETCURSOR:
 	case WM_MOUSEACTIVATE:
 	case WM_CONTEXTMENU://Interesting (also seems like the defproc of a child asks the parent for it)

@@ -293,7 +293,7 @@ void create_controls(State& state) {
 
 					auto& state = *(value_cell::State*)calloc(1, sizeof(value_cell::State));
 					state.parent = parent;
-					state.wnd = create_window(parent, value_cell::wndclass, nil, WS_VISIBLE | WS_CHILD, WS_EX_CONTROLPARENT); //TODO(fran): WS_EX_CONTROLPARENT allow recursive window traversal when the user hits tab, I think that create window should set WS_EX_CONTROLPARENT by default and allow to pass a parameter to not use the flag (also check the implementation in text.h, we are very limited in which controls we can access)
+					state.wnd = create_window(parent, value_cell::wndclass, nil, WS_VISIBLE | WS_CHILD, WS_EX_CONTROLPARENT);
 					state.cell_data = cell;
 					
 					auto& controls = state.controls;

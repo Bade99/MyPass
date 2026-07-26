@@ -152,8 +152,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_MOUSEMOVE: /*WM_MOUSEFIRST*/ //When the mouse goes over us this is 3rd msg received 
 	{
-		//TODO(fran): scroll when mouse clicks the background
-		
 		//After WM_NCHITTEST and WM_SETCURSOR we finally get that the mouse has moved
 		//Sent to the window where the cursor is, unless someone else is explicitly capturing it, in which case this gets sent to them
 		//With WPARAM you can test for different button presses, (wparam & MK_LBUTTON) --> left button down
@@ -169,7 +167,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_IME_SETCONTEXT://sent the first time on SetFocus //When we get keyboard focus for the first time this gets sent 
 	{
 	} break;
-	case WM_SETFOCUS: //Triggered, for example, when the user clicks and generates a WM_XBUTTONDOWN //TODO(fran): not sure what to do with this, set focus back to whoever had it, set focus to our parent, do nothing?
+	case WM_SETFOCUS: //Triggered, for example, when the user clicks and generates a WM_XBUTTONDOWN
 	case WM_KILLFOCUS:
 	{
 		return 0;
