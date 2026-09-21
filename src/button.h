@@ -56,6 +56,7 @@ void draw_image(State& state, HDC dc, HBRUSH br, DWORD style, rect_i32& bounds, 
 		case image_placement::left: return bounds.cut_left(max_image_sz + padding).cut_center(max_image_sz);
 		case image_placement::right: return bounds.cut_right(max_image_sz + padding).cut_center(max_image_sz);
 		case image_placement::full: return bounds.cut_center(max_image_sz);
+		default: Assert(0); return bounds;
 		}
 	};
 

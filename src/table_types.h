@@ -3,7 +3,7 @@
 namespace table {
 	constexpr auto& wndclass = wndclass_name("table");
 
-	constexpr auto MAX_COLUMNS = 5;
+	constexpr u32 MAX_COLUMNS = 5;
 
 	typedef HWND(*func_createcontrol)(u32 column_idx, HWND parent, const void* data);
 
@@ -30,8 +30,8 @@ namespace table {
 		} dimensions;
 		RowTheme cells;
 
-		struct copy_res { bool repaint = false, resize = false; } copy_from(const Theme& src, bool copy_cell_theme = true) {
-			copy_res res;
+		auto copy_from(const Theme& src, bool copy_cell_theme = true) {
+			struct copy_res { bool repaint = false, resize = false; } res;
 			for (u32 i = 0; auto& b : this->brushes.all)
 				res.repaint |= b.copy_from(src.brushes.all[i++]);
 

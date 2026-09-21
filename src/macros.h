@@ -78,10 +78,6 @@ template<typename F> Defer<F> operator+(defer_dummy, F&& f) { return makeDefer<F
 //usage: defer{block of code;}; //the last defer in a scope gets executed first (LIFO)
 #define defer auto _defer( __LINE__ ) = defer_dummy( ) + [ & ]( )
 
-#define nil nullptr
-
-#define elif else if
-
 
 /**
   * Theme

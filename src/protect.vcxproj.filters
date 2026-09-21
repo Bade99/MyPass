@@ -99,6 +99,9 @@
     <ClInclude Include="vector.h">
       <Filter>Header Files\Utils</Filter>
     </ClInclude>
+    <ClInclude Include="undo_history.h">
+      <Filter>Header Files\Utils</Filter>
+    </ClInclude>
     <ClInclude Include="serialization.h">
       <Filter>Header Files\Core</Filter>
     </ClInclude>

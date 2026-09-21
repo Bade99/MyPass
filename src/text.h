@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "win_sdk.h"
 #include "helpers.h"
+#include "string.h"
 
 //TODO(fran): 'show password' button (this needs to be a new element made up from 3 others: border + (editoneline + button)
 //TODO(fran): ballon tips, probably handmade since windows doesnt allow it anymore, the ballon tail makes it much clearer what the tip is referring to in cases where there's many controls next to each other
@@ -120,9 +121,8 @@ POINT calc_caret_p(const State& state) {
 
 	auto [line_char_idx, line_idx] = char_idx_to_line_char_idx(state, state.selection.cursor);
 
-	for (size_t i = line_char_idx; i < state.selection.cursor; i++) {
+	for (size_t i = line_char_idx; i < state.selection.cursor; i++)
 		res.x += state.char_dims[i];
-	}
 
 	HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd,dc); };
 	HFONT oldfont = SelectFont(dc, state.theme.font); defer{ SelectFont(dc, oldfont); };
@@ -162,28 +162,24 @@ void show_tip(HWND wnd, const cstr* msg, int duration_ms, u32 ETP_flags) {
 
 	RECT rc; GetClientRect(state.wnd, &rc);
 
-	if (ETP_flags & ETP::left) {
+	if (ETP_flags & ETP::left) 
 		tooltip_p.x = 0;
-	}
 
-	if (ETP_flags & ETP::right) {
+	if (ETP_flags & ETP::right) 
 		tooltip_p.x = RECTW(rc);
-	}
 
-	if (ETP_flags & ETP::top) {
+	if (ETP_flags & ETP::top) 
 		tooltip_p.y = -RECTH(tooltip_r);
-	}
 
-	if (ETP_flags & ETP::bottom) {
+	if (ETP_flags & ETP::bottom) 
 		tooltip_p.y = RECTH(rc);
-	}
 
 	ClientToScreen(state.wnd, &tooltip_p);
 	SendMessage(state.controls.tooltip, TTM_TRACKPOSITION, 0, (LPARAM)MAKELONG(tooltip_p.x, tooltip_p.y));
-	SetTimer(state.wnd, EDITONELINE_tooltip_timer_id, duration_ms, NULL);
+	SetTimer(state.wnd, EDITONELINE_tooltip_timer_id, duration_ms, nil);
 }
 
-void scroll_based_on_caret(State& state) {
+void scroll_to_caret(State& state) {
 	//TODO(fran): test right and center text alignments, @BUG: center alignment is wrong, probably due to my stupid use of padding.x, it should simply indicate the render area, instead Im using it to align the text when that should require a new variable
 
 	RECT rc; GetClientRect(state.wnd, &rc);
@@ -223,7 +219,7 @@ void reposition_caret(State& state, bool nocheck = false) {
 	POINT oldcaretp = state.caret.pos;
 	state.caret.pos = calc_caret_p(state);
 	if (oldcaretp != state.caret.pos || nocheck) {
-		scroll_based_on_caret(state);
+		scroll_to_caret(state);
 
 		//I havent found a way to apply a translation to the caret so that SetCaretPos automatically places it on the correct character even when the characters are scrolled, therefore we gotta apply the transformation manually
 		POINT p = state.caret.pos;
@@ -278,30 +274,6 @@ void reset_vertical_selection_stored_width(State& state) {
 	state.vertical_selection_stored_width = 0;
 }
 
-void remove_selection(State& state, size_t x_min, size_t x_max) {
-	if (!state.char_text.empty()) {
-		x_min = clamp((size_t)0, x_min, state.char_text.length());
-		x_max = clamp((size_t)0, x_max, state.char_text.length());
-
-		state.char_text.erase(x_min, distance(x_min, x_max));
-		state.char_dims.erase(state.char_dims.begin() + x_min, state.char_dims.begin() + x_max);
-
-		update_char_pad(state);
-
-		recalculate_line_breaks(state);
-
-		SendMessage(state.wnd, EM_SETSEL, x_min, x_min);
-		//state.selection.anchor = state.selection.cursor = x_min;
-
-		reset_vertical_selection_stored_width(state); //NOTE(fran): this may not be necessary here since most events that remove selections already reset this as a side effect, but we'll do it anyways for completion and because it costs nothing
-	}
-}
-
-//Removes the current text selection and updates the selection values
-void remove_selection(State& state) {
-	remove_selection(state, state.selection.x_min(), state.selection.x_max());
-}
-
 void check_expansibility(State& state) {
 	RECT rc; GetClientRect(state.wnd, &rc);
 
@@ -309,19 +281,160 @@ void check_expansibility(State& state) {
 		ask_window_for_resize(state.parent);
 }
 
-//true if the current contents of the text were modified, false otherwise
+void notify_parent(State& state, WORD notif_code) {
+	if (notif_code == EN_CHANGE && state.functions.on_change) state.functions.on_change(state.user_extra, state.wnd);
+	else PostMessage(state.parent, WM_COMMAND, MAKELONG(state.identifier, notif_code), (LPARAM)state.wnd);
+}
+
+char_sel make_selection(State& state, char_sel::type anchor, char_sel::type cursor) {
+	if (anchor == -1) {
+		//Remove current selection
+		anchor = cursor = state.selection.cursor; //TODO(fran): not sure if we want this functionality for this helper function, we could just set anchor = cursor = 0
+	}
+	else {
+		anchor = clamp<char_sel::type>(0, anchor, state.char_text.length());
+		cursor = clamp<char_sel::type>(0, cursor, state.char_text.length());
+	}
+
+	return char_sel{ anchor, cursor };
+}
+
+template<bool AffectHistory = false>
+void set_selection(State& state, char_sel::type anchor, char_sel::type cursor) {
+	size_t _start = anchor;
+	size_t _end = cursor;
+
+	if (_start == (size_t)-1) {
+		//Remove current selection
+		if (state.selection.anchor != state.selection.cursor) {
+			state.selection.anchor = state.selection.cursor;
+			ask_window_for_repaint(state.wnd);
+		}
+	}
+	else {
+		size_t end_max = (size_t)state.char_text.length();
+		if (_end == (size_t)-1) {
+			_end = end_max; //Set _end to one past the last valid char
+		}
+
+		_start = clamp((size_t)0, _start, end_max);
+		_end = clamp((size_t)0, _end, end_max);
+
+
+		if (state.selection.anchor != _start || state.selection.cursor != _end) {
+			state.selection.anchor = _start;
+			state.selection.cursor = _end;
+			ask_window_for_repaint(state.wnd);
+		}
+	}
+
+	reposition_caret(state);
+
+	if constexpr (AffectHistory) state.history_helper.break_group(); //While an edit is hapenning we dont want to break_group, we only do this when the user's action was to actually change the selection (arrow keys, home, end, etc)
+}
+
+template<bool AffectHistory = false> void set_selection(State& state, char_sel selection) { set_selection<AffectHistory>(state, selection.anchor, selection.cursor); };
+
+void select_all(State& state) { set_selection<true>(state, 0, -1); } //TODO(fran): consider placing inside a ::actions namespace, functions inside that namespace always affect history, to make it clearer which functions do and which dont
+
+void push_to_history(State& state, text_edit_entry& history_entry) { //TODO(fran): is the type right with & ? we want to take ownership of the object
+	if (state.history_helper.can_merge(history_entry.selection_before)) {
+		if (!state.history.update_latest([&history_entry](text_edit_entry& prior) -> size_t {
+			Assert(prior.edit_kind == history_entry.edit_kind);
+
+			switch (prior.edit_kind) {
+			case text_edit_entry::kind::typing:
+			{
+				Assert(history_entry.position_x_min == prior.position_x_min + prior.inserted_text.size());
+				prior.inserted_text += history_entry.inserted_text;
+			} break;
+			case text_edit_entry::kind::backspace:
+			{
+				Assert(history_entry.position_x_min + history_entry.removed_text.size() == prior.position_x_min);
+				prior.position_x_min = history_entry.position_x_min;
+				prior.removed_text.insert(0, history_entry.removed_text);
+			} break;
+			case text_edit_entry::kind::delete_forward:
+			{
+				Assert(history_entry.position_x_min == prior.position_x_min);
+				prior.removed_text += history_entry.removed_text;
+			} break;
+			default:
+				Assert(0);
+				break;
+			}
+
+			// Keep selection_before from the first operation in the group.
+			prior.selection_after = history_entry.selection_after;
+
+			return prior.memory_size();
+			})
+		)
+			goto push_history;
+	}
+	else {
+	push_history:
+		state.history.push(history_entry, history_entry.memory_size()); //TODO(fran): template undo_history: if the entry type can do .memory_size() then simplify this function call to a single parameter and internally call .memory_size()
+	}
+	state.history_helper.record_edit(history_entry.edit_kind, history_entry.selection_after);
+}
+
+template<bool AffectHistory = true>
+void remove_selection(State& state, size_t x_min, size_t x_max) {
+	if (!state.char_text.empty()) {
+		auto selection_before = state.selection;
+
+		x_min = clamp((size_t)0, x_min, state.char_text.length());
+		x_max = clamp((size_t)0, x_max, state.char_text.length());
+		size_t x_cnt = distance(x_min, x_max);
+
+		str removed_text;
+		if constexpr (AffectHistory) removed_text = str(state.char_text.c_str() + x_min, x_cnt);
+
+		state.char_text.erase(x_min, x_cnt);
+		state.char_dims.erase(state.char_dims.begin() + x_min, state.char_dims.begin() + x_max);
+
+		update_char_pad(state);
+
+		recalculate_line_breaks(state);
+
+		set_selection(state, x_min, x_min);
+
+		reset_vertical_selection_stored_width(state); //NOTE(fran): this may not be necessary here since most events that remove selections already reset this as a side effect, but we'll do it anyways for completion and because it costs nothing
+
+		if constexpr (AffectHistory) {
+			text_edit_entry history_entry{
+				.edit_kind = state.history_helper.transient_kind,
+				.position_x_min = x_min,
+				.removed_text = removed_text,
+				.inserted_text = str(),
+				.selection_before = selection_before,
+				.selection_after = state.selection,
+			};
+			push_to_history(state, history_entry);
+		}
+	}
+}
+template<bool AffectHistory = true> void remove_selection(State& state, char_sel selection) { remove_selection<AffectHistory>(state, selection.x_min(), selection.x_max()); }
+
+//Removes the current text selection and updates the selection values
+template<bool AffectHistory = true> void remove_selection(State& state) { remove_selection<AffectHistory>(state, state.selection.x_min(), state.selection.x_max()); }
+
+
+//true if text modified, false otherwise
+template<bool AffectHistory = true>
 bool insert_character(State& state, utf16_str s, size_t x_min, size_t x_max) {
+	auto selection_before = state.selection;
+
 	//TODO(fran): center alignment get offset wrongly when inserting text of any length
 	bool res = false;
-	x_min = clamp((size_t)0, x_min, state.char_text.length());
-	x_max = clamp((size_t)0, x_max, state.char_text.length());
-	char_sel sel{ x_min, x_max };
+	const char_sel sel{ clamp((size_t)0, x_min, state.char_text.length()), clamp((size_t)0, x_max, state.char_text.length()) };
 
 	if (safe_subtract0(state.char_text.length(), sel.sel_width()) < state.char_max_sz) {
 
 		//check for invalid characters
 		if (state.functions.has_invalid_chars) {//TODO(fran): +1 for having always valid function pointers, we could branch on valid on invalid instead we gotta hack in a return statement in the middle of the code
-			auto [invalid, explanation] = state.functions.has_invalid_chars(s.str, maximum((size_t)0, s.sz_char() - 1), state.user_extra);
+			auto [invalid, explanation] = state.functions.has_invalid_chars(s.str, maximum((size_t)0, s.cnt()), state.user_extra);
 			if (invalid) {
 				res = false;
 				show_tip(state.wnd, explanation.c_str(), EDITONELINE_default_tooltip_duration, ETP::left | ETP::top);
@@ -332,25 +445,43 @@ bool insert_character(State& state, utf16_str s, size_t x_min, size_t x_max) {
 		res = true;
 
 		//remove existing selection
-		if (sel.has_selection()) remove_selection(state, x_min, x_max);
+		str removed_text;
+		if (sel.has_selection()) {
+			if constexpr (AffectHistory) removed_text = str(state.char_text.c_str() + sel.x_min(), sel.sel_width());
+			remove_selection<false>(state, sel.x_min(), sel.x_max()); //after this sel.x_max() no longer means anything, you only use sel.x_min()
+		}
 
 		//insert new character
-		state.char_text.insert(state.selection.cursor, s.str);
+		str inserted_text;
+		if constexpr (AffectHistory) inserted_text = str(s.str, s.cnt()); //TODO(fran): unnecessary copy: template this function to allow s to be passed in and transfer ownership of the memory, if s's memory ownsership cannot be transferred only then do a copy
+		state.char_text.insert(sel.x_min(), s.str);
 
-		for (size_t i = 0; i < s.sz_char() - 1; i++)
-			state.char_dims.insert(state.char_dims.begin() + state.selection.cursor + i, calc_char_dim(state, s[i]).cx);
+
+		for (size_t i = 0; i < s.cnt(); i++)
+			state.char_dims.insert(state.char_dims.begin() + sel.x_min() + i, calc_char_dim(state, s[i]).cx);
 
 		recalculate_line_breaks(state);
 
-		size_t anchor = state.selection.cursor + safe_subtract0(s.sz_char(), (size_t)1);
-		size_t cursor = anchor;
+		size_t anchor, cursor; anchor = cursor = sel.x_min() + s.cnt();
 
-		SendMessage(state.wnd, EM_SETSEL, anchor, cursor);
+		set_selection(state, anchor, cursor);
 
 		reset_vertical_selection_stored_width(state);
 
 		update_char_pad(state);
 		reposition_caret(state);
+
+		if constexpr (AffectHistory) {
+			text_edit_entry history_entry{
+				.edit_kind = state.history_helper.transient_kind,
+				.position_x_min = sel.x_min(),
+				.removed_text = removed_text,
+				.inserted_text = inserted_text,
+				.selection_before = selection_before,
+				.selection_after = state.selection,
+			};
+			push_to_history(state, history_entry);
+		}
 
 		LONG_PTR style = GetWindowLongPtr(state.wnd, GWL_STYLE);
 		if (style & ES_EXPANSIBLE) check_expansibility(state);
@@ -359,54 +490,134 @@ bool insert_character(State& state, utf16_str s, size_t x_min, size_t x_max) {
 }
 
 //inserts character replacing the current selection
+template<bool AffectHistory = true>
 bool insert_character(State& state, utf16 c) {//TODO(fran): optimized version for single character insertion
 	utf16 txt[2];
 	txt[0] = c;
 	txt[1] = 0;
 
-	return insert_character(state, to_utf_str(txt), state.selection.x_min(), state.selection.x_max());
+	return insert_character<AffectHistory>(state, to_utf_str(txt), state.selection.x_min(), state.selection.x_max());
 }
 
 //inserts string replacing the current selection
+template<bool AffectHistory = true>
 bool insert_character(State& state, const utf16* s) {
 	bool res = false;
 	if (s)
-		res = insert_character(state, to_utf_str(const_cast<utf16*>(s)), state.selection.x_min(), state.selection.x_max());
+		res = insert_character<AffectHistory>(state, to_utf_str(const_cast<utf16*>(s)), state.selection.x_min(), state.selection.x_max());
 	return res;
 }
 
-bool _settext(State& state, cstr* buf /*null terminated*/) {
-	bool res = false;
-	cstr empty = 0;//INFO: compiler doesnt allow you to set it to L''
-	if (!buf) buf = &empty; //NOTE: this is the standard default behaviour
-	size_t char_sz = cstr_len(buf);//not including null terminator
-	if (char_sz <= (size_t)state.char_max_sz) {
-		//TODO(fran): settext should check for invalid characters
+void copy_selection(State& state, char_sel selection) {
+	//Copy text from current selection to clipboard
+	if (selection.has_selection()) {
+		if (OpenClipboard(state.wnd)) {
+			defer{ CloseClipboard(); };
+			HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, (selection.sel_width() + 1) * sizeof(state.char_text[0])); Assert(mem);//TODO(fran): runtime_assert ?
 
-		SendMessage(state.wnd, EM_SETSEL, 0, -1);
+			{
+				void* txt = GlobalLock(mem); Assert(txt); defer{ GlobalUnlock(mem); };
 
-		res = insert_character(state, buf);
+				memcpy(txt, state.char_text.c_str() + selection.x_min(), selection.sel_width() * sizeof(state.char_text[0]));//copy selection
+				((decltype(&state.char_text[0]))txt)[selection.sel_width() + 1] = 0;//null terminate
 
-		ask_window_for_repaint(state.wnd);//TODO(fran): probably unnecessary
+				state.history_helper.break_group();
+			}
+
+			EmptyClipboard();
+			auto setclipret = SetClipboardData(clipboard_format, mem);
+
+			if (!setclipret) GlobalFree(mem);//free mem if for some reason we fail to set the clipboard with our data
+			else state.clipboard_handle = mem;//store handle so we can free it on WM_DESTROYCLIPBOARD
+		}
 	}
-	return res;
 }
+void copy_selection(State& state) { copy_selection(state, state.selection); }
 
 //NOTE: pasting from the clipboard establishes a couple of invariants: lines end with \r\n, there's a null terminator, we gotta parse it carefully cause who knows whats inside
-bool paste_from_clipboard(State& state, const cstr* txt) { //returns true if it could paste something
+bool paste_dirty_text(State& state, const cstr* txt) { //returns true if it could paste something
 	bool res = false;
 	size_t char_sz = cstr_len(txt);//does not include null terminator
-	if ((size_t)state.char_max_sz >= state.char_text.length() + char_sz) {
-
-	}
-	else {
-		char_sz -= ((state.char_text.length() + char_sz) - (size_t)state.char_max_sz);
+	if ((size_t)state.char_max_sz < state.char_text.length() + char_sz) {
+		char_sz -= (state.char_text.length() + char_sz - (size_t)state.char_max_sz);
 	}
 	if (char_sz > 0) {
-		//TODO(fran): remove illegal chars (we dont know what could be inside)
-
+		//TODO(fran): remove illegal chars (we dont know what could be inside), remove newlines if multiline is not set
+		state.history_helper.record_transient_edit(text_edit_entry::kind::paste);
 		res = insert_character(state, txt);
+	}
+	return res;
+}
 
+void paste(State& state) {
+	bool en_change = false; defer{ if (en_change) { notify_parent(state, EN_CHANGE); state.history_helper.break_group(); } };
+
+	if (IsClipboardFormatAvailable(clipboard_format)) {//NOTE: lines end with \r\n, has null terminator
+		if (OpenClipboard(state.wnd)) {
+			defer{ CloseClipboard(); };
+			if (HGLOBAL clipboard = GetClipboardData(clipboard_format)) {
+				if (cstr* clipboard_txt = (cstr*)GlobalLock(clipboard)) {
+					defer{ GlobalUnlock(clipboard); };
+					en_change = paste_dirty_text(state, clipboard_txt); //TODO(fran): this should be separated into two fns, a general paste fn and first a sanitizer for anything strange that may be in the clipboard txt
+				}
+			}
+		}
+	}
+}
+
+void cut_selection(State& state) {
+	bool en_change = false; defer{ if (en_change) { notify_parent(state, EN_CHANGE); state.history_helper.break_group(); } };
+	copy_selection(state);
+	if (state.selection.has_selection()) en_change = true;
+	state.history_helper.record_transient_edit(text_edit_entry::kind::cut);
+	remove_selection(state);
+}
+
+bool undo(State& state) {
+	bool en_change = false; defer{ if (en_change) notify_parent(state, EN_CHANGE); };
+
+	if (state.history.can_undo()) {
+		auto entry = state.history.undo();
+		en_change = insert_character<false>(state, to_utf_str(entry->removed_text), entry->position_x_min, entry->position_x_min + entry->inserted_text.length());
+		if (en_change) {
+			set_selection(state, entry->selection_before);
+			state.history_helper.break_group();
+		}
+		else
+			state.history.redo(); //modification operation failed, restore history
+	}
+	return en_change;
+}
+
+bool redo(State& state) {
+	bool en_change = false; defer{ if (en_change) notify_parent(state, EN_CHANGE); };
+
+	if (state.history.can_redo()) {
+		auto entry = state.history.redo();
+		en_change = insert_character<false>(state, to_utf_str(entry->inserted_text), entry->position_x_min, entry->position_x_min + entry->removed_text.length());
+		if (en_change) {
+			set_selection(state, entry->selection_after);
+			state.history_helper.break_group();
+		}
+		else
+			state.history.undo(); //modification operation failed, restore history
+	}
+	return en_change;
+}
+
+bool set_text(State& state, cstr* buf /*null terminated*/) {
+	bool res = false;
+	cstr empty_txt = 0;
+	if (!buf) buf = &empty_txt; //NOTE: this is the standard default behaviour
+	auto txt = to_utf_str(buf);
+	if (txt.cnt() <= (size_t)state.char_max_sz) {
+		//TODO(fran): settext should check for invalid characters (use paste_dirty_text())
+		state.history_helper.record_transient_edit(text_edit_entry::kind::programmatic);
+		res = insert_character(state, txt, 0, -1);
+
+		state.history_helper.break_group();
+
+		ask_window_for_repaint(state.wnd);//TODO(fran): probably unnecessary
 	}
 	return res;
 }
@@ -489,11 +700,6 @@ void set_composition_font(State& state)//TODO(fran): this must set the other stu
 	}
 }
 
-void notify_parent(State& state, WORD notif_code) {
-	if (notif_code == EN_CHANGE && state.functions.on_change) state.functions.on_change(state.user_extra, state.wnd);
-	else PostMessage(state.parent, WM_COMMAND, MAKELONG(state.identifier, notif_code), (LPARAM)state.wnd);
-}
-
 bool is_placeholder_visible(State& state) {
 	bool res = (state.char_text.length() == 0) && *state.placeholder && (GetFocus() != state.wnd || state.maintain_placerholder_on_focus);
 	return res;
@@ -505,168 +711,6 @@ void maintain_placerholder_when_focussed(HWND wnd, bool maintain) {//TODO(fran):
 		state.maintain_placerholder_on_focus = maintain;
 		if (is_placeholder_visible(state)) ask_window_for_repaint(state.wnd);
 	}
-}
-
-struct _string_traversal { size_t p; bool reached_limit; };//NOTE: string::npos seems worse since it doesnt give you a valid last pos
-
-_string_traversal skip_whitespace(utf16_str s, size_t start_p, int direction) {
-	size_t last_valid_i;
-	for (size_t i = start_p; i < s.sz_char(); i += direction) {
-		last_valid_i = i;
-		if (!iswspace(s[i])) {
-			return { i,false };
-		}
-	}
-	return { last_valid_i,true };
-}
-
-//goes to first character in word or punctuation group (skips whitespaces)
-//TODO(fran): what to do if we're already at the start of a group?
-_string_traversal goto_start_of_group(utf16_str s, size_t start_p, int direction) {
-	Assert(direction < 0);
-
-	auto [x, reached_limit] = skip_whitespace(s, start_p, direction);
-	if (reached_limit) return { x, reached_limit };
-
-	bool is_punct = iswpunct(s[x]);//can either be punctuation or alphanumeric
-
-	//go to the start of the previous word or punctuation 'group'
-	size_t last_valid_j;
-	for (size_t j = x; j < s.sz_char(); j += direction) {
-		if ((is_punct ? !iswpunct(s[j]) : !iswalnum(s[j]))) return { j + 1,false };
-		last_valid_j = j;
-	}
-	return { last_valid_j,true };
-}
-
-//goes one past the last character in word or punctuation group (skips whitespaces)
-//TODO(fran): what to do if we're already at the end of a group?
-_string_traversal goto_end_of_group(utf16_str s, size_t start_p, int direction) {
-	Assert(direction > 0);
-
-	auto [x, reached_limit] = skip_whitespace(s, start_p, direction);
-	if (reached_limit) return { x, reached_limit };
-
-	bool is_punct = iswpunct(s[x]);//can either be punctuation or alphanumeric
-
-	//go to the end of the word or punctuation 'group'
-	size_t last_valid_j;
-	for (size_t j = x; j < s.sz_char(); j += direction) {
-		if ((is_punct ? !iswpunct(s[j]) : !iswalnum(s[j]))) return { j,false };
-		last_valid_j = j;
-	}
-	return { last_valid_j,true };
-}
-
-//finds different points where to stop when traversing a string, used for Ctrl+Left/Right Arrows keycombo
-size_t find_stopper(utf16_str s, size_t start_p, int direction/*should be +1 or -1*/) {
-	Assert(direction);
-	//TODO(fran): handle overflow
-
-	//TODO(fran): this doesnt work exactly like we'd like for Ctrl+ Right arrow, we fail to skip to the next word instead stopping at the last character of the current one, and when we do (by placing the cursor past the last character of the word) we go past to the end of that next word instead of stopping at the beginning of it. Extra: Actually I do like that it stops at the end of words (this is not the normal behaviour but I like it more), what is wrong is the second case, whereby starting from a whitespace & going right it skips to the end of the next word instead of stopping at the beginning
-
-	start_p = clamp((decltype(start_p))0, start_p, s.cnt());
-
-	if (iswspace(s[start_p]) || iswcntrl(s[start_p])) {//we're on a whitespace
-		//find first non whitespace in the direction
-		size_t last_valid_i;
-		for (size_t i = start_p; i < s.sz_char(); i += direction) {
-			last_valid_i = i;
-			if (!iswspace(s[i]) && !iswcntrl(s[i])) {
-				//found a non whitespace char, now go to the beginning/end of that new thing
-
-				bool is_punct = iswpunct(s[i]);//can either be punctuation or alphanumeric
-
-				size_t last_valid_j;
-				for (size_t j = i; j < s.sz_char(); j += direction) {
-					if ((is_punct ? !iswpunct(s[j]) : !iswalnum(s[j]))) return direction >= 0 ? j : j + 1;
-					last_valid_j = j;
-				}
-
-				return last_valid_j;
-			}
-		}
-		return last_valid_i;
-	}
-	else {
-
-		if (iswpunct(s[start_p])) {//we're on a punctuation mark
-			//TODO(fran):it seems like everybody does smth different with punctuation, look at visual studio & sublime for examples, so just find what I feel works best
-
-			if (size_t i = start_p; direction < 0 && !iswpunct(s[--i])) {//if going left and we're on the first character of the punctuation group
-
-				//go to first character in previous word or punctuation group
-				auto [x, _] = goto_start_of_group(s, i, direction);
-				return x;
-			}
-			else {
-				//find first non punctuation in the direction
-				for (size_t i = start_p; i < s.sz_char(); i += direction) {
-					if (!iswpunct(s[i])) {
-						return i;
-					}
-					//TODO(fran): same fix as in whitespace
-				}
-			}
-		}
-		else {//we're on a word
-			//find first non word in the direction 
-			//TODO(fran): what about langs that dont usually separate words, like japanese? looks pretty hard since you'd actually have to comprehend the text to understand where to cut each word
-
-			if (direction > 0) {//if going right
-				for (size_t i = start_p; i < s.sz_char(); i += direction) {
-					if (!iswalnum(s[i])) {//find first character not in the current word
-						return i;
-					}
-					//TODO(fran): same fix as in whitespace
-				}
-			}
-			else {//if going left
-
-				if (size_t i = start_p; i > 0 && !iswalnum(s[--i])) {//if we're at the first character of the word
-
-					//we go one back (--i)
-
-					if (iswpunct(s[i])) {//if we're on punctuation
-						//go to the start of the punctuation 'group' //TODO(fran): make this things into separate functions for reuse
-						size_t last_valid_j;
-						for (size_t j = i; j < s.sz_char(); j += direction) {
-							if (!iswpunct(s[j])) return j + 1;
-							last_valid_j = j;
-						}
-						return last_valid_j;
-					}
-					else {//else we're on a whitespace
-						//skip all whitespaces and go to the start of the previous word or punctuation 'group'
-						auto [x, _] = goto_start_of_group(s, i, direction);
-						return x;
-					}
-
-				}
-				else {//else find first character of the word
-
-					size_t last_valid_i = 0;
-					for (size_t i = start_p; i < s.sz_char(); i += direction) {
-						last_valid_i = i;
-						if (!iswalnum(s[i])) {//find first character not in the current word
-							return i + 1;
-						}
-					}
-					return last_valid_i;//if for example we get to the start of the string then stop there
-				}
-			}
-		}
-
-
-	}
-
-	return start_p;
-}
-size_t find_next_stopper(utf16_str s, size_t start_p) {
-	return find_stopper(s, start_p, +1);
-}
-size_t find_prev_stopper(utf16_str s, size_t start_p) {
-	return find_stopper(s, start_p, -1);
 }
 
 //Positive direction moves cursor/selection to the right, negative to the left
@@ -701,54 +745,10 @@ void move_selection(State& state, int direction, bool shift_is_down, bool ctrl_i
 		else anchor = cursor = new_cursor();
 	}
 
-	SendMessage(state.wnd, EM_SETSEL, anchor, cursor);
+	set_selection<true>(state, anchor, cursor);
+	state.history_helper.break_group();
 }
 
-/* TODO(fran): complete the implementation of this guys
-
-//Examples:
-// "Hello how are u doing\nFine" -> first_char_idx_past_line_idx(-1)      -> |Hello
-// "Hello how are u doing\nFine" -> first_char_idx_past_line_idx(n >= 0)  -> doing\n|Fine
-// "Hello how are u doing\n"     -> first_char_idx_past_line_idx(0)       -> \n|
-//Important: as we can see the value returned can go past the last character of the string, and thus go over the size of arrays, therefore the value should be iterated up to but not including itself
-size_t first_char_idx_past_line_idx(State& state, size_t line_idx) {
-	size_t res;
-	if (line_idx == (size_t)-1) res = 0; //TODO(fran): start using i64 so we can encode the hidden first line at 0
-	else if (line_idx >= state.line_breaks.size()) res = state.char_text.size(); //char can be past the end of text, this will cause crashes because I dont think most arrays dependent on char_idx handle that case, TODO(fran): see what to do about that
-	else res = state.line_breaks[line_idx] + 1; //again, can be past the end of text, and could even not be a valid character for that line if the line is just made of a single \n, which leads me to believe the user should go up to but not including first_char_idx
-	return res;
-}
-
-
-//Cursor will be _behind_ the last letter of the line
-//REMEMBER: line indexes are part of the line
-//				eg "Hello how are u doing\nFine" -> last_char_idx_before_line_idx(0 or -1) will place the cursor in doin|g
-//												    last_char_idx_before_line_idx(n>0) will place the cursor in Fin|e
-//				eg "Hello how are u doing"		 -> last_char_idx_before_line_idx(any number) will place the cursor in doin|g
-//Idx will be at the last letter of the line, state.char_text[idx] & state.char_dims[idx] is valid //TODO(fran): except for when char_text is empty
-size_t last_char_idx_before_line_idx(State& state, size_t line_idx) {
-	size_t res;
-	if (line_idx == (size_t)-1) res = state.line_breaks.size() ? safe_subtract0(state.line_breaks[0], 1) : safe_subtract0(state.char_text.size(), 1); //cursor will be behind the last letter of the line
-	else if (line_idx >= state.line_breaks.size()) res = safe_subtract0(state.char_text.size(),1);
-	else res = safe_subtract0(state.line_breaks[line_idx], 1);
-	return res; //TODO(fran): check that we dont move to the previous line, eg in the case of Hello\n\n -> last_char_idx_before_line_idx(1) should map to -> Hello\n|\n
-}
-
-//Cursor will be _after_ the last letter of the line
-//				eg "Hello how are u doing\nFine" -> one_past_last_char_idx_before_line_idx(0 or -1) will place the cursor in doing|
-//												    one_past_last_char_idx_before_line_idx(n>0) will place the cursor in Fine|
-//				eg "Hello how are u doing"		 -> one_past_last_char_idx_before_line_idx(any number) will place the cursor in doing|
-//				eg "Hello how are u doing\nFine" -> one_past_last_char_idx_before_line_idx(0 or -1) will place the cursor in doing|
-size_t one_past_last_char_idx_before_line_idx(State& state, size_t line_idx) {
-	size_t res = last_char_idx_before_line_idx(state, line_idx);
-	res = minimum(res + 1, state.char_text.size());
-	return res;
-
-}
-
-*/
-
-//TODO(fran): combine with move_selection by sending a v2_i32 direction?
 void move_selection_vertical(State& state, int direction, bool shift_is_down, bool ctrl_is_down) {
 	Assert(direction == 1 || direction == -1);
 	size_t anchor, cursor;
@@ -791,7 +791,7 @@ void move_selection_vertical(State& state, int direction, bool shift_is_down, bo
 		if (i == idx_end) res = idx_end;
 
 		return res;
-		};
+	};
 
 	if (shift_is_down && ctrl_is_down) {
 		return;
@@ -812,11 +812,8 @@ void move_selection_vertical(State& state, int direction, bool shift_is_down, bo
 		else anchor = cursor = new_cursor();
 	}
 
-	SendMessage(state.wnd, EM_SETSEL, anchor, cursor);
-}
-
-void select_all(State& state) {
-	SendMessage(state.wnd, EM_SETSEL, 0, (size_t)-1);
+	set_selection<true>(state, anchor, cursor);
+	state.history_helper.break_group();
 }
 
 size_t point_to_char(State& state, POINT mouse/*client coords*/) {
@@ -852,24 +849,6 @@ void keep_caret_blinking(State& state) {
 
 void stop_caret_blinking(State& state) {
 	KillTimer(state.wnd, EDITONELINE_caret_timer_id);
-}
-
-//Renders the selection box corresponding to only one line
-void render_selection(HDC dc, HBRUSH brush, char_sel sel, State& state, int yPos, size_t line_start) {
-	Assert(sel.has_selection());
-	RECT selection;
-	selection.top = yPos;
-	selection.bottom = selection.top + state.caret.dim.cy;
-	selection.left = state.padding.x;
-	for (size_t i = line_start; i < sel.x_min(); i++)
-		selection.left += state.char_dims[i];
-	selection.right = selection.left;
-	for (size_t i = sel.x_min(); i < sel.x_max(); i++)
-		selection.right += state.char_dims[i];
-	//FillRect(dc, &selection, selection_br);
-	COLORREF sel_col = ColorFromBrush(brush);
-	urender::FillRectAlpha(dc, selection, GetRValue(sel_col), GetGValue(sel_col), GetBValue(sel_col), 128);
-	//TODO(fran): benchmark whether doing all the calculations and only rendering one polygon is faster, in which case render_selection would have to take the entire (multiline) selection and convert it into one big polygon
 }
 
 /**
@@ -909,6 +888,148 @@ void show_rclickmenu(State& state, POINT mouse) {
 	TrackPopupMenuEx(subm, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, state.wnd, 0);
 }
 
+void init_cpp_objects(State& state) {
+	state.char_text = str();//REMEMBER: this c++ objects dont like being calloc-ed, they need their constructor, or, in this case, someone else's, otherwise they are badly initialized
+	state.char_dims = std::vector<int>();
+	state.line_breaks = decltype(state.line_breaks)();
+	state.history = decltype(state.history)();
+}
+
+void release_cpp_objects(State& state) {
+	state.char_dims.~vector();
+	state.char_text.~basic_string();
+	state.line_breaks.~vector();
+	state.history.release();
+}
+
+//Renders the selection box corresponding to only one line
+void render_selection(HDC dc, HBRUSH brush, char_sel sel, State& state, int yPos, size_t line_start) {
+	Assert(sel.has_selection());
+	RECT selection;
+	selection.top = yPos;
+	selection.bottom = selection.top + state.caret.dim.cy;
+	selection.left = state.padding.x;
+	for (size_t i = line_start; i < sel.x_min(); i++)
+		selection.left += state.char_dims[i];
+	selection.right = selection.left;
+	for (size_t i = sel.x_min(); i < sel.x_max(); i++)
+		selection.right += state.char_dims[i];
+	COLORREF sel_col = ColorFromBrush(brush);
+	urender::FillRectAlpha(dc, selection, GetRValue(sel_col), GetGValue(sel_col), GetBValue(sel_col), 128);
+	//TODO(fran): benchmark whether doing all the calculations and only rendering one polygon is faster, in which case render_selection would have to take the entire (multiline) selection and convert it into one big polygon
+}
+
+void render(State& state, HDC dc) {
+	auto& brushes = state.theme.brushes;
+
+	RECT rc; GetClientRect(state.wnd, &rc);
+	int w = RECTW(rc), h = RECTH(rc);
+
+	LONG_PTR style = GetWindowLongPtr(state.wnd, GWL_STYLE);
+	bool show_placeholder = is_placeholder_visible(state);
+	bool is_enabled = IsWindowEnabled(state.wnd);
+
+	u32 border_thickness = state.theme.dimensions.border_thickness;
+
+	HBRUSH bk_br, txt_br, border_br, selection_br;
+	HFONT font = state.theme.font;
+
+	if (is_enabled) {
+		bk_br = brushes.bk.normal;
+		txt_br = brushes.foreground.normal;
+		border_br = brushes.border.normal;
+		selection_br = (GetFocus() == state.wnd) ? brushes.selection.normal : brushes.selection.disabled;
+	}
+	else {
+		bk_br = brushes.bk.disabled;
+		txt_br = brushes.foreground.disabled;
+		border_br = brushes.border.disabled;
+		selection_br = brushes.selection.disabled;
+	}
+	if (show_placeholder) {
+		txt_br = brushes.placeholder.normal;
+		font = fonts.General; //TODO(fran): add placeholder specific font in theme
+	}
+
+	urender::draw_background(dc, rc, bk_br, border_br, state.theme.dimensions);
+
+	//TODO(fran): clip text rendering inside drawing area of the background and border (must take into account rounded borders as well)
+	{
+		HFONT oldfont = SelectFont(dc, font); defer{ SelectFont(dc, oldfont); };
+		UINT oldalign = GetTextAlign(dc); defer{ SetTextAlign(dc,oldalign); };
+
+		COLORREF oldtxtcol = SetTextColor(dc, ColorFromBrush(txt_br)); defer{ SetTextColor(dc, oldtxtcol); };
+		auto oldbkmode = SetBkMode(dc, TRANSPARENT); defer{ SetBkMode(dc, oldbkmode); };
+
+		TEXTMETRIC tm; GetTextMetrics(dc, &tm);
+		// Calculate vertical position for the string so that it will be vertically centered
+		// We are single line so we want vertical alignment always
+		//TODO(fran): allow the user to select the vertical alignment (top, center, bottom)
+		//TODO(fran): BUG: vertical centering doesnt automatically occur when going from 2 lines to 1 by deleting the \n character, it remains with top centering until another letter is written by the user
+		int yPos = state.padding.y;
+		int xPos;
+
+		//TODO(fran): continue exploring world transformations for scrolling, 
+		POINT old_origin; SetViewportOrgEx(dc, -state.scroll.x, -state.scroll.y, &old_origin); defer{ SetViewportOrgEx(dc, old_origin.x, old_origin.y, 0); };
+		//NOTE: even if you dont reset the origin back to 0,0 windows automatically does
+
+		{ //Render Selection
+			if (state.selection.has_selection() && (style & ES_PASSWORD)) {
+				render_selection(dc, selection_br, state.selection, state, yPos, 0);
+			}
+		}
+
+		if (style & ES_CENTER) {
+			SetTextAlign(dc, TA_CENTER);
+			xPos = (rc.right - rc.left) / 2;
+		}
+		else if (style & ES_RIGHT) {
+			SetTextAlign(dc, TA_RIGHT);
+			xPos = rc.right - state.padding.x;
+		}
+		else /*ES_LEFT*/ {//NOTE: ES_LEFT==0, that was their way of defaulting to left
+			SetTextAlign(dc, TA_LEFT);
+			xPos = rc.left + state.padding.x;
+		}
+
+		if (show_placeholder) {
+			TextOut(dc, xPos, yPos, state.placeholder, (int)cstr_len(state.placeholder));
+		}
+		else if (style & ES_PASSWORD) { //TODO(fran): ES_PASSWORD should only be taken into account for single-line edit controls
+			//TODO(fran): benchmark: full allocation vs for loop drawing characters one by one
+			cstr* pass_text = (cstr*)malloc(state.char_text.length() * sizeof(cstr)); defer{ free(pass_text); };
+			for (size_t i = 0; i < state.char_text.length(); i++)pass_text[i] = password_char;
+
+			TextOut(dc, xPos, yPos, pass_text, (int)state.char_text.length());
+		}
+		else {
+			//TODO(fran): make a common path for all three and allow the placeholder to also have linebreaks, what we could do is have another variable that stores the currently used text, if placeholder is active it'll point to the placeholder, otherwise it'll point to the password if password style is active, or to the normal text
+
+			//TextOut(dc, xPos, yPos, state.char_text.c_str(), (int)state.char_text.length());
+
+			state.line_breaks.push_back(state.char_text.length()); defer{ state.line_breaks.pop_back(); }; //TODO(fran): find better solution to render the last line, which potentially doesnt have a line break
+			const u64 lines = state.line_breaks.size();
+			u64 off = 0;
+			for (u64 i = 0; i < lines; i++) { //TODO(fran): @speed: only render lines visible on screen
+				const size_t len = state.line_breaks[i];
+
+				{
+					const size_t start = off, end = len + 1 /*+1 so the user can visually select the \n character at the end of the line*/;
+					char_sel selection{ clamp(start,state.selection.x_min(),end), clamp(start,state.selection.x_max(),end) };
+					if (selection.has_selection())
+						render_selection(dc, selection_br, selection, state, yPos, start);
+				}
+				//TODO(fran): use ExtTextOut which has support for font fallback
+				TextOut(dc, xPos, yPos, state.char_text.c_str() + off, (int)(len - off));
+				off = len + 1;
+				yPos += tm.tmHeight;
+				//TODO(fran): all alignment related code needs to be re-done
+					//NOTE: I could cheat by simply using DrawText but I think this will be more insightful
+			}
+		}
+	}
+}
+
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	//static int __c; printf("%d:EDITONELINE:%s\n",__c++, msgToString(msg));
 
@@ -928,9 +1049,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		st->identifier = (u32)(UINT_PTR)creation_nfo->hMenu;
 		st->char_max_sz = -1;//default established by windows: 32767
 		*st->placeholder = 0;
-		st->char_text = str();//REMEMBER: this c++ objects dont like being calloc-ed, they need their constructor, or, in this case, someone else's, otherwise they are badly initialized
-		st->char_dims = std::vector<int>();
-		st->line_breaks = decltype(st->line_breaks)();
+		init_cpp_objects(*st);
 
 		return TRUE;
 	} break;
@@ -997,127 +1116,16 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			DeleteBitmap(state.caret.bmp);
 			state.caret.bmp = nil;
 		}
-		state.char_dims.~vector();
-		state.char_text.~basic_string();
-		state.line_breaks.~vector();
+		release_cpp_objects(state);
 		set_window_state(state.wnd, nil);
 		free(&state);
 		return 0;
 	}break;
 	case WM_PAINT:
 	{
-		auto& brushes = state.theme.brushes;
-		PAINTSTRUCT ps;
-		//ps.rcPaint
+		PAINTSTRUCT ps; //ps.rcPaint
 		HDC dc = BeginPaint(state.wnd, &ps); defer{ EndPaint(state.wnd, &ps); };
-
-		RECT rc; GetClientRect(state.wnd, &rc);
-		int w = RECTW(rc), h = RECTH(rc);
-
-		LONG_PTR style = GetWindowLongPtr(state.wnd, GWL_STYLE);
-		bool show_placeholder = is_placeholder_visible(state);
-		bool is_enabled = IsWindowEnabled(state.wnd);
-
-		u32 border_thickness = state.theme.dimensions.border_thickness;
-
-		HBRUSH bk_br, txt_br, border_br, selection_br;
-		HFONT font = state.theme.font;
-
-		if (is_enabled) {
-			bk_br = brushes.bk.normal;
-			txt_br = brushes.foreground.normal;
-			border_br = brushes.border.normal;
-			selection_br = (GetFocus() == state.wnd) ? brushes.selection.normal : brushes.selection.disabled;
-		}
-		else {
-			bk_br = brushes.bk.disabled;
-			txt_br = brushes.foreground.disabled;
-			border_br = brushes.border.disabled;
-			selection_br = brushes.selection.disabled;
-		}
-		if (show_placeholder) {
-			txt_br = brushes.placeholder.normal;
-			font = fonts.General; //TODO(fran): add placeholder specific font in theme
-		}
-
-		urender::draw_background(dc, rc, bk_br, border_br, state.theme.dimensions);
-
-		//TODO(fran): clip text rendering inside drawing area of the background and border (must take into account rounded borders as well)
-		{
-			HFONT oldfont = SelectFont(dc, font); defer{ SelectFont(dc, oldfont); };
-			UINT oldalign = GetTextAlign(dc); defer{ SetTextAlign(dc,oldalign); };
-
-			COLORREF oldtxtcol = SetTextColor(dc, ColorFromBrush(txt_br)); defer{ SetTextColor(dc, oldtxtcol); };
-			auto oldbkmode = SetBkMode(dc, TRANSPARENT); defer{ SetBkMode(dc, oldbkmode); };
-
-			TEXTMETRIC tm; GetTextMetrics(dc, &tm);
-			// Calculate vertical position for the string so that it will be vertically centered
-			// We are single line so we want vertical alignment always
-			//TODO(fran): allow the user to select the vertical alignment (top, center, bottom)
-			//TODO(fran): BUG: vertical centering doesnt automatically occur when going from 2 lines to 1 by deleting the \n character, it remains with top centering until another letter is written by the user
-			int yPos = state.padding.y;
-			int xPos;
-
-			//TODO(fran): continue exploring world transformations for scrolling, 
-			POINT old_origin; SetViewportOrgEx(dc, -state.scroll.x, -state.scroll.y, &old_origin); defer{ SetViewportOrgEx(dc, old_origin.x, old_origin.y, 0); };
-			//NOTE: even if you dont reset the origin back to 0,0 windows automatically does
-
-			{ //Render Selection
-				if (state.selection.has_selection() && (style & ES_PASSWORD)) {
-					render_selection(dc, selection_br, state.selection, state, yPos, 0);
-				}
-			}
-
-			if (style & ES_CENTER) {
-				SetTextAlign(dc, TA_CENTER);
-				xPos = (rc.right - rc.left) / 2;
-			}
-			else if (style & ES_RIGHT) {
-				SetTextAlign(dc, TA_RIGHT);
-				xPos = rc.right - state.padding.x;
-			}
-			else /*ES_LEFT*/ {//NOTE: ES_LEFT==0, that was their way of defaulting to left
-				SetTextAlign(dc, TA_LEFT);
-				xPos = rc.left + state.padding.x;
-			}
-
-			if (show_placeholder) {
-				TextOut(dc, xPos, yPos, state.placeholder, (int)cstr_len(state.placeholder));
-			}
-			else if (style & ES_PASSWORD) { //TODO(fran): ES_PASSWORD should only be taken into account for single-line edit controls
-				//TODO(fran): benchmark: full allocation vs for loop drawing characters one by one
-				cstr* pass_text = (cstr*)malloc(state.char_text.length() * sizeof(cstr)); defer{ free(pass_text); };
-				for (size_t i = 0; i < state.char_text.length(); i++)pass_text[i] = password_char;
-
-				TextOut(dc, xPos, yPos, pass_text, (int)state.char_text.length());
-			}
-			else {
-				//TODO(fran): make a common path for all three and allow the placeholder to also have linebreaks, what we could do is have another variable that stores the currently used text, if placeholder is active it'll point to the placeholder, otherwise it'll point to the password if password style is active, or to the normal text
-
-				//TextOut(dc, xPos, yPos, state.char_text.c_str(), (int)state.char_text.length());
-
-				state.line_breaks.push_back(state.char_text.length()); defer{ state.line_breaks.pop_back(); }; //TODO(fran): find better solution to render the last line, which potentially doesnt have a line break
-				const u64 lines = state.line_breaks.size();
-				u64 off = 0;
-				for (u64 i = 0; i < lines; i++) { //TODO(fran): @speed: only render lines visible on screen
-					const size_t len = state.line_breaks[i];
-
-					{
-						const size_t start = off, end = len + 1 /*+1 so the user can visually select the \n character at the end of the line*/;
-						char_sel selection{ clamp(start,state.selection.x_min(),end), clamp(start,state.selection.x_max(),end) };
-						if (selection.has_selection())
-							render_selection(dc, selection_br, selection, state, yPos, start);
-					}
-					//TODO(fran): use ExtTextOut which has support for font fallback
-					TextOut(dc, xPos, yPos, state.char_text.c_str() + off, (int)(len - off));
-					off = len + 1;
-					yPos += tm.tmHeight;
-					//TODO(fran): all alignment related code needs to be re-done
-						//NOTE: I could cheat by simply using DrawText but I think this will be more insightful
-				}
-			}
-		}
-
+		render(state, dc);
 		return 0;
 	} break;
 	case WM_DESIRED_SIZE:
@@ -1184,7 +1192,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		if (state.on_mouse_tracking) {
 			//user is trying to make a selection
 			size_t cursor = point_to_char(state, mouse);
-			SendMessage(state.wnd, EM_SETSEL, state.selection.anchor, cursor);
+			set_selection(state, state.selection.anchor, cursor);
 		}
 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -1207,7 +1215,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		state.on_mouse_tracking = true;
 
 		size_t cursor = point_to_char(state, mouse);
-		SendMessage(state.wnd, EM_SETSEL, cursor, cursor);
+		set_selection(state, cursor, cursor);
 
 		return 0;
 	} break;
@@ -1217,7 +1225,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//HACK: We assume the mouse hasnt moved much since the first click, therefore we do not need to check the mouse position to find out where the cursor is since the first click already set the cursor position
 		auto left = find_stopper(text, state.selection.cursor + 1, -1);
 		auto right = find_stopper(text, state.selection.cursor ? state.selection.cursor - 1 : 0, +1);
-		SendMessage(state.wnd, EM_SETSEL, left, right);
+		set_selection(state, left, right);
 	} break;
 	case WM_LBUTTONUP:
 	{
@@ -1292,7 +1300,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_KEYDOWN://When the user presses a non-system key this is the 1st msg we receive
 	{
 		//Notifications:
-		bool en_change = false;
+		bool en_change = false; defer{ if (en_change) notify_parent(state, EN_CHANGE); };
 
 		//Vertical Selection Stored Width:
 		bool reset_v_sel_stored_w = true;
@@ -1327,7 +1335,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				anchor = cursor = char_idx_to_line_char_idx(state, state.selection.cursor).line_char_idx;
 			}
 
-			SendMessage(state.wnd, EM_SETSEL, anchor, cursor);
+			set_selection<true>(state, anchor, cursor);
 		} break;
 		case VK_END://End //TODO(fran): @multiline
 		{
@@ -1336,7 +1344,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			auto last_cursor_in_line = [](State& state) {
 				auto line_idx = char_idx_to_line_char_idx(state, state.selection.cursor).line_idx;
 				return line_idx < state.line_breaks.size() ? state.line_breaks[line_idx] : state.char_text.length();
-				};
+			};
 
 			if (shift_is_down && ctrl_is_down) {//Make a selection to the end of the text
 				anchor = state.selection.anchor;
@@ -1355,7 +1363,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				anchor = cursor = last_cursor_in_line(state);
 			}
 
-			SendMessage(state.wnd, EM_SETSEL, anchor, cursor);
+			set_selection<true>(state, anchor, cursor);
 		} break;
 		case VK_LEFT://Left arrow
 		{
@@ -1379,7 +1387,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		case VK_DELETE://What in spanish is the "Supr" key (delete character ahead of you)
 		{
 			if (!state.char_text.empty()) {
-				if (state.selection.has_selection())remove_selection(state);
+				state.history_helper.record_transient_edit(text_edit_entry::kind::delete_forward);
+				if (state.selection.has_selection()) remove_selection(state);
 				else {
 					if (ctrl_is_down && shift_is_down) {//delete everything til end of the line
 						remove_selection(state, state.selection.cursor, state.char_text.length());
@@ -1388,9 +1397,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 						remove_selection(state, state.selection.cursor, find_stopper(to_utf_str(state.char_text), state.selection.cursor, +1));
 					}
 					else if (shift_is_down) {//save whole line to clipboard and then delete it
-						SendMessage(state.wnd, EM_SETSEL, 0, -1);
-						SendMessage(state.wnd, WM_COPY, 0, 0);
-						remove_selection(state);
+						auto sel_all = make_selection(state, 0, -1);
+						copy_selection(state, sel_all);
+						remove_selection(state, sel_all);
 					}
 					else remove_selection(state, state.selection.cursor, state.selection.cursor + 1);//delete character in front of the cursor
 				}
@@ -1402,9 +1411,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//TODO(fran): @feature: if an accent has been selected the delete should cancel the accent instead of deleting a character
 			//		eg: keyboard sequence: a´a -> aá ; a´backspace -> a
 			if (!state.char_text.empty()) {
-				if (state.selection.has_selection())remove_selection(state);
+				state.history_helper.record_transient_edit(text_edit_entry::kind::backspace);
+				if (state.selection.has_selection()) remove_selection(state);
 				else {
-
 					if (ctrl_is_down && shift_is_down) remove_selection(state, 0, state.selection.cursor); //Remove every character from cursor to line start
 					else if (ctrl_is_down) remove_selection(state, find_stopper(to_utf_str(state.char_text), state.selection.cursor, -1), state.selection.cursor);
 					else remove_selection(state, state.selection.cursor - 1, state.selection.cursor);
@@ -1420,23 +1429,23 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		case _t('v'):
 		case _t('V'):
 		{
-			if (ctrl_is_down) {
-				SendMessage(state.wnd, WM_PASTE, 0, 0);
-			}
+			if (ctrl_is_down) paste(state);
 		} break;
 		case _t('c'):
 		case _t('C'):
 		{
-			if (ctrl_is_down) {
-				SendMessage(state.wnd, WM_COPY, 0, 0);
-			}
+			if (ctrl_is_down) copy_selection(state);
 		} break;
 		case _t('x'):
 		case _t('X'):
 		{
-			if (ctrl_is_down) {
-				SendMessage(state.wnd, WM_CUT, 0, 0);
-			}
+			if (ctrl_is_down) cut_selection(state);
+		} break;
+		case _t('z'):
+		case _t('Z'):
+		{
+			if (ctrl_is_down && shift_is_down) redo(state);
+			elif (ctrl_is_down) undo(state);
 		} break;
 		case (char)VK_PROCESSKEY: //NOTE: you must cast to (char) for this value to match
 		{
@@ -1462,69 +1471,35 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		} break;
 		}
 
-		if (reset_v_sel_stored_w)  reset_vertical_selection_stored_width(state);
+		if (reset_v_sel_stored_w) reset_vertical_selection_stored_width(state);
 		ask_window_for_repaint(state.wnd);//TODO(fran): dont invalidate everything, NOTE: also on each wm_paint the cursor will stop so we should add here a bool repaint; to avoid calling InvalidateRect when it isnt needed
-		if (en_change) notify_parent(state, EN_CHANGE); //There was a change in the text
 		return 0;
 	}break;
 	case WM_CUT:
 	{
-		bool en_change = false;
-		SendMessage(state.wnd, WM_COPY, 0, 0);
-		if (state.selection.has_selection()) en_change = true;
-		remove_selection(state);
-		if (en_change) notify_parent(state, EN_CHANGE);
+		cut_selection(state);
 	} break;
 	case WM_COPY:
 	{
-		//Copy text from current selection to clipboard
-		if (state.selection.has_selection()) {
-			if (OpenClipboard(state.wnd)) {
-				defer{ CloseClipboard(); };
-				HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, (state.selection.sel_width() + 1) * sizeof(state.char_text[0])); Assert(mem);//TODO(fran): runtime_assert ?
-
-				{
-					void* txt = GlobalLock(mem); Assert(txt); defer{ GlobalUnlock(mem); };
-
-					memcpy(txt, state.char_text.c_str() + state.selection.x_min(), state.selection.sel_width() * sizeof(state.char_text[0]));//copy selection
-					((decltype(&state.char_text[0]))txt)[state.selection.sel_width() + 1] = 0;//null terminate
-				}
-
-				EmptyClipboard();
-				auto setclipret = SetClipboardData(clipboard_format, mem);
-
-				if (!setclipret) GlobalFree(mem);//free mem if for some reason we fail to set the clipboard with our data
-				else state.clipboard_handle = mem;//store handle so we can free it on WM_DESTROYCLIPBOARD
-			}
-		}
+		copy_selection(state);
 	} break;
 	case WM_PASTE:
 	{
-		//Notifications:
-		bool en_change = false;
-
-		if (IsClipboardFormatAvailable(clipboard_format)) {//NOTE: lines end with \r\n, has null terminator
-			if (OpenClipboard(state.wnd)) {
-				defer{ CloseClipboard(); };
-				HGLOBAL clipboard = GetClipboardData(clipboard_format);
-				if (clipboard) {
-					cstr* clipboardtxt = (cstr*)GlobalLock(clipboard);
-					if (clipboardtxt)
-					{
-						defer{ GlobalUnlock(clipboard); };
-						bool paste_res = paste_from_clipboard(state, clipboardtxt); //TODO(fran): this should be separated into two fns, a general paste fn and first a sanitizer for anything strange that may be in the clipboard txt
-						en_change = paste_res;
-					}
-
-				}
-			}
-		}
-		if (en_change) notify_parent(state, EN_CHANGE); //There was a change in the text
+		paste(state);
+	} break;
+	case WM_UNDO:
+	{
+		return undo(state);
+	} break;
+	case WM_REDO:
+	{
+		return redo(state);
 	} break;
 	case WM_CHAR://When the user presses a non-system key this is the 2nd msg we receive
 	{//NOTE: a WM_KEYDOWN msg was translated by TranslateMessage() into WM_CHAR
 		//Notifications:
-		bool en_change = false;
+		bool en_change = false; defer{ if (en_change) notify_parent(state, EN_CHANGE); };
+
 
 		TCHAR c = (TCHAR)wparam;
 		bool ctrl_is_down = HIBYTE(GetKeyState(VK_CONTROL));
@@ -1533,36 +1508,19 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//lparam = flags
 		switch (c) { //https://docs.microsoft.com/en-us/windows/win32/menurc/using-carets
 		case 127://Ctrl + Backspace
+		case VK_BACK://Backspace (gets sent as WM_CHAR even though it can be handled in WM_KEYDOWN)
 		{
-			/*if (!state.char_text.empty()) {
-				if (state.selection.has_selection())remove_selection(state);
-				else remove_selection(state, find_stopper(to_utf_str(state.char_text), state.selection.cursor, -1), state.selection.cursor);
-
-				en_change = true;
-			}*/
-			//do nothing, we already handled it on WM_KEYDOWN
-		} break;
-		case VK_BACK://Backspace (for some reason it gets sent as WM_CHAR even though it can be handled in WM_KEYDOWN)
-		{
-			//if (!state.char_text.empty()) {
-			//	if (state.selection.has_selection())remove_selection(state);
-			//	else remove_selection(state, state.selection.cursor - 1, state.selection.cursor);
-
-			//	en_change = true;
-			//}
-			//do nothing, we already handled it on WM_KEYDOWN
+			//already handled on WM_KEYDOWN
 		}break;
 		case VK_TAB://Tab
 		{
-			if (style & WS_TABSTOP) {
-				//handle_tabstop_transition(state.wnd);
-			}
-			else {
+			if (!(style & WS_TABSTOP)) {
 				//We dont handle tabs for now
 				Assert(0);
 				goto insert_control_char;
 			}
 		}break;
+		case 0x0A://Linefeed, aka \n (I assume it is unused in modern versions, haven't found a key that triggers it)
 		case VK_RETURN://Received when the user presses the "enter" key //Carriage Return aka \r
 		{
 			//NOTE: I wonder, it doesnt seem to send us \r\n so is that something that is manually done by the control?
@@ -1581,11 +1539,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		{
 			//TODO(fran): should we do something?
 			PostMessage(GetParent(state.wnd), WM_COMMAND, MAKELONG(state.identifier, EN_ESCAPE), (LPARAM)state.wnd);
-		}break;
-		case 0x0A://Linefeed, aka \n
-		{
-			//I havent found which key triggers this
-			printf("WM_CHAR = linefeed\n");
 		}break;
 		default:
 		{
@@ -1607,15 +1560,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//We have some normal character
 			//TODO(fran): what happens with surrogate pairs? I dont even know what they are -> READ
 			if (safe_subtract0(state.char_text.length(), state.selection.sel_width()) < state.char_max_sz) {
+				state.history_helper.record_transient_edit(text_edit_entry::kind::typing);
 				en_change = insert_character(state, c);
-
-				//wprintf(L"%s\n", state.char_text.c_str());
 			}
 
 		}break;
 		}
 		ask_window_for_repaint(state.wnd); //TODO(fran): dont invalidate everything
-		if (en_change) notify_parent(state, EN_CHANGE); //There was a change in the text
 		return 0;
 	} break;
 	case WM_TIMER:
@@ -1636,7 +1587,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			KillTimer(state.wnd, timerID);
 
 			//TODO(fran): timing isnt quite right, there's a slight delay between each caret "re-blinking"
-			//			  also we should check the registry to find out the caret timeout, 5 sec is the default on w10 but idk about other OS versions, or maybe the user changed it
+			//			  also we should check the registry to find out the caret timeout, 5 sec is the default on w10 but could be different
 			HideCaret(state.wnd);
 			ShowCaret(state.wnd);
 
@@ -1668,17 +1619,15 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_SETTEXT:
 	{
-		//Notifications:
-		bool en_change = false;
-
 		cstr* buf = (cstr*)lparam;//null terminated
 		bool notify = wparam; //Custom extension to WM_SETTEXT
 
-		BOOL res = edit_oneline::_settext(state, buf);
-		SendMessage(state.wnd, EM_SETSEL, 0, 0); //When setting the whole element's text we want to keep the cursor at the beginning
+		//Notifications:
+		bool en_change = false; defer{ if (en_change && notify) notify_parent(state, EN_CHANGE); };
 
-		en_change = res;
-		if (en_change && notify) notify_parent(state, EN_CHANGE); //There was a change in the text
+		BOOL res = en_change = set_text(state, buf);
+		
+		if (res) set_selection(state, 0, 0); //When setting the whole element's text we want to keep the cursor at the beginning //TODO(fran): we could provide a flag to switch between setting the selection at the start or at the end
 
 		return res;
 	}break;
@@ -1770,6 +1719,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//If an application has created an IME window, it should pass this message to that window.The DefWindowProc function processes the message by passing it to the default IME window.
 		set_composition_pos(state);
 		set_composition_font(state);//TODO(fran): should I place this somewhere else?
+		state.history_helper.break_group();
 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
@@ -1796,7 +1746,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 #endif
 
 		if (state.hide_IME_wnd && lparam & GCS_RESULTSTR) {//the content of the IME has been accepted by the user
-			SendMessage(state.wnd, EM_SETSEL, state.selection.cursor, state.selection.cursor);//clear selection
+			set_selection(state, state.selection.cursor, state.selection.cursor);//clear selection
 			state.ignore_IME_candidates = false;
 			return 0;//we already have the result string in the editbox
 		}
@@ -1840,7 +1790,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		if (lparam == 0) {
 			//IME was cancelled, delete whatever was written with it
 			if (state.selection.has_selection()) {
-				remove_selection(state);
+				remove_selection<false>(state);
 				en_change = true;
 			}
 		}
@@ -1858,9 +1808,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 					auto len = ImmGetCompositionString(imc, GCS_COMPSTR, txt, szbytes) / sizeof(*txt);
 					txt[len] = 0;//ImmGetCompositionString does _not_ write the null terminator
 
+					state.history_helper.record_transient_edit(text_edit_entry::kind::ime);
 					en_change = insert_character(state, txt);
 
-					SendMessage(state.wnd, EM_SETSEL, safe_subtract0(state.selection.cursor, len), state.selection.cursor);
+					set_selection(state, safe_subtract0(state.selection.cursor, len), state.selection.cursor);
 				}
 			}
 		}
@@ -1883,6 +1834,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_IME_ENDCOMPOSITION://After the chars are sent from the IME window it hides/destroys itself (idk)
 	{
 		//TODO: Handle once we process our own IME
+		state.history_helper.break_group();
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	//case WM_IME_CONTROL: //NOTE: I feel like this should be received by the wndproc of the IME, I dont think I can get DefWndProc to send it there for me
@@ -1898,11 +1850,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		if (is_placeholder_visible(state)) ask_window_for_repaint(state.wnd);
 		return 1;
 	} break;
-	//case EM_SETINVALIDCHARS:
-	//{
-	//	cstr* chars = (cstr*)lparam;
-	//	memcpy_s(state.invalid_chars, sizeof(state.invalid_chars), chars, (cstr_len(chars) + 1) * sizeof(*chars));
-	//} break;
 	case WM_NOTIFYFORMAT://1st msg sent by our tooltip
 	{
 		switch (lparam) {
@@ -1976,12 +1923,17 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			bool en_change = false;
 			switch (LOWORD(wparam))
 			{
-			case menu::undo: break; //TODO(fran)
-			case menu::redo: break; //TODO(fran)
-			case menu::cut: SendMessage(state.wnd, WM_CUT, 0, 0); break;
-			case menu::copy: SendMessage(state.wnd, WM_COPY, 0, 0); break;
-			case menu::paste: SendMessage(state.wnd, WM_PASTE, 0, 0); break;
-			case menu::del: if (en_change = state.selection.has_selection()) remove_selection(state); break;
+			case menu::undo: undo(state); break;
+			case menu::redo: redo(state); break;
+			case menu::cut:cut_selection(state); break;
+			case menu::copy: copy_selection(state); break;
+			case menu::paste: paste(state); break;
+			case menu::del: 
+				if (en_change = state.selection.has_selection()) {
+					state.history_helper.record_transient_edit(text_edit_entry::kind::backspace);
+					remove_selection(state);
+				} 
+				break;
 			case menu::find: break; //TODO(fran)
 			case menu::select_all: select_all(state); break;
 			default: res = SendMessage(state.parent, msg, wparam, lparam);
@@ -1992,36 +1944,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case EM_SETSEL:
 	{
-		size_t _start = (size_t)wparam;
-		size_t _end = (size_t)lparam;
-		//int anchor = _start; //TODO(fran): store the anchor, useful for extending selection eg when the user clicks while pressing shift
-
-		if (_start == (size_t)-1 || (i32)_start == (i32)-1) {//TODO(fran): find out the best check for this since -1 usually gets automapped to i32 and thus will be different from (size_t)-1 (I think)
-			//Remove current selection
-			if (state.selection.anchor != state.selection.cursor) {
-				state.selection.anchor = state.selection.cursor;
-				ask_window_for_repaint(state.wnd);
-			}
-		}
-		else {
-			size_t end_max = (size_t)state.char_text.length();
-			if (_end == (size_t)-1 || (i32)_end == (i32)-1) {
-				_end = end_max; //Set _end to one past the last valid char
-			}
-
-			_start = clamp((size_t)0, _start, end_max);
-			_end = clamp((size_t)0, _end, end_max);
-
-
-			if (state.selection.anchor != _start || state.selection.cursor != _end) {
-				state.selection.anchor = _start;
-				state.selection.cursor = _end;
-				ask_window_for_repaint(state.wnd);
-			}
-		}
-
-		reposition_caret(state);//TODO(fran): only do it if cursor changed
-
+		size_t anchor = wparam, cursor = lparam;
+		set_selection(state, anchor, cursor); //TODO(fran): probably should have set_selection<true>(...)
 		return 0;
 	} break;
 	case EM_GETSEL://TODO(fran): EM_GETSEL_EX (to be able to request for size_t (possibly 64bit) values)

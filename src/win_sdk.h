@@ -38,6 +38,8 @@
 // wparam = bool, should enable or disable itself and child controls at discretion of the control
 // lparam = unused
 
+#define WM_REDO (extramsgs_base_msg_addr+5)
+
 #define wndclass_name(name) _APP_NAME _t("_wndclass_") _t(name)
 
 

@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+#include "undo_history.h"
+
 namespace edit_oneline {
 
 //-------------------"API"--------------------:
@@ -57,20 +59,20 @@ struct char_sel {
 	type anchor;//Eg ABC		anchor=1	anchor is between A and B
 	type cursor;//Eg ABC		cursor=1	cursor is between A and B
 	//First character of the selection
-	type x_min() {
+	type x_min() const {
 		type res = (anchor < cursor) ? anchor : cursor;
 		return res;
 	}
 	//First character beyond the selection
-	type x_max() {
+	type x_max() const {
 		type res = (anchor > cursor) ? anchor : cursor;
 		return res;
 	}
-	type sel_width() {
+	type sel_width() const {
 		type res = distance(anchor, cursor);
 		return res;
 	}
-	bool has_selection() { return sel_width(); }
+	bool has_selection() const { return sel_width(); }
 	//void set_both(int new_val) { anchor = cursor = new_val; }
 
 	//Example:
@@ -129,6 +131,100 @@ union Functions {
 private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 };
 
+struct text_edit_entry {
+	/*
+	TODO: Simpler entry struct, see if we can reduce this one down to this:
+		struct text_edit_entry {
+			enum class type { insert, erase } type;
+			size_t pos;
+			str text;
+			// Optional: selection before/after
+		};
+	*/
+
+	enum class kind { //TODO: we can add these guys to undo_merge_state::type as well together with an extra check (can_merge(old type) && old type == new type, where can_merge will only be true for typing, backspace, delete_forward). We could also not add them and still do the same, with can_merge false for type::none
+		typing, backspace, delete_forward, paste, cut, ime, programmatic,
+	};
+	kind edit_kind;
+
+	size_t position_x_min;
+	str removed_text, inserted_text;
+
+	char_sel selection_before, selection_after; //NOTE: selection_after could be safely inferred
+
+	size_t memory_size() const { return sizeof(*this) + (removed_text.capacity() + inserted_text.capacity()) * sizeof(decltype(removed_text)::value_type); }
+};
+
+struct undo_merge_state {
+	/*
+	Usage:
+
+		auto now = std::time(nil);
+
+		if (merge_state.can_merge(edit_type, selection_before, now))
+			history.update_latest(...);
+		else
+			history.push(...);
+
+		merge_state.record_edit(edit_type, selection_after, now);
+	*/
+
+	enum class type { other, typing, backspace, delete_forward, }; //NOTE: vscode uses an extra type: space, breaks operations by a space and never by time, in practice that means that, for languages that use spaces, every undo operation removes the last word and space you typed
+
+	text_edit_entry::kind transient_kind = text_edit_entry::kind::typing;
+	type active_type = type::other;
+	char_sel selection_after{};
+	time64 last_edit_time{};
+	static constexpr u32 max_delay_ms{ 2000 };
+
+	bool can_merge(type incoming_type, const char_sel& selection_before, time64 now = std::time(nil)) const {
+		bool same_mergeable_type = active_type == incoming_type && active_type != type::other;
+		bool selections_are_empty = !selection_after.has_selection() && !selection_before.has_selection();
+		bool selection_is_contiguous = selection_after.cursor == selection_before.cursor;
+		bool close_in_time = now - last_edit_time <= max_delay_ms;
+		return same_mergeable_type && selections_are_empty && selection_is_contiguous && close_in_time;
+	}
+
+	static type map_kind_to_type(text_edit_entry::kind kind) {
+		switch (kind) {
+		case text_edit_entry::kind::typing: return type::typing;
+		case text_edit_entry::kind::backspace: return type::backspace;
+		case text_edit_entry::kind::delete_forward: return type::delete_forward;
+		default: return type::other;
+		}
+	};
+
+	bool can_merge(const char_sel& selection_before, time64 now = std::time(nil)) const {
+		return can_merge(map_kind_to_type(transient_kind), selection_before, now);
+	}
+
+	void record_transient_edit(text_edit_entry::kind edit_kind) {
+		transient_kind = edit_kind;
+	}
+
+	void record_edit(type edit_type, const char_sel& new_selection_after, time64 now = std::time(nil)) {
+		active_type = edit_type;
+		selection_after = new_selection_after;
+		last_edit_time = now;
+	}
+	void record_edit(text_edit_entry::kind edit_kind, const char_sel& new_selection_after, time64 now = std::time(nil)) {
+		record_edit(map_kind_to_type(edit_kind), new_selection_after, now);
+	}
+
+	void break_group() {
+		/*
+		Call break_group() after:
+		- Undo or redo.
+		- Cursor or selection movement.
+		- Focus loss.
+		- Paste, cut, autocomplete, or selection replacement.
+		- Programmatic text changes.
+		- An IME composition is committed or cancelled.
+		*/
+		active_type = type::other;
+	}
+};
+
 struct State : WindowState {
 	u32 identifier;
 
@@ -149,6 +245,9 @@ struct State : WindowState {
 	str char_text;//much simpler to work with and debug
 	std::vector<int> char_dims;//NOTE: specifies, for each character, its width
 	std::vector<size_t> line_breaks; //Indices into the text string where line breaks occur
+
+	undo_history<text_edit_entry> history;
+	undo_merge_state history_helper;
 
 	v2_i32 padding; //NOTE: x,y offset from where characters start being placed on the screen, relative to the client area, positive values 'shrink' the rendering area. For a left aligned control this will be offset from the left, for right aligned it'll be offset from the right, and for center alignment it'll be the left most position from where chars will be drawn
 

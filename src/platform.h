@@ -23,6 +23,15 @@
 constexpr auto& app_name = _APP_NAME;
 constexpr auto& app_name_with_version = _APP_NAME _t(" ") _APP_VERSION;
 
+#define nil nullptr
+#define elif else if
+
+#define Bytes(n)     (n)
+#define Kilobytes(n) ((n)*1024)
+#define Megabytes(n) (Kilobytes(n)*1024)
+#define Gigabytes(n) (Megabytes(n)*1024LL)
+#define Terabytes(n) (Gigabytes(n)*1024LL)
+
 typedef uint8_t  u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
