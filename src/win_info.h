@@ -167,6 +167,56 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_IME_SETCONTEXT://sent the first time on SetFocus //When we get keyboard focus for the first time this gets sent 
 	{
 	} break;
+	case WM_IME_NOTIFY:
+	{
+		//Notifies about changes to the IME window
+		//TODO(fran): process this msgs once we manage the ime window
+		UINT command = wparam;
+		//lparam = command specific data
+		#if 0
+		const char* notif;
+		switch (command) {
+		case IMN_CHANGECANDIDATE:	   notif = "IMN_CHANGECANDIDATE"; break;
+		case IMN_CLOSECANDIDATE:	   notif = "IMN_CLOSECANDIDATE"; break;
+		case IMN_CLOSESTATUSWINDOW:	   notif = "IMN_CLOSESTATUSWINDOW"; break;
+		case IMN_GUIDELINE:			   notif = "IMN_GUIDELINE"; break;
+		case IMN_OPENCANDIDATE:		   notif = "IMN_OPENCANDIDATE"; break;
+		case IMN_OPENSTATUSWINDOW:	   notif = "IMN_OPENSTATUSWINDOW"; break;
+		case IMN_SETCANDIDATEPOS:	   notif = "IMN_SETCANDIDATEPOS"; break;
+		case IMN_SETCOMPOSITIONFONT:   notif = "IMN_SETCOMPOSITIONFONT"; break;
+		case IMN_SETCOMPOSITIONWINDOW: notif = "IMN_SETCOMPOSITIONWINDOW"; break;
+		case IMN_SETCONVERSIONMODE:	   notif = "IMN_SETCONVERSIONMODE"; break;
+		case IMN_SETOPENSTATUS:		   notif = "IMN_SETOPENSTATUS"; break;
+		case IMN_SETSENTENCEMODE:	   notif = "IMN_SETSENTENCEMODE"; break;
+		case IMN_SETSTATUSWINDOWPOS:   notif = "IMN_SETSTATUSWINDOWPOS"; break;
+		case 0xf:					   notif = "HIDDEN IME NOTIF 0xf"; break;//probably IME_SETCOMPOSITION or smth like that, happens when you press a key
+		case 0x10d:					   notif = "HIDDEN IME NOTIF 0x10d"; break;
+		case 0x10e:					   notif = "HIDDEN IME NOTIF 0x10e"; break;//probably IME_CANCEL or smth like that, happens when the ime window is closed eg by pressing escape
+		default: notif = 0; Assert(0);
+		}
+		printf("WM_IME_NOTIFY: %s\n", notif);
+		#endif
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
+	case WM_IME_REQUEST://After Alt+Shift to change the keyboard (and some WM_IMENOTIFY) we receive this msg
+	{
+		#if 0
+		const char* req;
+		switch (wparam) {
+		case IMR_CANDIDATEWINDOW:			req = "IMR_CANDIDATEWINDOW"; break;
+		case IMR_COMPOSITIONFONT:			req = "IMR_COMPOSITIONFONT"; break;
+		case IMR_COMPOSITIONWINDOW:			req = "IMR_COMPOSITIONWINDOW"; break;
+		case IMR_CONFIRMRECONVERTSTRING:	req = "IMR_CONFIRMRECONVERTSTRING"; break;
+		case IMR_DOCUMENTFEED:				req = "IMR_DOCUMENTFEED"; break;
+		case IMR_QUERYCHARPOSITION:			req = "IMR_QUERYCHARPOSITION"; break;
+		case IMR_RECONVERTSTRING:			req = "IMR_RECONVERTSTRING"; break;
+		default:req = 0; Assert(0);
+		}
+		printf("WM_IME_REQUEST: %s\n", req);
+		#endif
+
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
 	case WM_SETFOCUS: //Triggered, for example, when the user clicks and generates a WM_XBUTTONDOWN
 	case WM_KILLFOCUS:
 	{
