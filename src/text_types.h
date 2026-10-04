@@ -269,8 +269,6 @@ struct State : WindowState {
 
 	bool on_mouse_tracking;//true when capturing the mouse while the user remains with left click down
 
-	HGLOBAL clipboard_handle;
-
 	bool hide_IME_wnd;
 	bool ignore_IME_candidates;
 

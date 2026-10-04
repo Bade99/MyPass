@@ -95,16 +95,11 @@ auto char_idx_to_line_char_idx(const State& state, size_t char_idx) {
 
 	res.line_idx = 0;
 	if (res.line_char_idx) {
-		u64 line_idx_estimate = (u64)safe_ratio0((f64)res.line_char_idx, (f64)state.char_text.size()) * safe_subtract0(state.line_breaks.size(), 1);
-		i64 increment = state.line_breaks[line_idx_estimate] < res.line_char_idx ? +1 : -1;
-
-		for (u64 i = line_idx_estimate; i < state.line_breaks.size(); i += increment) {
-			if (state.line_breaks[i] == res.line_char_idx - 1) {
-				if (char_idx == state.line_breaks[i]) res.line_idx = i;
-				else res.line_idx = i + 1;
-				break;
-				//TODO(fran): this code sucks, as well as its use in calc_caret_p, this NEEDS a redesign. Look at the selection rendering code for inspiration, since it does the exact same thing, I should be able to reuse it somehow
-			}
+		auto line_break = std::lower_bound(state.line_breaks.begin(), state.line_breaks.end(), res.line_char_idx - 1);
+		if (line_break != state.line_breaks.end() && *line_break == res.line_char_idx - 1) {
+			u64 line_idx = line_break - state.line_breaks.begin();
+			if (char_idx == *line_break) res.line_idx = line_idx;
+			else res.line_idx = line_idx + 1;
 		}
 	}
 	//TODO(fran): now I need to know the line idx, I guess the cache wasnt so pointless after all, although this search pattern may even be faster if I now add a hash table to store a mapping line_char_idx -> line_idx (remember to remove the -1 before using it on the hash table though)
@@ -380,12 +375,13 @@ void push_to_history(State& state, text_edit_entry& history_entry) { //TODO(fran
 }
 
 template<bool AffectHistory = true>
-void remove_selection(State& state, size_t x_min, size_t x_max) {
+bool remove_selection(State& state, size_t x_min, size_t x_max) {
 	if (!state.char_text.empty()) {
 		auto selection_before = state.selection;
 
 		x_min = clamp((size_t)0, x_min, state.char_text.length());
 		x_max = clamp((size_t)0, x_max, state.char_text.length());
+		if (x_min == x_max) return false;
 		size_t x_cnt = distance(x_min, x_max);
 
 		str removed_text;
@@ -394,9 +390,9 @@ void remove_selection(State& state, size_t x_min, size_t x_max) {
 		state.char_text.erase(x_min, x_cnt);
 		state.char_dims.erase(state.char_dims.begin() + x_min, state.char_dims.begin() + x_max);
 
-		update_char_pad(state);
-
 		recalculate_line_breaks(state);
+
+		update_char_pad(state);
 
 		set_selection(state, x_min, x_min);
 
@@ -413,12 +409,14 @@ void remove_selection(State& state, size_t x_min, size_t x_max) {
 			};
 			push_to_history(state, history_entry);
 		}
+		return true;
 	}
+	return false;
 }
-template<bool AffectHistory = true> void remove_selection(State& state, char_sel selection) { remove_selection<AffectHistory>(state, selection.x_min(), selection.x_max()); }
+template<bool AffectHistory = true> bool remove_selection(State& state, char_sel selection) { return remove_selection<AffectHistory>(state, selection.x_min(), selection.x_max()); }
 
 //Removes the current text selection and updates the selection values
-template<bool AffectHistory = true> void remove_selection(State& state) { remove_selection<AffectHistory>(state, state.selection.x_min(), state.selection.x_max()); }
+template<bool AffectHistory = true> bool remove_selection(State& state) { return remove_selection<AffectHistory>(state, state.selection.x_min(), state.selection.x_max()); }
 
 
 //true if text modified, false otherwise
@@ -430,7 +428,8 @@ bool insert_character(State& state, utf16_str s, size_t x_min, size_t x_max) {
 	bool res = false;
 	const char_sel sel{ clamp((size_t)0, x_min, state.char_text.length()), clamp((size_t)0, x_max, state.char_text.length()) };
 
-	if (safe_subtract0(state.char_text.length(), sel.sel_width()) < state.char_max_sz) {
+	u64 text_length_after_removal = safe_subtract0(state.char_text.length(), sel.sel_width());
+	if (text_length_after_removal <= state.char_max_sz && s.cnt() <= state.char_max_sz - text_length_after_removal) {
 
 		//check for invalid characters
 		if (state.functions.has_invalid_chars) {//TODO(fran): +1 for having always valid function pointers, we could branch on valid on invalid instead we gotta hack in a return statement in the middle of the code
@@ -635,43 +634,45 @@ bool end_IME_composition(State& state) {
 	return committed_change;
 }
 
-void copy_selection(State& state, char_sel selection) {
+bool copy_selection(State& state, char_sel selection) {
 	//Copy text from current selection to clipboard
-	if (selection.has_selection()) {
-		if (OpenClipboard(state.wnd)) {
-			defer{ CloseClipboard(); };
-			HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, (selection.sel_width() + 1) * sizeof(state.char_text[0])); Assert(mem);//TODO(fran): runtime_assert ?
+	if (!selection.has_selection() || !OpenClipboard(state.wnd)) return false;
+	defer{ CloseClipboard(); };
 
-			{
-				void* txt = GlobalLock(mem); Assert(txt); defer{ GlobalUnlock(mem); };
+	HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, (selection.sel_width() + 1) * sizeof(state.char_text[0]));
+	if (!mem) return false;
 
-				memcpy(txt, state.char_text.c_str() + selection.x_min(), selection.sel_width() * sizeof(state.char_text[0]));//copy selection
-				((decltype(&state.char_text[0]))txt)[selection.sel_width() + 1] = 0;//null terminate
-
-				state.history_helper.break_group();
-			}
-
-			EmptyClipboard();
-			auto setclipret = SetClipboardData(clipboard_format, mem);
-
-			if (!setclipret) GlobalFree(mem);//free mem if for some reason we fail to set the clipboard with our data
-			else state.clipboard_handle = mem;//store handle so we can free it on WM_DESTROYCLIPBOARD
-		}
+	void* txt = GlobalLock(mem);
+	if (!txt) {
+		GlobalFree(mem);
+		return false;
 	}
+
+	memcpy(txt, state.char_text.c_str() + selection.x_min(), selection.sel_width() * sizeof(state.char_text[0]));//copy selection
+	((decltype(&state.char_text[0]))txt)[selection.sel_width()] = 0;//null terminate
+	GlobalUnlock(mem);
+
+	if (!EmptyClipboard() || !SetClipboardData(clipboard_format, mem)) {
+		GlobalFree(mem);
+		return false;
+	}
+
+	state.history_helper.break_group();
+	return true;
 }
-void copy_selection(State& state) { copy_selection(state, state.selection); }
+bool copy_selection(State& state) { return copy_selection(state, state.selection); }
 
 //NOTE: pasting from the clipboard establishes a couple of invariants: lines end with \r\n, there's a null terminator, we gotta parse it carefully cause who knows whats inside
 bool paste_dirty_text(State& state, const cstr* txt) { //returns true if it could paste something
 	bool res = false;
-	size_t char_sz = cstr_len(txt);//does not include null terminator
-	if ((size_t)state.char_max_sz < state.char_text.length() + char_sz) {
-		char_sz -= (state.char_text.length() + char_sz - (size_t)state.char_max_sz);
-	}
+	u64 text_length_after_removal = safe_subtract0(state.char_text.length(), state.selection.sel_width());
+	u64 available_char_count = text_length_after_removal <= state.char_max_sz ? state.char_max_sz - text_length_after_removal : 0;
+	size_t char_sz = minimum(cstr_len(txt), (size_t)minimum(available_char_count, (u64)SIZE_MAX));//does not include null terminator
 	if (char_sz > 0) {
 		//TODO(fran): remove illegal chars (we dont know what could be inside), remove newlines if multiline is not set
+		str text(txt, char_sz);
 		state.history_helper.record_transient_edit(text_edit_entry::kind::paste);
-		res = insert_character(state, txt);
+		res = insert_character(state, to_utf_str(text), state.selection.x_min(), state.selection.x_max());
 	}
 	return res;
 }
@@ -694,10 +695,9 @@ void paste(State& state) {
 
 void cut_selection(State& state) {
 	bool en_change = false; defer{ if (en_change) { notify_parent(state, EN_CHANGE); state.history_helper.break_group(); } };
-	copy_selection(state);
-	if (state.selection.has_selection()) en_change = true;
+	if (!state.selection.has_selection() || !copy_selection(state)) return;
 	state.history_helper.record_transient_edit(text_edit_entry::kind::cut);
-	remove_selection(state);
+	en_change = remove_selection(state);
 }
 
 bool undo(State& state) {
@@ -743,10 +743,12 @@ bool set_text(State& state, cstr* buf) {
 		state.history_helper.record_transient_edit(text_edit_entry::kind::programmatic);
 		res = insert_character(state, txt, 0, -1);
 
-		state.history_helper.break_group();
-		if constexpr (ClearHistory) state.history.clear();
+		if (res) {
+			state.history_helper.break_group();
+			if constexpr (ClearHistory) state.history.clear();
 
-		ask_window_for_repaint(state.wnd);//TODO(fran): probably unnecessary
+			ask_window_for_repaint(state.wnd);//TODO(fran): probably unnecessary
+		}
 	}
 	return res;
 }
@@ -1525,24 +1527,22 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		{
 			if (!state.char_text.empty()) {
 				state.history_helper.record_transient_edit(text_edit_entry::kind::delete_forward);
-				if (state.selection.has_selection()) remove_selection(state);
+				if (state.selection.has_selection()) en_change = remove_selection(state);
 				else {
 					if (ctrl_is_down && shift_is_down) {//delete everything til end of the line
-						remove_selection(state, state.selection.cursor, state.char_text.length());
+						en_change = remove_selection(state, state.selection.cursor, state.char_text.length());
 					}
 					else if (ctrl_is_down) {//delete everything up to the next stopper
-						remove_selection(state, state.selection.cursor, find_stopper(to_utf_str(state.char_text), state.selection.cursor, +1));
+						en_change = remove_selection(state, state.selection.cursor, find_stopper(to_utf_str(state.char_text), state.selection.cursor, +1));
 					}
 					else if (shift_is_down) {//save whole line to clipboard and then delete it
 						auto sel_all = make_selection(state, 0, -1);
-						copy_selection(state, sel_all);
-						remove_selection(state, sel_all);
+						if (copy_selection(state, sel_all)) en_change = remove_selection(state, sel_all);
 					}
 					else if (state.selection.cursor < state.char_text.length()) {
-						remove_selection(state, state.selection.cursor, state.selection.cursor + 1);//delete character in front of the cursor
+						en_change = remove_selection(state, state.selection.cursor, state.selection.cursor + 1);//delete character in front of the cursor
 					}
 				}
-				en_change = true;
 			}
 		} break;
 		case VK_BACK://Backspace
@@ -1551,13 +1551,12 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//		eg: keyboard sequence: a´a -> aá ; a´backspace -> a
 			if (!state.char_text.empty()) {
 				state.history_helper.record_transient_edit(text_edit_entry::kind::backspace);
-				if (state.selection.has_selection()) remove_selection(state);
+				if (state.selection.has_selection()) en_change = remove_selection(state);
 				else {
-					if (ctrl_is_down && shift_is_down) remove_selection(state, 0, state.selection.cursor); //Remove every character from cursor to line start
-					else if (ctrl_is_down) remove_selection(state, find_stopper(to_utf_str(state.char_text), state.selection.cursor, -1), state.selection.cursor);
-					else if (state.selection.cursor > 0) remove_selection(state, state.selection.cursor - 1, state.selection.cursor);
+					if (ctrl_is_down && shift_is_down) en_change = remove_selection(state, 0, state.selection.cursor); //Remove every character from cursor to line start
+					else if (ctrl_is_down) en_change = remove_selection(state, find_stopper(to_utf_str(state.char_text), state.selection.cursor, -1), state.selection.cursor);
+					else if (state.selection.cursor > 0) en_change = remove_selection(state, state.selection.cursor - 1, state.selection.cursor);
 				}
-				en_change = true;
 			}
 		} break;
 		case _t('a'):
@@ -1934,7 +1933,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		cstr* text = (cstr*)lparam;
 
-		memcpy_s(state.placeholder, sizeof(state.placeholder), text, (cstr_len(text) + 1) * sizeof(*text));
+		string_copy(state.placeholder, text ? str_view{ text } : str_view{});
 		if (is_placeholder_visible(state)) ask_window_for_repaint(state.wnd);
 		return 1;
 	} break;
@@ -2040,23 +2039,21 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		DWORD* start = (decltype(start))wparam;
 		DWORD* end = (decltype(end))lparam;
+		auto selection_start = state.selection.x_min();
+		auto selection_end = state.selection.x_max();
 
-		if (start) *start = (DWORD)state.selection.x_min();
-		if (end) *end = (DWORD)state.selection.x_max();
+		if (start) *start = (DWORD)selection_start;
+		if (end) *end = (DWORD)selection_end;
 
-		return -1;//TODO(fran): support for 16bit, should return zero-based value with the starting position of the selection in the LOWORD and the position of the first TCHAR after the last selected TCHAR in the HIWORD. If either of these values exceeds 65535 then the return value is -1.
+		if (selection_start > U16MAX || selection_end > U16MAX) return -1;
+		return MAKELONG((WORD)selection_start, (WORD)selection_end);
 	} break;
 	case WM_CAPTURECHANGED://We're losing mouse capture
 	{
 		state.on_mouse_tracking = false;
 		return 0;
 	} break;
-	case WM_DESTROYCLIPBOARD:
-	{
-		GlobalFree(state.clipboard_handle);//TODO(fran): should I zero clipboard_handle?
-		//TODO(fran): this and storing the clipboard_handle are actually pointless, windows now owns and knows how to free our clipboard data so we should actually _not_ give it our handle when we OpenClipboard() and this extra work should solve itself
-		return 0;
-	} break;
+	case WM_DESTROYCLIPBOARD: return 0;
 	case WM_RENDERALLFORMATS:
 	{
 		//When our application is about to be closed windows requests that we "render" all the clipboard formats that we have previously set
