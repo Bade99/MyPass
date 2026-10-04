@@ -662,15 +662,62 @@ bool copy_selection(State& state, char_sel selection) {
 }
 bool copy_selection(State& state) { return copy_selection(state, state.selection); }
 
-//NOTE: pasting from the clipboard establishes a couple of invariants: lines end with \r\n, there's a null terminator, we gotta parse it carefully cause who knows whats inside
-bool paste_dirty_text(State& state, const cstr* txt) { //returns true if it could paste something
+bool is_high_surrogate(utf16 c) { return c >= 0xd800 && c <= 0xdbff; }
+bool is_low_surrogate(utf16 c) { return c >= 0xdc00 && c <= 0xdfff; }
+
+str sanitize_pasted_text(str_view dirty_text, size_t max_char_count, bool multiline) {
+	str text;
+	text.reserve(minimum(dirty_text.size(), max_char_count));
+
+	auto append_character = [&](utf16 c) {
+		if (text.size() >= max_char_count) return false;
+		text.push_back(c);
+		return true;
+	};
+	auto append_line_break = [&]() { return append_character(multiline ? _t('\n') : _t(' ')); };
+
+	for (size_t i = 0; i < dirty_text.size();) {
+		utf16 c = dirty_text[i++];
+		if (!c) break;
+
+		if (c == _t('\r')) {
+			if (i < dirty_text.size() && dirty_text[i] == _t('\n')) i++;
+			if (!append_line_break()) break;
+		}
+		else if (c == _t('\n') || c == _t('\v') || c == _t('\f') || c == 0x0085 || c == 0x2028 || c == 0x2029) {
+			if (!append_line_break()) break;
+		}
+		else if (c == _t('\t')) {
+			if (!append_character(_t(' '))) break;
+		}
+		else if (c < 0x20 || (c >= 0x7f && c <= 0x9f)) {
+			continue;
+		}
+		else if (is_high_surrogate(c)) {
+			if (i < dirty_text.size() && is_low_surrogate(dirty_text[i])) {
+				if (max_char_count - text.size() < 2) break;
+				text.push_back(c);
+				text.push_back(dirty_text[i++]);
+			}
+			else if (!append_character(0xfffd)) break;
+		}
+		else if (is_low_surrogate(c)) {
+			if (!append_character(0xfffd)) break;
+		}
+		else if (!append_character(c)) break;
+	}
+
+	return text;
+}
+
+bool paste_dirty_text(State& state, str_view dirty_text) { //returns true if it could paste something
 	bool res = false;
 	u64 text_length_after_removal = safe_subtract0(state.char_text.length(), state.selection.sel_width());
 	u64 available_char_count = text_length_after_removal <= state.char_max_sz ? state.char_max_sz - text_length_after_removal : 0;
-	size_t char_sz = minimum(cstr_len(txt), (size_t)minimum(available_char_count, (u64)SIZE_MAX));//does not include null terminator
-	if (char_sz > 0) {
-		//TODO(fran): remove illegal chars (we dont know what could be inside), remove newlines if multiline is not set
-		str text(txt, char_sz);
+	size_t max_char_count = (size_t)minimum(available_char_count, (u64)SIZE_MAX);
+	bool multiline = GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_MULTILINE;
+	str text = sanitize_pasted_text(dirty_text, max_char_count, multiline);
+	if (!text.empty()) {
 		state.history_helper.record_transient_edit(text_edit_entry::kind::paste);
 		res = insert_character(state, to_utf_str(text), state.selection.x_min(), state.selection.x_max());
 	}
@@ -686,7 +733,15 @@ void paste(State& state) {
 			if (HGLOBAL clipboard = GetClipboardData(clipboard_format)) {
 				if (cstr* clipboard_txt = (cstr*)GlobalLock(clipboard)) {
 					defer{ GlobalUnlock(clipboard); };
-					en_change = paste_dirty_text(state, clipboard_txt); //TODO(fran): this should be separated into two fns, a general paste fn and first a sanitizer for anything strange that may be in the clipboard txt
+					SIZE_T clipboard_byte_count = GlobalSize(clipboard);
+					if (clipboard_byte_count && clipboard_byte_count % sizeof(*clipboard_txt) == 0) {
+						size_t clipboard_char_capacity = clipboard_byte_count / sizeof(*clipboard_txt);
+						const cstr* clipboard_start = clipboard_txt;
+						const cstr* clipboard_end = clipboard_start + clipboard_char_capacity;
+						const cstr* null_terminator = std::find(clipboard_start, clipboard_end, (cstr)0);
+						if (null_terminator != clipboard_end)
+							en_change = paste_dirty_text(state, str_view{ clipboard_start, (size_t)(null_terminator - clipboard_start) });
+					}
 				}
 			}
 		}
