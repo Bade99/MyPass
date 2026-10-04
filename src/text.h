@@ -225,19 +225,6 @@ void reposition_caret(State& state, bool nocheck = false) {
 	//if(GetFocus() == state.wnd) SetCaretPos(state.caret.pos); //NOTE: this introduced a bug with settext where calling settext with a null string on the focussed editbox would place the caret on the wrong place
 }
 
-void recalculate_char_dims(State& state) {
-	state.char_dims.clear();
-	for (auto c : state.char_text)
-		state.char_dims.push_back(calc_char_dim(state, c).cx);
-	reposition_caret(state);
-}
-
-void set_theme(HWND wnd, const Theme& src) {
-	auto old_font = GetWindowFont(wnd);
-	_control_create_function__set_theme;
-	if (&state && old_font != state.theme.font) recalculate_char_dims(state);
-}
-
 void update_char_pad(State& state) {
 	LONG_PTR style = GetWindowLongPtr(state.wnd, GWL_STYLE);
 	RECT rc; GetClientRect(state.wnd, &rc);
@@ -252,6 +239,20 @@ void update_char_pad(State& state) {
 		state.padding.x = 3; //TODO(fran): user defined and 'dpi pixels' based
 	}
 	state.padding.y = !state.line_breaks.size() ? (rc.bottom + rc.top - tm.tmHeight) / 2 : rc.top + (RECTH(rc) % tm.tmHeight) / 2; //TODO(fran): provide additional styles so the user can change vertical alignment
+}
+
+void recalculate_char_dims(State& state) {
+	state.char_dims.clear();
+	for (auto c : state.char_text)
+		state.char_dims.push_back(calc_char_dim(state, c).cx);
+	update_char_pad(state);
+	reposition_caret(state);
+}
+
+void set_theme(HWND wnd, const Theme& src) {
+	auto old_font = GetWindowFont(wnd);
+	_control_create_function__set_theme;
+	if (&state && old_font != state.theme.font) recalculate_char_dims(state);
 }
 
 void recalculate_line_breaks(State& state) {
@@ -1490,6 +1491,17 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		stop_caret_blinking(state);
 
 		return 0;
+	} break;
+	case WM_GETDLGCODE:
+	{
+		LRESULT dialog_code = DLGC_WANTCHARS | DLGC_WANTARROWS | DLGC_HASSETSEL;
+		MSG* key_message = (MSG*)lparam;
+		if (key_message && key_message->message == WM_KEYDOWN &&
+			(key_message->wParam == VK_RETURN || key_message->wParam == VK_ESCAPE))
+		{
+			dialog_code |= DLGC_WANTMESSAGE;
+		}
+		return dialog_code;
 	} break;
 	case WM_KEYDOWN://When the user presses a non-system key this is the 1st msg we receive
 	{
