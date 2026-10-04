@@ -155,6 +155,16 @@ struct text_edit_entry {
 	size_t memory_size() const { return sizeof(*this) + (removed_text.capacity() + inserted_text.capacity()) * sizeof(decltype(removed_text)::value_type); }
 };
 
+struct ime_composition_state {
+	bool active;
+	bool document_replaced;
+	bool has_result;
+
+	size_t position_x_min;
+	str removed_text, committed_text, provisional_text;
+	char_sel selection_before;
+};
+
 struct undo_merge_state {
 	/*
 	Usage:
@@ -248,6 +258,7 @@ struct State : WindowState {
 
 	undo_history<text_edit_entry> history;
 	undo_merge_state history_helper;
+	ime_composition_state ime_composition;
 
 	v2_i32 padding; //NOTE: x,y offset from where characters start being placed on the screen, relative to the client area, positive values 'shrink' the rendering area. For a left aligned control this will be offset from the left, for right aligned it'll be offset from the right, and for center alignment it'll be the left most position from where chars will be drawn
 

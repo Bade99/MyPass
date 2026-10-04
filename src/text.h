@@ -508,6 +508,133 @@ bool insert_character(State& state, const utf16* s) {
 	return res;
 }
 
+void begin_IME_composition(State& state) {
+	auto& composition = state.ime_composition;
+	Assert(!composition.active);
+
+	composition.active = true;
+	composition.document_replaced = false;
+	composition.has_result = false;
+	composition.position_x_min = state.selection.x_min();
+	composition.selection_before = state.selection;
+	composition.committed_text.clear();
+	composition.provisional_text.clear();
+
+	if (state.selection.has_selection())
+		composition.removed_text.assign(state.char_text, state.selection.x_min(), state.selection.sel_width());
+	else
+		composition.removed_text.clear();
+
+	state.history_helper.break_group();
+}
+
+bool get_IME_string(HIMC imc, DWORD index, str& text) {
+	LONG byte_count = ImmGetCompositionString(imc, index, nil, 0);
+	if (byte_count < 0 || byte_count % sizeof(utf16))
+		return false;
+
+	text.resize(byte_count / sizeof(utf16));
+	if (!byte_count)
+		return true;
+
+	LONG written_byte_count = ImmGetCompositionString(imc, index, text.data(), byte_count);
+	if (written_byte_count < 0 || written_byte_count % sizeof(utf16))
+		return false;
+
+	text.resize(written_byte_count / sizeof(utf16));
+	return true;
+}
+
+bool replace_IME_provisional_text(State& state, str& text) {
+	auto& composition = state.ime_composition;
+	Assert(composition.active);
+
+	size_t x_min = composition.position_x_min + composition.committed_text.length();
+	size_t x_max = composition.document_replaced ?
+		x_min + composition.provisional_text.length() :
+		composition.position_x_min + composition.removed_text.length();
+
+	if (!insert_character<false>(state, to_utf_str(text), x_min, x_max))
+		return false;
+
+	composition.document_replaced = true;
+	composition.provisional_text = text;
+	set_selection(state, x_min, x_min + text.length());
+	return true;
+}
+
+bool commit_IME_result(State& state, str& result) {
+	auto& composition = state.ime_composition;
+	Assert(composition.active);
+
+	size_t x_min = composition.position_x_min + composition.committed_text.length();
+	size_t x_max = composition.document_replaced ?
+		x_min + composition.provisional_text.length() :
+		composition.position_x_min + composition.removed_text.length();
+
+	if (!insert_character<false>(state, to_utf_str(result), x_min, x_max))
+		return false;
+
+	composition.document_replaced = true;
+	composition.has_result = true;
+	composition.committed_text += result;
+	composition.provisional_text.clear();
+	set_selection(state, x_min + result.length(), x_min + result.length());
+	return true;
+}
+
+bool end_IME_composition(State& state) {
+	auto& composition = state.ime_composition;
+	if (!composition.active)
+		return false;
+
+	bool committed_change = false;
+	if (composition.has_result) {
+		if (!composition.provisional_text.empty()) {
+			size_t x_min = composition.position_x_min + composition.committed_text.length();
+			str empty_text;
+			if (!insert_character<false>(state, to_utf_str(empty_text), x_min, x_min + composition.provisional_text.length()))
+				Assert(0);
+			composition.provisional_text.clear();
+		}
+
+		set_selection(state,
+			composition.position_x_min + composition.committed_text.length(),
+			composition.position_x_min + composition.committed_text.length());
+
+		if (composition.removed_text != composition.committed_text) {
+			text_edit_entry history_entry{
+				.edit_kind = text_edit_entry::kind::ime,
+				.position_x_min = composition.position_x_min,
+				.removed_text = composition.removed_text,
+				.inserted_text = composition.committed_text,
+				.selection_before = composition.selection_before,
+				.selection_after = state.selection,
+			};
+			state.history_helper.record_transient_edit(text_edit_entry::kind::ime);
+			push_to_history(state, history_entry);
+			committed_change = true;
+		}
+	}
+	else if (composition.document_replaced) {
+		size_t inserted_length = composition.committed_text.length() + composition.provisional_text.length();
+		if (!insert_character<false>(state, to_utf_str(composition.removed_text),
+			composition.position_x_min, composition.position_x_min + inserted_length))
+			Assert(0);
+		set_selection(state, composition.selection_before);
+	}
+
+	composition.active = false;
+	composition.document_replaced = false;
+	composition.has_result = false;
+	composition.removed_text.clear();
+	composition.committed_text.clear();
+	composition.provisional_text.clear();
+	state.ignore_IME_candidates = false;
+	state.history_helper.break_group();
+	return committed_change;
+}
+
 void copy_selection(State& state, char_sel selection) {
 	//Copy text from current selection to clipboard
 	if (selection.has_selection()) {
@@ -895,6 +1022,9 @@ void init_cpp_objects(State& state) {
 	state.char_dims = std::vector<int>();
 	state.line_breaks = decltype(state.line_breaks)();
 	state.history = decltype(state.history)();
+	state.ime_composition.removed_text = str();
+	state.ime_composition.committed_text = str();
+	state.ime_composition.provisional_text = str();
 }
 
 void release_cpp_objects(State& state) {
@@ -902,6 +1032,9 @@ void release_cpp_objects(State& state) {
 	state.char_text.~basic_string();
 	state.line_breaks.~vector();
 	state.history.release();
+	state.ime_composition.removed_text.~basic_string();
+	state.ime_composition.committed_text.~basic_string();
+	state.ime_composition.provisional_text.~basic_string();
 }
 
 //Renders the selection box corresponding to only one line
@@ -1680,7 +1813,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//If an application has created an IME window, it should pass this message to that window.The DefWindowProc function processes the message by passing it to the default IME window.
 		set_composition_pos(state);
 		set_composition_font(state);//TODO(fran): should I place this somewhere else?
-		state.history_helper.break_group();
+		if (state.ime_composition.active) {
+			bool en_change = end_IME_composition(state);
+			if (en_change) notify_parent(state, EN_CHANGE);
+		}
+		begin_IME_composition(state);
 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
@@ -1705,12 +1842,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		if (lparam & GCS_RESULTSTR) { change = "GCS_RESULTSTR"; printf("%s\n", change); }
 		if (!lparam) { change = "CANCEL IME"; printf("%s\n", change); }
 #endif
-
-		if (state.hide_IME_wnd && lparam & GCS_RESULTSTR) {//the content of the IME has been accepted by the user
-			set_selection(state, state.selection.cursor, state.selection.cursor);//clear selection
-			state.ignore_IME_candidates = false;
-			return 0;//we already have the result string in the editbox
-		}
 
 		if (state.hide_IME_wnd && state.ignore_IME_candidates) {
 			state.ignore_IME_candidates = false;
@@ -1744,40 +1875,36 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		}
 
 
-		DefWindowProc(hwnd, msg, wparam, lparam);//TODO(fran): this will generate WM_CHAR msgs that I dont really want, I can retrieve the composition string right from here, I shouldnt call DefWindowProc
-		bool en_change = false;
+		if (!state.ime_composition.active)
+			begin_IME_composition(state);
 
-		//TODO(fran): find a way to know when the IME was accepted, we dont really want to receive the accepted text as WM_CHAR messages since we already have the text written into the control
-		if (lparam == 0) {
-			//IME was cancelled, delete whatever was written with it
-			if (state.selection.has_selection()) {
-				remove_selection<false>(state);
-				en_change = true;
-			}
+		if (!lparam) {
+			bool en_change = end_IME_composition(state);
+			if (en_change) notify_parent(state, EN_CHANGE);
 		}
-		else {//TODO(fran): check lparam, we may not always want to update the text depending on the code it has
+		else {
 			HIMC imc = ImmGetContext(state.wnd);
 			if (imc != NULL) {
 				defer{ ImmReleaseContext(state.wnd, imc); };
-				//INFO: ImmGetCompositionString: https://cpp.hotexamples.com/examples/-/-/ImmGetCompositionStringW/cpp-immgetcompositionstringw-function-examples.html
-				int szbytes = ImmGetCompositionString(imc, GCS_COMPSTR, 0, 0);//excluding null terminator
-				if (szbytes > 0) {//otherwise gotta handle possible errors
-					utf16* txt;
-					//szbytes += (1 * sizeof(*txt));//include null terminator
-					txt = (decltype(txt))malloc(szbytes + sizeof(*txt)); defer{ free(txt); };
 
-					auto len = ImmGetCompositionString(imc, GCS_COMPSTR, txt, szbytes) / sizeof(*txt);
-					txt[len] = 0;//ImmGetCompositionString does _not_ write the null terminator
+				if (lparam & GCS_RESULTSTR) {
+					str result;
+					if (get_IME_string(imc, GCS_RESULTSTR, result))
+						commit_IME_result(state, result);
+				}
 
-					state.history_helper.record_transient_edit(text_edit_entry::kind::ime);
-					en_change = insert_character(state, txt);
-
-					set_selection(state, safe_subtract0(state.selection.cursor, len), state.selection.cursor);
+				if (lparam & GCS_COMPSTR) {
+					str composition;
+					if (get_IME_string(imc, GCS_COMPSTR, composition))
+						replace_IME_provisional_text(state, composition);
 				}
 			}
 		}
-		if (en_change) notify_parent(state, EN_CHANGE); //There was a change in the text
-		return 0;
+
+		if (state.hide_IME_wnd && lparam & GCS_RESULTSTR)
+			return 0;
+
+		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	case WM_IME_CHAR://WM_CHAR from the IME window, this are generated once the user has pressed enter on the IME window, so more than one char will probably be coming
 	{
@@ -1786,7 +1913,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 #ifndef UNICODE
 		Assert(0);//TODO(fran): DBCS
 #endif 
-		if (!state.hide_IME_wnd) {
+		if (!state.ime_composition.active && !state.hide_IME_wnd) {
 			PostMessage(state.wnd, WM_CHAR, wparam, lparam);
 		}
 
@@ -1794,8 +1921,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_IME_ENDCOMPOSITION://After the chars are sent from the IME window it hides/destroys itself (idk)
 	{
-		//TODO: Handle once we process our own IME
-		state.history_helper.break_group();
+		bool en_change = end_IME_composition(state);
+		if (en_change) notify_parent(state, EN_CHANGE);
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	//case WM_IME_CONTROL: //NOTE: I feel like this should be received by the wndproc of the IME, I dont think I can get DefWndProc to send it there for me
