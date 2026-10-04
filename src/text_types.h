@@ -159,29 +159,29 @@ struct undo_merge_state {
 	/*
 	Usage:
 
-		auto now = std::time(nil);
-
-		if (merge_state.can_merge(edit_type, selection_before, now))
+		if (merge_state.can_merge(edit_type, selection_before))
 			history.update_latest(...);
 		else
 			history.push(...);
 
-		merge_state.record_edit(edit_type, selection_after, now);
+		merge_state.record_edit(edit_type, selection_after);
 	*/
+
+	using clock = std::chrono::steady_clock;
 
 	enum class type { other, typing, backspace, delete_forward, }; //NOTE: vscode uses an extra type: space, breaks operations by a space and never by time, in practice that means that, for languages that use spaces, every undo operation removes the last word and space you typed
 
 	text_edit_entry::kind transient_kind = text_edit_entry::kind::typing;
 	type active_type = type::other;
 	char_sel selection_after{};
-	time64 last_edit_time{};
-	static constexpr u32 max_delay_ms{ 2000 };
+	clock::time_point last_edit_time{};
+	static constexpr auto max_delay_ms = std::chrono::milliseconds{ 2000 };
 
-	bool can_merge(type incoming_type, const char_sel& selection_before, time64 now = std::time(nil)) const {
+	bool can_merge(type incoming_type, const char_sel& selection_before) const {
 		bool same_mergeable_type = active_type == incoming_type && active_type != type::other;
 		bool selections_are_empty = !selection_after.has_selection() && !selection_before.has_selection();
 		bool selection_is_contiguous = selection_after.cursor == selection_before.cursor;
-		bool close_in_time = now - last_edit_time <= max_delay_ms;
+		bool close_in_time = clock::now() - last_edit_time <= max_delay_ms;
 		return same_mergeable_type && selections_are_empty && selection_is_contiguous && close_in_time;
 	}
 
@@ -194,21 +194,21 @@ struct undo_merge_state {
 		}
 	};
 
-	bool can_merge(const char_sel& selection_before, time64 now = std::time(nil)) const {
-		return can_merge(map_kind_to_type(transient_kind), selection_before, now);
+	bool can_merge(const char_sel& selection_before) const {
+		return can_merge(map_kind_to_type(transient_kind), selection_before);
 	}
 
 	void record_transient_edit(text_edit_entry::kind edit_kind) {
 		transient_kind = edit_kind;
 	}
 
-	void record_edit(type edit_type, const char_sel& new_selection_after, time64 now = std::time(nil)) {
+	void record_edit(type edit_type, const char_sel& new_selection_after) {
 		active_type = edit_type;
 		selection_after = new_selection_after;
-		last_edit_time = now;
+		last_edit_time = clock::now();
 	}
-	void record_edit(text_edit_entry::kind edit_kind, const char_sel& new_selection_after, time64 now = std::time(nil)) {
-		record_edit(map_kind_to_type(edit_kind), new_selection_after, now);
+	void record_edit(text_edit_entry::kind edit_kind, const char_sel& new_selection_after) {
+		record_edit(map_kind_to_type(edit_kind), new_selection_after);
 	}
 
 	void break_group() {

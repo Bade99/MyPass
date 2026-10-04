@@ -605,17 +605,19 @@ bool redo(State& state) {
 	return en_change;
 }
 
-bool set_text(State& state, cstr* buf /*null terminated*/) {
+template<bool ClearHistory = true>
+bool set_text(State& state, cstr* buf) {
 	bool res = false;
 	cstr empty_txt = 0;
 	if (!buf) buf = &empty_txt; //NOTE: this is the standard default behaviour
-	auto txt = to_utf_str(buf);
-	if (txt.cnt() <= (size_t)state.char_max_sz) {
+	
+	if (auto txt = to_utf_str(buf); txt.cnt() <= (size_t)state.char_max_sz) {
 		//TODO(fran): settext should check for invalid characters (use paste_dirty_text())
 		state.history_helper.record_transient_edit(text_edit_entry::kind::programmatic);
 		res = insert_character(state, txt, 0, -1);
 
 		state.history_helper.break_group();
+		if constexpr (ClearHistory) state.history.clear();
 
 		ask_window_for_repaint(state.wnd);//TODO(fran): probably unnecessary
 	}
@@ -1215,7 +1217,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		state.on_mouse_tracking = true;
 
 		size_t cursor = point_to_char(state, mouse);
-		set_selection(state, cursor, cursor);
+		set_selection<true>(state, cursor, cursor);
 
 		return 0;
 	} break;
@@ -1223,9 +1225,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		auto text = to_utf_str(state.char_text);
 		//HACK: We assume the mouse hasnt moved much since the first click, therefore we do not need to check the mouse position to find out where the cursor is since the first click already set the cursor position
-		auto left = find_stopper(text, state.selection.cursor + 1, -1);
-		auto right = find_stopper(text, state.selection.cursor ? state.selection.cursor - 1 : 0, +1);
-		set_selection(state, left, right);
+		auto left = find_stopper(text, safe_add(state.selection.cursor, 1), -1);
+		auto right = find_stopper(text, safe_subtract0(state.selection.cursor, 1), +1);
+		set_selection<true>(state, left, right);
 	} break;
 	case WM_LBUTTONUP:
 	{
@@ -1287,6 +1289,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//NOTE(fran): docs says to never display/activate a window here cause we can lock the thread
 
 		DestroyCaret();
+
+		state.history_helper.break_group();
 
 		//We ask for repainting so placeholders and other focus dependent elements con be re-renderered o hidden
 		ask_window_for_repaint(state.wnd);
@@ -1401,7 +1405,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 						copy_selection(state, sel_all);
 						remove_selection(state, sel_all);
 					}
-					else remove_selection(state, state.selection.cursor, state.selection.cursor + 1);//delete character in front of the cursor
+					else if (state.selection.cursor < state.char_text.length()) {
+						remove_selection(state, state.selection.cursor, state.selection.cursor + 1);//delete character in front of the cursor
+					}
 				}
 				en_change = true;
 			}
@@ -1416,7 +1422,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				else {
 					if (ctrl_is_down && shift_is_down) remove_selection(state, 0, state.selection.cursor); //Remove every character from cursor to line start
 					else if (ctrl_is_down) remove_selection(state, find_stopper(to_utf_str(state.char_text), state.selection.cursor, -1), state.selection.cursor);
-					else remove_selection(state, state.selection.cursor - 1, state.selection.cursor);
+					else if (state.selection.cursor > 0) remove_selection(state, state.selection.cursor - 1, state.selection.cursor);
 				}
 				en_change = true;
 			}

@@ -87,6 +87,14 @@ static T signum(T val) {
 	return (T)((T(0) < val) - (val < T(0)));
 }
 
+template<std::unsigned_integral T, std::convertible_to<T> U>
+static T safe_add(T a, U b) {
+	Assert(b > 0);
+	constexpr T max_value = std::numeric_limits<T>::max();
+	T res = (a > max_value - b) ? max_value : a + b;
+	return res;
+}
+
 //returns a - b if a >= b otherwise returns n
 template <typename T, std::convertible_to<T> U>
 static T safe_subtractN(T a, U b, T n) {
