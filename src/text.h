@@ -74,9 +74,154 @@ directwrite_factories& get_directwrite_factories() {
 bool is_high_surrogate(utf16 c);
 bool is_low_surrogate(utf16 c);
 
+struct directwrite_script_run {
+	UINT32 text_start;
+	UINT32 text_length;
+	DWRITE_SCRIPT_ANALYSIS analysis;
+};
+
+struct directwrite_bidi_run {
+	UINT32 text_start;
+	UINT32 text_length;
+	UINT8 resolved_level;
+};
+
+class directwrite_text_analysis : public IDWriteTextAnalysisSource, public IDWriteTextAnalysisSink {
+	LONG reference_count = 1;
+	const utf16* text;
+	UINT32 text_length;
+	DWRITE_READING_DIRECTION reading_direction;
+	utf16 locale_name[LOCALE_NAME_MAX_LENGTH]{};
+
+public:
+	std::vector<directwrite_script_run> script_runs;
+	std::vector<directwrite_bidi_run> bidi_runs;
+
+	directwrite_text_analysis(const utf16* text, UINT32 text_length, DWRITE_READING_DIRECTION reading_direction) :
+		text(text), text_length(text_length), reading_direction(reading_direction)
+	{
+		if (!GetUserDefaultLocaleName(locale_name, ARRAYSIZE(locale_name))) wcscpy_s(locale_name, _t("en-us"));
+	}
+
+	HRESULT STDMETHODCALLTYPE QueryInterface(REFIID interface_id, void** object) override {
+		if (!object) return E_POINTER;
+		*object = nil;
+		if (interface_id == __uuidof(IUnknown) || interface_id == __uuidof(IDWriteTextAnalysisSource))
+			*object = static_cast<IDWriteTextAnalysisSource*>(this);
+		else if (interface_id == __uuidof(IDWriteTextAnalysisSink))
+			*object = static_cast<IDWriteTextAnalysisSink*>(this);
+		else return E_NOINTERFACE;
+		AddRef();
+		return S_OK;
+	}
+	ULONG STDMETHODCALLTYPE AddRef() override { return (ULONG)InterlockedIncrement(&reference_count); }
+	ULONG STDMETHODCALLTYPE Release() override {
+		ULONG references = (ULONG)InterlockedDecrement(&reference_count);
+		if (!references) delete this;
+		return references;
+	}
+	HRESULT STDMETHODCALLTYPE GetTextAtPosition(UINT32 position, const WCHAR** string, UINT32* length) override {
+		if (!string || !length) return E_POINTER;
+		if (position >= text_length) {
+			*string = nil;
+			*length = 0;
+		}
+		else {
+			*string = text + position;
+			*length = text_length - position;
+		}
+		return S_OK;
+	}
+	HRESULT STDMETHODCALLTYPE GetTextBeforePosition(UINT32 position, const WCHAR** string, UINT32* length) override {
+		if (!string || !length) return E_POINTER;
+		if (!position || position > text_length) {
+			*string = nil;
+			*length = 0;
+		}
+		else {
+			*string = text;
+			*length = position;
+		}
+		return S_OK;
+	}
+	DWRITE_READING_DIRECTION STDMETHODCALLTYPE GetParagraphReadingDirection() override { return reading_direction; }
+	HRESULT STDMETHODCALLTYPE GetLocaleName(UINT32 position, UINT32* length, const WCHAR** name) override {
+		if (!length || !name) return E_POINTER;
+		*length = position < text_length ? text_length - position : 0;
+		*name = locale_name;
+		return S_OK;
+	}
+	HRESULT STDMETHODCALLTYPE GetNumberSubstitution(UINT32 position, UINT32* length, IDWriteNumberSubstitution** substitution) override {
+		if (!length || !substitution) return E_POINTER;
+		*length = position < text_length ? text_length - position : 0;
+		*substitution = nil;
+		return S_OK;
+	}
+	HRESULT STDMETHODCALLTYPE SetScriptAnalysis(UINT32 position, UINT32 length, const DWRITE_SCRIPT_ANALYSIS* analysis) override {
+		if (!analysis) return E_POINTER;
+		try { script_runs.push_back({ position, length, *analysis }); }
+		catch (...) { return E_OUTOFMEMORY; }
+		return S_OK;
+	}
+	HRESULT STDMETHODCALLTYPE SetLineBreakpoints(UINT32, UINT32, const DWRITE_LINE_BREAKPOINT*) override { return S_OK; }
+	HRESULT STDMETHODCALLTYPE SetBidiLevel(UINT32 position, UINT32 length, UINT8, UINT8 resolved_level) override {
+		try { bidi_runs.push_back({ position, length, resolved_level }); }
+		catch (...) { return E_OUTOFMEMORY; }
+		return S_OK;
+	}
+	HRESULT STDMETHODCALLTYPE SetNumberSubstitution(UINT32, UINT32, IDWriteNumberSubstitution*) override { return S_OK; }
+};
+
+bool analyze_script_runs(const utf16* text, size_t text_length, bool right_to_left,
+	std::vector<directwrite_script_run>& script_runs, IDWriteTextAnalyzer1** analyzer1 = nil,
+	std::vector<directwrite_bidi_run>* bidi_runs = nil)
+{
+	if (analyzer1) *analyzer1 = nil;
+	if (text_length > (size_t)U32MAX) return false;
+	auto& factories = get_directwrite_factories();
+	if (!factories.write) return false;
+
+	IDWriteTextAnalyzer* analyzer = nil;
+	if (factories.write->CreateTextAnalyzer(&analyzer) != S_OK) return false;
+	defer{ release_com(analyzer); };
+	IDWriteTextAnalyzer1* extended_analyzer = nil;
+	if (analyzer->QueryInterface(__uuidof(IDWriteTextAnalyzer1), (void**)&extended_analyzer) != S_OK) return false;
+	defer{ release_com(extended_analyzer); };
+
+	auto analysis = new (std::nothrow) directwrite_text_analysis(text, (UINT32)text_length,
+		right_to_left ? DWRITE_READING_DIRECTION_RIGHT_TO_LEFT : DWRITE_READING_DIRECTION_LEFT_TO_RIGHT);
+	if (!analysis) return false;
+	HRESULT result = analyzer->AnalyzeScript(analysis, 0, (UINT32)text_length, analysis);
+	if (result == S_OK && bidi_runs) result = analyzer->AnalyzeBidi(analysis, 0, (UINT32)text_length, analysis);
+	if (result == S_OK) script_runs = std::move(analysis->script_runs);
+	if (result == S_OK && bidi_runs) *bidi_runs = std::move(analysis->bidi_runs);
+	analysis->Release();
+	if (result != S_OK) return false;
+	if (analyzer1) {
+		*analyzer1 = extended_analyzer;
+		extended_analyzer = nil;
+	}
+	return true;
+}
+
+bool script_is_neutral(UINT32 script) {
+	return script == DWRITE_MAKE_OPENTYPE_TAG('Z','y','y','y') ||
+		script == DWRITE_MAKE_OPENTYPE_TAG('Z','i','n','h') ||
+		script == DWRITE_MAKE_OPENTYPE_TAG('Z','z','z','z');
+}
+
 bool line_is_right_to_left(const State& state, const utf16* text, size_t text_length, bool password) {
 	if (password) return false;
-	if (GetWindowLongPtr(state.wnd, GWL_EXSTYLE) & WS_EX_RTLREADING) return true;
+	LONG_PTR extended_style = GetWindowLongPtr(state.wnd, GWL_EXSTYLE);
+	bool layout_rtl = extended_style & WS_EX_LAYOUTRTL;
+	bool reading_rtl = extended_style & WS_EX_RTLREADING;
+	if (layout_rtl || reading_rtl) return layout_rtl != reading_rtl;
+
+	std::vector<directwrite_script_run> script_runs;
+	std::vector<directwrite_bidi_run> bidi_runs;
+	IDWriteTextAnalyzer1* script_analyzer = nil;
+	analyze_script_runs(text, text_length, false, script_runs, &script_analyzer, &bidi_runs);
+	defer{ release_com(script_analyzer); };
 
 	for (size_t i = 0; i < text_length;) {
 		int code_unit_count = i + 1 < text_length && is_high_surrogate(text[i]) && is_low_surrogate(text[i + 1]) ? 2 : 1;
@@ -86,6 +231,21 @@ bool line_is_right_to_left(const State& state, const utf16* text, size_t text_le
 				if (character_types[code_unit] == C2_LEFTTORIGHT) return false;
 				if (character_types[code_unit] == C2_RIGHTTOLEFT) return true;
 			}
+		}
+		for (const auto& run : script_runs) {
+			if (i < run.text_start || i >= (size_t)run.text_start + run.text_length) continue;
+			if (script_analyzer) {
+				DWRITE_SCRIPT_PROPERTIES properties{};
+				if (script_analyzer->GetScriptProperties(run.analysis, &properties) == S_OK) {
+					if (script_is_neutral(properties.isoScriptCode)) break;
+					for (const auto& bidi_run : bidi_runs) {
+						if (i < bidi_run.text_start || i >= (size_t)bidi_run.text_start + bidi_run.text_length) continue;
+						return (bidi_run.resolved_level & 1) != 0;
+					}
+					break;
+				}
+			}
+			break;
 		}
 		i += code_unit_count;
 	}
@@ -137,6 +297,11 @@ bool create_line_text_layout(State& state, HDC dc, const text_line_layout& line,
 	if (result != S_OK) return false;
 	(*text_layout)->SetReadingDirection(line.right_to_left ? DWRITE_READING_DIRECTION_RIGHT_TO_LEFT : DWRITE_READING_DIRECTION_LEFT_TO_RIGHT);
 	(*text_layout)->SetFlowDirection(DWRITE_FLOW_DIRECTION_TOP_TO_BOTTOM);
+	DWRITE_TEXT_METRICS metrics{};
+	if ((*text_layout)->GetMetrics(&metrics) == S_OK) {
+		(*text_layout)->SetMaxWidth(maximum(1.f, metrics.widthIncludingTrailingWhitespace));
+		(*text_layout)->SetMaxHeight(maximum(1.f, metrics.height));
+	}
 	return true;
 }
 
@@ -190,20 +355,38 @@ void analyze_line_layout(State& state, HDC dc, text_line_layout& line) {
 			cluster_layout = logical_layout;
 		defer{ release_com(logical_layout); };
 
+		set_fallback_line_boundaries(text, line);
+		std::vector<u8> cluster_boundaries(line.text_length + 1, false);
+		cluster_boundaries[0] = true;
 		UINT32 cluster_count = 0;
 		cluster_layout->GetClusterMetrics(nil, 0, &cluster_count);
 		std::vector<DWRITE_CLUSTER_METRICS> clusters(cluster_count);
 		if (cluster_count && cluster_layout->GetClusterMetrics(clusters.data(), cluster_count, &cluster_count) == S_OK) {
 			size_t boundary = 0;
-			line.caret_stops[0] = true;
 			for (const auto& cluster : clusters) {
 				for (UINT16 i = 0; i < cluster.length && boundary + i < line.text_length; i++)
 					line.whitespace_characters[boundary + i] = cluster.isWhitespace;
 				boundary = minimum(boundary + cluster.length, line.text_length);
-				line.caret_stops[boundary] = true;
+				cluster_boundaries[boundary] = true;
 			}
+
+			std::vector<directwrite_script_run> script_runs;
+			IDWriteTextAnalyzer1* analyzer = nil;
+			if (analyze_script_runs(text, line.text_length, line.right_to_left, script_runs, &analyzer)) {
+				defer{ release_com(analyzer); };
+				for (const auto& run : script_runs) {
+					DWRITE_SCRIPT_PROPERTIES properties{};
+					if (analyzer->GetScriptProperties(run.analysis, &properties) != S_OK || !properties.restrictCaretToClusters)
+						continue;
+					size_t run_start = minimum((size_t)run.text_start, line.text_length);
+					size_t run_end = minimum((size_t)run.text_start + run.text_length, line.text_length);
+					for (size_t caret = run_start + 1; caret < run_end; caret++) line.caret_stops[caret] = false;
+					for (size_t caret = run_start; caret <= run_end; caret++)
+						if (cluster_boundaries[caret]) line.caret_stops[caret] = true;
+				}
+			}
+			else line.caret_stops = std::move(cluster_boundaries);
 		}
-		else set_fallback_line_boundaries(text, line);
 
 		for (UINT32 boundary = 0; boundary <= (UINT32)line.text_length; boundary++) {
 			f32 leading_x = 0, trailing_x = 0, ignored_y = 0;
@@ -221,14 +404,20 @@ void analyze_line_layout(State& state, HDC dc, text_line_layout& line) {
 		}
 	}
 	else {
-		line.right_to_left = false;
 		set_fallback_line_boundaries(text, line);
+		str password_text;
+		if (password) {
+			password_text.assign(line.text_length, password_char);
+			text = password_text.c_str();
+		}
 		std::vector<int> partial_extents(line.text_length);
 		int fit = 0;
 		GetTextExtentExPoint(dc, text, (int)line.text_length, I32MAX, &fit, partial_extents.data(), &line.size);
+		if (line.right_to_left) line.leading_caret_positions[0] = line.trailing_caret_positions[0] = (f32)line.size.cx;
 		for (size_t boundary = 1; boundary <= line.text_length; boundary++) {
-			line.leading_caret_positions[boundary] = (f32)partial_extents[boundary - 1];
-			line.trailing_caret_positions[boundary] = (f32)partial_extents[boundary - 1];
+			f32 position = line.right_to_left ? (f32)(line.size.cx - partial_extents[boundary - 1]) : (f32)partial_extents[boundary - 1];
+			line.leading_caret_positions[boundary] = position;
+			line.trailing_caret_positions[boundary] = position;
 		}
 	}
 
@@ -1288,9 +1477,12 @@ void move_selection(State& state, int direction, bool shift_is_down, bool ctrl_i
 	size_t anchor;
 	text_caret_hit cursor{ state.selection.cursor, state.caret.trailing };
 	if (ctrl_is_down) {
+		auto line_location = char_idx_to_line_char_idx(state, state.selection.cursor);
+		const text_line_layout* line = get_line_layout(state, line_location.line_idx);
+		int logical_direction = line && line->right_to_left ? -direction : direction;
 		cursor.character_index = snap_to_caret_stop(state,
-			find_stopper(to_utf_str(state.char_text), state.selection.cursor, direction), direction);
-		cursor.trailing = direction > 0;
+			find_stopper(to_utf_str(state.char_text), state.selection.cursor, logical_direction), logical_direction);
+		cursor.trailing = logical_direction > 0;
 	}
 	else cursor = move_to_visual_caret_stop(state, cursor, direction);
 
@@ -1445,6 +1637,7 @@ void render_selection(HDC dc, HBRUSH brush, char_sel sel, State& state, int yPos
 		urender::FillRectAlpha(dc, selection, GetRValue(sel_col), GetGValue(sel_col), GetBValue(sel_col), 128);
 	};
 
+	bool text_selection_rendered = false;
 	UINT32 metric_count = 0;
 	if (text_layout && local_end > local_start) {
 		text_layout->HitTestTextRange((UINT32)local_start, (UINT32)(local_end - local_start), 0, 0, nil, 0, &metric_count);
@@ -1454,13 +1647,26 @@ void render_selection(HDC dc, HBRUSH brush, char_sel sel, State& state, int yPos
 		{
 			for (const auto& metric : metrics)
 				draw_rectangle(metric.left, metric.top, metric.left + metric.width, metric.top + metric.height);
-			return;
+			text_selection_rendered = true;
 		}
 	}
 
-	f32 start_x = line_caret_x(*line, local_start, false);
-	f32 end_x = line_caret_x(*line, local_end, true);
-	draw_rectangle(minimum(start_x, end_x), 0, maximum(start_x, end_x), (f32)state.caret.dim.cy);
+	if (!text_selection_rendered && local_end > local_start) {
+		f32 start_x = line_caret_x(*line, local_start, false);
+		f32 end_x = line_caret_x(*line, local_end, true);
+		draw_rectangle(minimum(start_x, end_x), 0, maximum(start_x, end_x), (f32)state.caret.dim.cy);
+	}
+
+	size_t newline_index = line->text_start + line->text_length;
+	bool newline_selected = line_index < state.line_breaks.size() && sel.x_min() <= newline_index && sel.x_max() > newline_index;
+	if (newline_selected) {
+		SIZE space_size{};
+		GetTextExtentPoint32(dc, _t(" "), 1, &space_size);
+		f32 end_x = line_caret_x(*line, line->text_length, true);
+		f32 width = (f32)maximum(space_size.cx, 1L);
+		draw_rectangle(line->right_to_left ? end_x - width : end_x, 0,
+			line->right_to_left ? end_x : end_x + width, (f32)state.caret.dim.cy);
+	}
 	//TODO(fran): benchmark whether doing all the calculations and only rendering one polygon is faster, in which case render_selection would have to take the entire (multiline) selection and convert it into one big polygon
 }
 
@@ -1551,6 +1757,20 @@ void render(State& state, HDC dc) {
 					render_selection(dc, selection_br, selection, state, yPos, line_index, rendered_lines.back().text_layout);
 				yPos += tm.tmHeight;
 			}
+			auto render_line_with_gdi = [&](const rendered_line& line) {
+				str masked_text;
+				const utf16* text = state.char_text.c_str() + line.cached_layout->text_start;
+				if (style & ES_PASSWORD) {
+					if (line.owned_text.size() == line.cached_layout->text_length) text = line.owned_text.c_str();
+					else {
+						masked_text.assign(line.cached_layout->text_length, password_char);
+						text = masked_text.c_str();
+					}
+				}
+				SetTextAlign(dc, TA_LEFT | (line.cached_layout->right_to_left ? TA_RTLREADING : 0));
+				TextOut(dc, line_render_x(state, *line.cached_layout) - state.scroll.x, line.y - state.scroll.y,
+					text, (int)line.cached_layout->text_length);
+			};
 
 			auto& factories = get_directwrite_factories();
 			ID2D1DCRenderTarget* target = nil;
@@ -1583,14 +1803,8 @@ void render(State& state, HDC dc) {
 					directwrite_rendered = target->EndDraw() == S_OK;
 				}
 			}
-			if (!directwrite_rendered) {
-				SetTextAlign(dc, TA_LEFT);
-				for (const auto& line : rendered_lines) {
-					const utf16* text = line.owned_text.empty() ? state.char_text.c_str() + line.cached_layout->text_start : line.owned_text.c_str();
-					TextOut(dc, line_render_x(state, *line.cached_layout) - state.scroll.x, line.y - state.scroll.y,
-						text, (int)line.cached_layout->text_length);
-				}
-			}
+			for (const auto& line : rendered_lines)
+				if (!directwrite_rendered || !line.text_layout) render_line_with_gdi(line);
 			for (auto& line : rendered_lines) release_com(line.text_layout);
 			release_com(text_brush);
 			release_com(target);
