@@ -50,6 +50,7 @@
 
 #include <windows.h>
 #include <windowsx.h>
+#include <usp10.h>
 //#include <uxtheme.h>
 //#include <Shlwapi.h>
 #include <shellapi.h>
@@ -59,6 +60,7 @@
 /**
   * Linker Configuration
   */
+#pragma comment(lib, "Usp10.lib") // complex text shaping, caret placement, and hit testing
 #pragma comment(lib, "comctl32.lib" ) //common controls lib
 //#pragma comment(lib,"shlwapi.lib") //strcpynw 
 //#pragma comment(lib,"UxTheme.lib") // setwindowtheme

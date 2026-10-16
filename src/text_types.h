@@ -165,6 +165,14 @@ struct ime_composition_state {
 	char_sel selection_before;
 };
 
+struct text_line_layout {
+	size_t text_start;
+	size_t text_length;
+	SIZE size;
+	std::vector<int> caret_positions;
+	std::vector<u8> caret_stops;
+};
+
 struct undo_merge_state {
 	/*
 	Usage:
@@ -253,8 +261,8 @@ struct State : WindowState {
 	}caret;
 
 	str char_text;//much simpler to work with and debug
-	std::vector<int> char_dims;//NOTE: specifies, for each character, its width
 	std::vector<size_t> line_breaks; //Indices into the text string where line breaks occur
+	std::vector<text_line_layout> line_layouts;
 
 	undo_history<text_edit_entry> history;
 	undo_merge_state history_helper;
