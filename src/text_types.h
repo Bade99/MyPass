@@ -151,6 +151,7 @@ struct text_edit_entry {
 	str removed_text, inserted_text;
 
 	char_sel selection_before, selection_after; //NOTE: selection_after could be safely inferred
+	bool selection_before_trailing, selection_after_trailing;
 
 	size_t memory_size() const { return sizeof(*this) + (removed_text.capacity() + inserted_text.capacity()) * sizeof(decltype(removed_text)::value_type); }
 };
@@ -163,14 +164,26 @@ struct ime_composition_state {
 	size_t position_x_min;
 	str removed_text, committed_text, provisional_text;
 	char_sel selection_before;
+	bool selection_before_trailing;
+};
+
+struct text_caret_stop {
+	size_t character_index;
+	int x;
+	bool trailing;
 };
 
 struct text_line_layout {
 	size_t text_start;
 	size_t text_length;
 	SIZE size;
-	std::vector<int> caret_positions;
+	bool right_to_left;
+	std::vector<int> leading_caret_positions;
+	std::vector<int> trailing_caret_positions;
 	std::vector<u8> caret_stops;
+	std::vector<u8> word_stops;
+	std::vector<u8> whitespace_characters;
+	std::vector<text_caret_stop> visual_caret_stops;
 };
 
 struct undo_merge_state {
@@ -258,6 +271,7 @@ struct State : WindowState {
 		HBITMAP bmp;
 		SIZE dim;
 		POINT pos;//client coords, it's also top down so this is the _top_ of the caret
+		bool trailing;
 	}caret;
 
 	str char_text;//much simpler to work with and debug
