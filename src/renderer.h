@@ -564,7 +564,8 @@ namespace urender {
 		if (parts.shortcut.empty()) return label_size;
 		auto shortcut_size = measure_text(dc, font, parts.shortcut);
 		auto gap = measure_text(dc, font, L"    ").cx;
-		return { label_size.cx + gap + shortcut_size.cx, maximum(label_size.cy, shortcut_size.cy) };
+		auto right_pad = measure_text(dc, font, L" ").cx;
+		return { label_size.cx + gap + shortcut_size.cx + right_pad, maximum(label_size.cy, shortcut_size.cy) };
 	}
 
 	//Intended for a single line of text
@@ -640,9 +641,10 @@ namespace urender {
 		if (!parts.shortcut.empty()) {
 			auto shortcut_width = measure_text(dc, font, parts.shortcut).cx;
 			auto gap = measure_text(dc, font, L"    ").cx;
-			label_bounds.right = maximum(label_bounds.left, bounds.right - shortcut_width - gap);
+			auto right_pad = measure_text(dc, font, L" ").cx;
+			label_bounds.right = maximum(label_bounds.left, bounds.right - shortcut_width - gap - right_pad);
 			utf16_str shortcut{ const_cast<utf16*>(parts.shortcut.data()), (parts.shortcut.size() + 1) * sizeof(utf16) };
-			draw_text(dc, bounds, shortcut, font, brush, TextAlignment::right, 0);
+			draw_text(dc, bounds, shortcut, font, brush, TextAlignment::right, right_pad);
 		}
 		utf16_str label{ const_cast<utf16*>(parts.label.data()), (parts.label.size() + 1) * sizeof(utf16) };
 		draw_text(dc, label_bounds, label, font, brush, TextAlignment::left, 0);
