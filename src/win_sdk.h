@@ -50,6 +50,9 @@
 
 #include <windows.h>
 #include <windowsx.h>
+#include <dwrite.h>
+#include <dwrite_1.h>
+#include <d2d1.h>
 //#include <uxtheme.h>
 //#include <Shlwapi.h>
 #include <shellapi.h>
@@ -60,6 +63,8 @@
   * Linker Configuration
   */
 #pragma comment(lib, "comctl32.lib" ) //common controls lib
+#pragma comment(lib, "dwrite.lib") // complex text shaping, layout, and hit testing
+#pragma comment(lib, "d2d1.lib") // DirectWrite rendering into the GDI paint target
 //#pragma comment(lib,"shlwapi.lib") //strcpynw 
 //#pragma comment(lib,"UxTheme.lib") // setwindowtheme
 #pragma comment(lib,"Imm32.lib") // IME related stuff
