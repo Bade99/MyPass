@@ -97,20 +97,11 @@ void draw_image(State& state, HDC dc, HBRUSH br, DWORD style, rect_i32& bounds, 
 }
 
 void draw_text(State& state, HDC dc, HBRUSH br, const rect_i32& bounds) {
-	HFONT font = state.theme.font;
-	if (font) SelectFont(dc, font);
-	SetTextColor(dc, ColorFromBrush(br));
-	auto oldbkmode = SetBkMode(dc, TRANSPARENT); defer{ SetBkMode(dc, oldbkmode); };
-	TCHAR title[max_expected_text_length];
-	int len = (int)SendMessage(state.wnd, WM_GETTEXT, ARRAYSIZE(title), (LPARAM)title);
-
-	// Calculate vertical position for the item string so that it will be vertically centered
-	SIZE txt_sz; GetTextExtentPoint32(dc, title, len, &txt_sz);
-	int yPos = (bounds.bottom() + bounds.top - txt_sz.cy) / 2;
-
-	SetTextAlign(dc, TA_CENTER); //TODO(fran): probably we want left aligned when an image is also being rendered?
-	int xPos = (bounds.right() - bounds.left) / 2;
-	TextOut(dc, xPos, yPos, title, len);
+	TCHAR title[max_expected_text_length]{};
+	SendMessage(state.wnd, WM_GETTEXT, ARRAYSIZE(title), (LPARAM)title);
+	RECT text_bounds{ bounds.left, bounds.top, bounds.left + bounds.w, bounds.top + bounds.h };
+	urender::draw_text(dc, text_bounds, to_utf_str(title), state.theme.font, br,
+		urender::TextAlignment::center, 0);
 }
 
 static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -158,7 +149,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 				cstr t[max_expected_text_length];
 				int len = (int)SendMessage(state.wnd, WM_GETTEXT, ARRAYSIZE(t), (LPARAM)t);
 
-				GetTextExtentPoint32(dc, t, len, &res);
+				res = urender::measure_text(dc, state.theme.font, { t, (size_t)len });
 				res.cx = (i32)((f32)res.cx * text_scale_factor);
 				res.cy = (i32)((f32)res.cy * text_scale_factor);
 				return res;
