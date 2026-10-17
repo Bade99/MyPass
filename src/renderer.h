@@ -224,7 +224,7 @@ namespace urender {
 
 	//NOTE: the caller is in charge of handling the hbitmap, including deletion
 	//NOTE: we add an extra limitation, no offsets, we scale the entire bitmap, at least for now to make it simpler to write
-	HBITMAP scale_mask(HBITMAP mask_bmp, int destW, int destH) {
+	HBITMAP scale_mask(HBITMAP mask_bmp, int destination_width, int destination_height) {
 
 		BITMAP masknfo; GetObject(mask_bmp, sizeof(masknfo), &masknfo); Assert(masknfo.bmBitsPixel == 1);
 		MaskImage mask;
@@ -239,8 +239,8 @@ namespace urender {
 		Assert(getbits == mask_sz);
 
 		MaskImage scaled_mask;
-		scaled_mask.width = destW;
-		scaled_mask.height = destH;
+		scaled_mask.width = destination_width;
+		scaled_mask.height = destination_height;
 		scaled_mask.bits_per_pixel = 1;
 		scaled_mask.pitch = round2up((i32)roundf(((f32)scaled_mask.width * (1.f / 8.f/*bytes per pixel*/))));//NOTE: windows expects word aligned bmps
 		int scaled_mask_sz = scaled_mask.height * scaled_mask.pitch;
@@ -329,10 +329,10 @@ namespace urender {
 		return new_mask;
 	}
 
-	void draw_mask(HDC dest, int xDest, int yDest, int wDest, int hDest, HBITMAP mask, int xSrc, int ySrc, int wSrc, int hSrc, HBRUSH colorbr) {
+	void draw_mask(HDC dest, int destination_x, int destination_y, int destination_width, int destination_height, HBITMAP mask, int source_x, int source_y, int source_width, int source_height, HBRUSH color_brush) {
 		{BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo); Assert(bmpnfo.bmBitsPixel == 1); }
 
-		HBITMAP scaled_mask = (wDest != wSrc || hDest != hSrc) ? scale_mask(mask, wDest, hDest) : mask; //NOTE: beware of applying any modification to scaled_mask, you could be modifying the original mask
+		HBITMAP scaled_mask = (destination_width != source_width || destination_height != source_height) ? scale_mask(mask, destination_width, destination_height) : mask; //NOTE: beware of applying any modification to scaled_mask, you could be modifying the original mask
 		BITMAP masknfo; GetObject(scaled_mask, sizeof(masknfo), &masknfo); Assert(masknfo.bmBitsPixel == 1);
 		MaskImage mask_img;
 		mask_img.width = masknfo.bmWidth;
@@ -343,11 +343,11 @@ namespace urender {
 		mask_img.mem = malloc(mask_sz); defer{ free(mask_img.mem); };
 		int getbits = GetBitmapBits(scaled_mask, mask_sz, mask_img.mem); Assert(getbits == mask_sz);
 
-		for (int y = yDest; y < yDest + hDest; y++) {
-			for (int x = xDest; x < xDest + wDest; x++)
+		for (int y = destination_y; y < destination_y + destination_height; y++) {
+			for (int x = destination_x; x < destination_x + destination_width; x++)
 			{
-				u8 sample = sample_mask(&mask_img, x - xDest, y - yDest);
-				if (!sample) SetPixel(dest, x, y, ColorFromBrush(colorbr));
+				u8 sample = sample_mask(&mask_img, x - destination_x, y - destination_y);
+				if (!sample) SetPixel(dest, x, y, ColorFromBrush(color_brush));
 			}
 		}
 		if (scaled_mask != mask) DeleteObject(scaled_mask);
@@ -395,56 +395,56 @@ namespace urender {
 		}
 	}
 
-	void draw_icon(HDC dest, int xDest, int yDest, int wDest, int hDest, HICON icon, int xSrc, int ySrc, int wSrc, int hSrc) {
+	void draw_icon(HDC dest, int destination_x, int destination_y, int destination_width, int destination_height, HICON icon, int source_x, int source_y, int source_width, int source_height) {
 		Gdiplus::Graphics graphics(dest);//Yeah, who cares, icons are small, I just want bilinear filtering
 		graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBilinear);
 		Gdiplus::Bitmap bmp(icon);
 		//TODO?(fran): with gdi+ we can do subpixel placement (RectF)
 		graphics.DrawImage(&bmp,
-			Gdiplus::Rect(xDest, yDest, wDest, hDest),
-			xSrc, ySrc, wSrc, hSrc,
+			Gdiplus::Rect(destination_x, destination_y, destination_width, destination_height),
+			source_x, source_y, source_width, source_height,
 			Gdiplus::Unit::UnitPixel);//TODO(fran): get the current unit from the device
 	}
 
 	//NOTE: specific procedure for drawing images on windows' menus, other drawing functions may fail on specific situations
 	//NOTE: this is set up to work with masks that have black as the color and white as transparency, otherwise you'll need to flip your colors, for example BitBlt(arrowDC, 0, 0, arrowW, arrowH, arrowDC, 0, 0, DSTINVERT)
-	void draw_menu_mask(HDC destDC, int xDest, int yDest, int wDest, int hDest, HBITMAP mask, int xSrc, int ySrc, int wSrc, int hSrc, HBRUSH colorbr)
+	void draw_menu_mask(HDC destination_dc, int destination_x, int destination_y, int destination_width, int destination_height, HBITMAP mask, int source_x, int source_y, int source_width, int source_height, HBRUSH color_brush)
 	{
 		{BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo); Assert(bmpnfo.bmBitsPixel == 1); }
 
 		//NOTE: I dont know if this will be final, dont really wanna depend on windows, but it's pretty good for now. see https://docs.microsoft.com/en-us/windows/win32/gdi/scaling-an-image maybe some of those stretch modes work better than HALFTONE
 
 		//Create the DCs and Bitmaps we will need
-		HDC maskDC = CreateCompatibleDC(destDC);
-		HBITMAP fillBitmap = CreateCompatibleBitmap(destDC, wDest, hDest);
-		HBITMAP oldFillBitmap = (HBITMAP)SelectObject(maskDC, fillBitmap);
+		HDC mask_dc = CreateCompatibleDC(destination_dc);
+		HBITMAP fill_bitmap = CreateCompatibleBitmap(destination_dc, destination_width, destination_height);
+		HBITMAP previous_fill_bitmap = (HBITMAP)SelectObject(mask_dc, fill_bitmap);
 
 		//Blit the content already stored in dest onto a secondary buffer
-		BitBlt(maskDC, 0, 0, wDest, hDest, destDC, xDest, yDest, SRCCOPY);
+		BitBlt(mask_dc, 0, 0, destination_width, destination_height, destination_dc, destination_x, destination_y, SRCCOPY);
 
 		//Draw on the new buffer, this is neeeded cause draw_mask uses MaskBlt which sometimes fails on menus 
 		//Explanation: I think I know what the problem is, draw_mask doesnt fail on the first submenus because the menu window is already being shown/exists, but for submenus of those guys the window is not yet shown when we draw onto it, this problaly confuses MaskBlt in some strange way
-		urender::draw_mask(maskDC, 0, 0, wDest, hDest, mask, xSrc, ySrc, wSrc, hSrc, colorbr);
+		urender::draw_mask(mask_dc, 0, 0, destination_width, destination_height, mask, source_x, source_y, source_width, source_height, color_brush);
 
 		//Draw back to dest with the new content
-		BitBlt(destDC, xDest, yDest, wDest, hDest, maskDC, 0, 0, SRCCOPY);
+		BitBlt(destination_dc, destination_x, destination_y, destination_width, destination_height, mask_dc, 0, 0, SRCCOPY);
 
 		//Clean up
-		SelectObject(maskDC, oldFillBitmap);
-		DeleteObject(fillBitmap);
-		DeleteDC(maskDC);
+		SelectObject(mask_dc, previous_fill_bitmap);
+		DeleteObject(fill_bitmap);
+		DeleteDC(mask_dc);
 	}
 
-	void draw_menu_mask8(HDC destDC, int xDest, int yDest, int wDest, int hDest, HBITMAP mask, HBRUSH colorbr)
+	void draw_menu_mask8(HDC destination_dc, int destination_x, int destination_y, int destination_width, int destination_height, HBITMAP mask, HBRUSH color_brush)
 	{
 		BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo); Assert(bmpnfo.bmBitsPixel == 8);
 
 		u32* pixels = nullptr;
 		HBITMAP bmp = create_DIB32(bmpnfo.bmWidth, bmpnfo.bmHeight, &pixels); defer{ DeleteObject(bmp); };
 
-		urender::draw_mask8(pixels, mask, colorbr);
+		urender::draw_mask8(pixels, mask, color_brush);
 
-		HDC memdc = CreateCompatibleDC(destDC); defer{ DeleteDC(memdc); };
+		HDC memdc = CreateCompatibleDC(destination_dc); defer{ DeleteDC(memdc); };
 		HBITMAP oldbmp = (HBITMAP)SelectObject(memdc, bmp); defer{ SelectObject(memdc, oldbmp); };
 		
 		BLENDFUNCTION bf = {
@@ -453,7 +453,7 @@ namespace urender {
 			.AlphaFormat = AC_SRC_ALPHA,
 		};
 
-		AlphaBlend(destDC, xDest, yDest, wDest, hDest, 
+		AlphaBlend(destination_dc, destination_x, destination_y, destination_width, destination_height,
 			memdc, 0, 0, bmpnfo.bmWidth, bmpnfo.bmHeight, bf); 
 		// We allow AlphaBlend to do the scaling 
 		// TODO: check if it scales nicely or it looks like trash and we gotta do it ourselves with bilinear sampling. Initial impressions, downscaling looks like absolute trash, we gotta do it right ourselves
