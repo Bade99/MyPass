@@ -9,7 +9,7 @@ constexpr auto& serialization_folder = L"\\MyPass";
 
 static i32 n_tabs = 0; //Needed for serialization
 
-union known_colors {
+union KnownColors {
 	struct {
 #define foreach_color(op) \
 		op(HBRUSH,ControlBk,CreateSolidBrush(RGB(40, 41, 35))) \
@@ -66,13 +66,13 @@ union known_colors {
 constexpr const utf16* known_colors_names[] = { foreach_color(_get_color_name) };
 #endif
 
-void default_colors_if_not_set(known_colors* c) {
+void default_colors_if_not_set(KnownColors* c) {
 #define _default_initialize(type, name,value) if(!c->name) c->name = value;
 	foreach_color(_default_initialize);
 #undef _default_initialize
 }
 
-union known_fonts {
+union KnownFonts {
 	struct {
 		HFONT General;
 		HFONT GeneralBold;
@@ -83,7 +83,7 @@ union known_fonts {
 	private: void _() { static_assert(sizeof(*this) == sizeof(all)); }
 } static fonts{};
 
-union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
+union KnownBitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 	struct {
 		HBITMAP close;
 		HBITMAP minimize;
@@ -137,7 +137,7 @@ union known_bitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
   * same ones, by normalizing to english we increase the chances
   * the shortcuts they know they will be able to use in other apps.
   */
-struct known_shortcuts {
+struct KnownShortcuts {
 	//Accelerator memory is cleared by the system on close, no need to deallocate
 	HACCEL table; 
 	HWND listener_wnd;

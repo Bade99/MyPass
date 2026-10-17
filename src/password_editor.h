@@ -332,9 +332,9 @@ void create_controls(State& state) {
 							auto& text_state = *edit_oneline::get_state(text);
 							auto res = copy_text_to_clipboard(text_state.char_text.c_str(), text_state.char_text.length());
 							if (res == -1) {
-								toast::show(state.wnd, RS(LANG_COPY_TO_CLIPBOARD_ERROR), toast::type::failure);
+								toast::show(state.wnd, RS(LANG_COPY_TO_CLIPBOARD_ERROR), toast::Type::failure);
 							} elif(res != 0) {
-								toast::show(state.wnd, RS(LANG_COPY_TO_CLIPBOARD), toast::type::success);
+								toast::show(state.wnd, RS(LANG_COPY_TO_CLIPBOARD), toast::Type::success);
 							}
 						}
 					});
@@ -385,7 +385,7 @@ void create_controls(State& state) {
 	table::Theme tbl_theme = themes.base_table; 
 	tbl_theme.cells = {
 		.row_h = 30,
-		.columns_w = {UINumber{.value = 100}, UINumber{.type = UINumber::type::dyn}}
+		.columns_w = {UINumber{.value = 100}, UINumber{.type = UINumber::Type::dyn}}
 	};
 	table::set_theme(controls.tbl_values, tbl_theme);
 

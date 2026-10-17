@@ -19,15 +19,15 @@
 namespace combobox {
 	constexpr auto& wndclass = wndclass_name("combobox");
 
-	struct render_flags {
-		bool isEnabled, onMouseover, onClicked, isListboxOpen;
-		//INFO: additional hidden state, the user could have pressed the button and while still holding it pressed have moved the mouse outside it, in this case onMouseover==false and onClicked==true
+	struct RenderFlags {
+		bool is_enabled, on_mouseover, on_clicked, is_listbox_open;
+		//INFO: additional hidden state, the user could have pressed the button and while still holding it pressed have moved the mouse outside it, in this case on_mouseover==false and on_clicked==true
 	};
 
 	//typedef void(*func_free_elements)(ptr<void*> elements, void* user_extra);
 	typedef void(*func_on_selection_accepted)(void* element, void* user_extra);
 	typedef void(*func_on_listbox_opening)(HWND combo, HWND listbox, void* user_extra);
-	typedef void(*func_render_combobox)(HDC dc, rect_i32 r, render_flags flags, void* element, void* user_extra);
+	typedef void(*func_render_combobox)(HDC dc, rect_i32 r, RenderFlags flags, void* element, void* user_extra);
 	//For Handling WM_DESIRED_SIZE
 	typedef int(*func_desired_size_combobox)(SIZE* min, SIZE* max, HDC dc, void* element, void* user_extra);//NOTE: the dc is simply to be used for functions such as GetTextExtentPoint32 that need a dc
 
@@ -51,7 +51,7 @@ namespace combobox {
 		func_on_listbox_opening on_listbox_opening;
 
 		struct {
-			HHOOK hookmouseclick;
+			HHOOK mouse_click_hook;
 		}impl;
 
 		bool reject_button;//do not open listbox on the next button press if the listbox is already open and the button is clicked

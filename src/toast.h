@@ -104,7 +104,7 @@ namespace toast {
 		if (!state.is_showing && state.notification_queue.size()) {
 			auto& notification = state.notification_queue.front();
 			SetWindowText(state.controls.btn_toast, notification.msg.c_str());
-			auto& theme = notification.type == type::success ? state.theme.success : state.theme.failure;
+			auto& theme = notification.type == Type::success ? state.theme.success : state.theme.failure;
 			button::set_theme(state.controls.btn_toast, theme);
 			state.notification_queue.pop();
 			animate_wndpos(state);
@@ -150,7 +150,7 @@ namespace toast {
 
 	void set_theme(HWND wnd, const Theme& src) { _control_create_function__set_theme }
 
-	void show(HWND child_of_someone, str msg, type type) {
+	void show(HWND child_of_someone, str msg, Type type) {
 		auto& nc = *nonclient::get_state(GetAncestor(child_of_someone, GA_ROOT));
 		auto& state = *get_state(nc.toast);
 		state.notification_queue.emplace(msg, type);

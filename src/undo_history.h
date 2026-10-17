@@ -5,16 +5,16 @@
 /*
 Example usage:
 
-struct text_edit {
-	enum class type { insert, erase } type;
+struct TextEdit {
+	enum class Type { insert, erase } type;
 	size_t position;
 	str text;
 };
 
-undo_history<text_edit> history;
+UndoHistory<TextEdit> history;
 history.set_limits(Megabytes(8), 1000); // 8 MiB or 1000 entries, whichever is reached first
 
-text_edit edit{ text_edit::type::insert, position, inserted_text };
+TextEdit edit{ TextEdit::Type::insert, position, inserted_text };
 size_t edit_memory_size = sizeof(edit) + edit.text.capacity() * sizeof(str::value_type);
 history.push(std::move(edit), edit_memory_size);
 
@@ -22,7 +22,7 @@ if (auto* edit = history.undo()) apply_inverse(*edit);
 if (auto* edit = history.redo()) apply(*edit);
 
 if (auto* latest = history.latest(); latest && can_merge(*latest, new_char)) {
-	history.update_latest([&](text_edit& edit) {
+	history.update_latest([&](TextEdit& edit) {
 		edit.text.push_back(new_char);
 		return sizeof(edit) + edit.text.capacity() * sizeof(str::value_type);
 	});
@@ -35,10 +35,10 @@ If an updater throws, it must leave the entry unchanged.
 */
 
 template<typename T>
-struct undo_history {
-	struct history_entry { T value; size_t memory_size; };
+struct UndoHistory {
+	struct HistoryEntry { T value; size_t memory_size; };
 
-	std::vector<history_entry> entries;
+	std::vector<HistoryEntry> entries;
 	size_t first{};
 	size_t next{};
 	size_t memory_size{};

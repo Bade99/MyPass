@@ -240,6 +240,9 @@
     <ClInclude Include="control_helpers.h">
       <Filter>Header Files\Utils</Filter>
     </ClInclude>
+    <ClInclude Include="string.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">

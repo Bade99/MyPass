@@ -100,7 +100,7 @@ struct text { //A NON null terminated cstring
 #error "Unsupported architecture. Please validate functionality, then add it here."
 // Areas of concern to test in the new arch:
 // - raw_buffer encoding methodology: 
-//  + we try to standardise it with padding for 2 and 4 byte alignment for some types, but allocators for data that is passed to the raw_buffer_reader should also provide aligned memory
+//  + we try to standardise it with padding for 2 and 4 byte alignment for some types, but allocators for data that is passed to the RawBufferReader should also provide aligned memory
 //  + we dont handle different endianness, we assume little-endian, which should be fine for most use cases
 #endif
 

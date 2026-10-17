@@ -14,83 +14,48 @@
 extern "C"
 {
 #endif
-    u32* set_key(const u32 in_key[], const u32 key_len);
-    //in_blk and out_blk can be the same
-    void encrypt(const u32 in_blk[4] /*16 bytes*/, u32 out_blk[4]);
-    //in_blk and out_blk can be the same
-    void decrypt(const u32 in_blk[4], u32 out_blk[4]);
+	u32* set_key(const u32 in_key[], const u32 key_len);
+	//in_blk and out_blk can be the same
+	void encrypt(const u32 in_blk[4] /*16 bytes*/, u32 out_blk[4]);
+	//in_blk and out_blk can be the same
+	void decrypt(const u32 in_blk[4], u32 out_blk[4]);
 
 #ifdef  __cplusplus
 };
 #endif
 
-
-
 /* 3. Basic macros for speeding up generic operations               */
 
-
-
 /* Circular rotate of 32 bit values                                 */
-
-
-
 #ifdef _MSC_VER
-
-
 
 #  include <stdlib.h>
 
 #  pragma intrinsic(_lrotr,_lrotl)
 
 #  define rotr(x,n) _lrotr(x,n)
-
 #  define rotl(x,n) _lrotl(x,n)
-
-
 
 #else
 
-
-
 #define rotr(x,n)   (((x) >> ((int)(n))) | ((x) << (32 - (int)(n))))
-
 #define rotl(x,n)   (((x) << ((int)(n))) | ((x) >> (32 - (int)(n))))
-
-
 
 #endif
 
-
-
 /* Invert byte order in a 32 bit variable                           */
-
-
-
 #define bswap(x)    (rotl(x, 8) & 0x00ff00ff | rotr(x, 8) & 0xff00ff00)
 
-
-
 /* Extract byte from a 32 bit quantity (little endian notation)     */
-
-
-
 #define byte(x,n)   ((u8)((x) >> (8 * n)))
 
-
-
 /* For inverting byte order in input/output 32 bit words if needed  */
-
-
-
 #ifdef  BLOCK_SWAP
 
 #define BYTE_SWAP
-
 #define WORD_SWAP
 
 #endif
-
-
 
 #ifdef  BYTE_SWAP
 
@@ -102,12 +67,7 @@ extern "C"
 
 #endif
 
-
-
 /* For inverting the byte order of input/output blocks if needed    */
-
-
-
 #ifdef  WORD_SWAP
 
 #define get_block(x)                            \
@@ -116,45 +76,40 @@ extern "C"
 ((u32*)(x))[2] = io_swap(in_blk[1]);     \
 ((u32*)(x))[3] = io_swap(in_blk[0])
 
-
 #define put_block(x)                            \
 out_blk[3] = io_swap(((u32*)(x))[0]);    \
 out_blk[2] = io_swap(((u32*)(x))[1]);    \
 out_blk[1] = io_swap(((u32*)(x))[2]);    \
 out_blk[0] = io_swap(((u32*)(x))[3])
 
-
-
 #define get_key(x,len)                          \
 ((u32*)(x))[4] = ((u32*)(x))[5] = \
 ((u32*)(x))[6] = ((u32*)(x))[7] = 0;  \
 switch ((((len)+63) / 64)) { \
 case 2:                                     \
-        ((u32*)(x))[0] = io_swap(in_key[3]);     \
-        ((u32*)(x))[1] = io_swap(in_key[2]);     \
-        ((u32*)(x))[2] = io_swap(in_key[1]);     \
-        ((u32*)(x))[3] = io_swap(in_key[0]);     \
-        break;                                      \
+		((u32*)(x))[0] = io_swap(in_key[3]);     \
+		((u32*)(x))[1] = io_swap(in_key[2]);     \
+		((u32*)(x))[2] = io_swap(in_key[1]);     \
+		((u32*)(x))[3] = io_swap(in_key[0]);     \
+		break;                                      \
 case 3:                                     \
-        ((u32*)(x))[0] = io_swap(in_key[5]);     \
-        ((u32*)(x))[1] = io_swap(in_key[4]);     \
-        ((u32*)(x))[2] = io_swap(in_key[3]);     \
-        ((u32*)(x))[3] = io_swap(in_key[2]);     \
-        ((u32*)(x))[4] = io_swap(in_key[1]);     \
-        ((u32*)(x))[5] = io_swap(in_key[0]);     \
-        break;                                      \
+		((u32*)(x))[0] = io_swap(in_key[5]);     \
+		((u32*)(x))[1] = io_swap(in_key[4]);     \
+		((u32*)(x))[2] = io_swap(in_key[3]);     \
+		((u32*)(x))[3] = io_swap(in_key[2]);     \
+		((u32*)(x))[4] = io_swap(in_key[1]);     \
+		((u32*)(x))[5] = io_swap(in_key[0]);     \
+		break;                                      \
 case 4:                                     \
-        ((u32*)(x))[0] = io_swap(in_key[7]);     \
-        ((u32*)(x))[1] = io_swap(in_key[6]);     \
-        ((u32*)(x))[2] = io_swap(in_key[5]);     \
-        ((u32*)(x))[3] = io_swap(in_key[4]);     \
-        ((u32*)(x))[4] = io_swap(in_key[3]);     \
-        ((u32*)(x))[5] = io_swap(in_key[2]);     \
-        ((u32*)(x))[6] = io_swap(in_key[1]);     \
-        ((u32*)(x))[7] = io_swap(in_key[0]);     \
+		((u32*)(x))[0] = io_swap(in_key[7]);     \
+		((u32*)(x))[1] = io_swap(in_key[6]);     \
+		((u32*)(x))[2] = io_swap(in_key[5]);     \
+		((u32*)(x))[3] = io_swap(in_key[4]);     \
+		((u32*)(x))[4] = io_swap(in_key[3]);     \
+		((u32*)(x))[5] = io_swap(in_key[2]);     \
+		((u32*)(x))[6] = io_swap(in_key[1]);     \
+		((u32*)(x))[7] = io_swap(in_key[0]);     \
 }
-
-
 
 #else
 
@@ -175,16 +130,16 @@ out_blk[3] = io_swap(((u32*)(x))[3])
 ((u32*)(x))[6] = ((u32*)(x))[7] = 0;  \
 switch ((((len)+63) / 64)) { \
 case 4:                                     \
-        ((u32*)(x))[6] = io_swap(in_key[6]);     \
-        ((u32*)(x))[7] = io_swap(in_key[7]);     \
+		((u32*)(x))[6] = io_swap(in_key[6]);     \
+		((u32*)(x))[7] = io_swap(in_key[7]);     \
 case 3:                                     \
-        ((u32*)(x))[4] = io_swap(in_key[4]);     \
-        ((u32*)(x))[5] = io_swap(in_key[5]);     \
+		((u32*)(x))[4] = io_swap(in_key[4]);     \
+		((u32*)(x))[5] = io_swap(in_key[5]);     \
 case 2:                                     \
-        ((u32*)(x))[0] = io_swap(in_key[0]);     \
-        ((u32*)(x))[1] = io_swap(in_key[1]);     \
-        ((u32*)(x))[2] = io_swap(in_key[2]);     \
-        ((u32*)(x))[3] = io_swap(in_key[3]);     \
+		((u32*)(x))[0] = io_swap(in_key[0]);     \
+		((u32*)(x))[1] = io_swap(in_key[1]);     \
+		((u32*)(x))[2] = io_swap(in_key[2]);     \
+		((u32*)(x))[3] = io_swap(in_key[3]);     \
 }
 
 #endif
@@ -281,7 +236,7 @@ u8 qt0[2][16] =
 
 { { 8, 1, 7, 13, 6, 15, 3, 2, 0, 11, 5, 9, 14, 12, 10, 4 },
 
-    { 2, 8, 11, 13, 15, 7, 6, 14, 3, 1, 9, 4, 0, 10, 12, 5 }
+	{ 2, 8, 11, 13, 15, 7, 6, 14, 3, 1, 9, 4, 0, 10, 12, 5 }
 
 };
 
@@ -291,7 +246,7 @@ u8 qt1[2][16] =
 
 { { 14, 12, 11, 8, 1, 2, 3, 5, 15, 4, 10, 6, 7, 0, 9, 13 },
 
-    { 1, 14, 2, 11, 4, 12, 3, 7, 6, 13, 10, 5, 15, 9, 0, 8 }
+	{ 1, 14, 2, 11, 4, 12, 3, 7, 6, 13, 10, 5, 15, 9, 0, 8 }
 
 };
 
@@ -301,7 +256,7 @@ u8 qt2[2][16] =
 
 { { 11, 10, 5, 14, 6, 13, 9, 0, 12, 8, 15, 3, 2, 4, 7, 1 },
 
-    { 4, 12, 7, 5, 1, 6, 9, 10, 0, 14, 13, 8, 2, 11, 3, 15 }
+	{ 4, 12, 7, 5, 1, 6, 9, 10, 0, 14, 13, 8, 2, 11, 3, 15 }
 
 };
 
@@ -311,7 +266,7 @@ u8 qt3[2][16] =
 
 { { 13, 7, 15, 4, 1, 2, 6, 14, 9, 11, 3, 0, 8, 5, 12, 10 },
 
-    { 11, 9, 5, 1, 12, 3, 13, 14, 6, 4, 7, 15, 2, 0, 8, 10 }
+	{ 11, 9, 5, 1, 12, 3, 13, 14, 6, 4, 7, 15, 2, 0, 8, 10 }
 
 };
 
@@ -320,21 +275,21 @@ u8 qt3[2][16] =
 u8 qp(const u32 n, const u8 x)
 
 {
-    u8  a0, a1, a2, a3, a4, b0, b1, b2, b3, b4;
+	u8  a0, a1, a2, a3, a4, b0, b1, b2, b3, b4;
 
 
 
-    a0 = x >> 4; b0 = x & 15;
+	a0 = x >> 4; b0 = x & 15;
 
-    a1 = a0 ^ b0; b1 = ror4[b0] ^ ashx[a0];
+	a1 = a0 ^ b0; b1 = ror4[b0] ^ ashx[a0];
 
-    a2 = qt0[n][a1]; b2 = qt1[n][b1];
+	a2 = qt0[n][a1]; b2 = qt1[n][b1];
 
-    a3 = a2 ^ b2; b3 = ror4[b2] ^ ashx[a2];
+	a3 = a2 ^ b2; b3 = ror4[b2] ^ ashx[a2];
 
-    a4 = qt2[n][a3]; b4 = qt3[n][b3];
+	a4 = qt2[n][a3]; b4 = qt3[n][b3];
 
-    return (b4 << 4) | a4;
+	return (b4 << 4) | a4;
 
 };
 
@@ -357,19 +312,19 @@ u8  q_tab[2][256];
 void gen_qtab(void)
 
 {
-    u32  i;
+	u32  i;
 
 
 
-    for (i = 0; i < 256; ++i)
+	for (i = 0; i < 256; ++i)
 
-    {
+	{
 
-        q(0, i) = qp(0, (u8)i);
+		q(0, i) = qp(0, (u8)i);
 
-        q(1, i) = qp(1, (u8)i);
+		q(1, i) = qp(1, (u8)i);
 
-    }
+	}
 
 };
 
@@ -400,29 +355,29 @@ u32  m_tab[4][256];
 void gen_mtab(void)
 
 {
-    u32  i, f01, f5b, fef;
+	u32  i, f01, f5b, fef;
 
 
 
-    for (i = 0; i < 256; ++i)
+	for (i = 0; i < 256; ++i)
 
-    {
+	{
 
-        f01 = q(1, i); f5b = ffm_5b(f01); fef = ffm_ef(f01);
+		f01 = q(1, i); f5b = ffm_5b(f01); fef = ffm_ef(f01);
 
-        m_tab[0][i] = f01 + (f5b << 8) + (fef << 16) + (fef << 24);
+		m_tab[0][i] = f01 + (f5b << 8) + (fef << 16) + (fef << 24);
 
-        m_tab[2][i] = f5b + (fef << 8) + (f01 << 16) + (fef << 24);
+		m_tab[2][i] = f5b + (fef << 8) + (f01 << 16) + (fef << 24);
 
 
 
-        f01 = q(0, i); f5b = ffm_5b(f01); fef = ffm_ef(f01);
+		f01 = q(0, i); f5b = ffm_5b(f01); fef = ffm_ef(f01);
 
-        m_tab[1][i] = fef + (fef << 8) + (f5b << 16) + (f01 << 24);
+		m_tab[1][i] = fef + (fef << 8) + (f5b << 16) + (f01 << 24);
 
-        m_tab[3][i] = f5b + (f01 << 8) + (fef << 16) + (f5b << 24);
+		m_tab[3][i] = f5b + (f01 << 8) + (fef << 16) + (f5b << 24);
 
-    }
+	}
 
 };
 
@@ -505,59 +460,59 @@ void gen_mtab(void)
 u32 h_fun(const u32 x, const u32 key[])
 
 {
-    u32  b0, b1, b2, b3;
+	u32  b0, b1, b2, b3;
 
 
 
 #ifndef M_TABLE
 
-    u32  m5b_b0, m5b_b1, m5b_b2, m5b_b3;
+	u32  m5b_b0, m5b_b1, m5b_b2, m5b_b3;
 
-    u32  mef_b0, mef_b1, mef_b2, mef_b3;
+	u32  mef_b0, mef_b1, mef_b2, mef_b3;
 
 #endif
 
 
 
-    b0 = byte(x, 0); b1 = byte(x, 1); b2 = byte(x, 2); b3 = byte(x, 3);
+	b0 = byte(x, 0); b1 = byte(x, 1); b2 = byte(x, 2); b3 = byte(x, 3);
 
 
 
-    switch (k_len)
+	switch (k_len)
 
-    {
+	{
 
-    case 4: b0 = q(1, b0) ^ byte(key[3], 0);
+	case 4: b0 = q(1, b0) ^ byte(key[3], 0);
 
-        b1 = q(0, b1) ^ byte(key[3], 1);
+		b1 = q(0, b1) ^ byte(key[3], 1);
 
-        b2 = q(0, b2) ^ byte(key[3], 2);
+		b2 = q(0, b2) ^ byte(key[3], 2);
 
-        b3 = q(1, b3) ^ byte(key[3], 3);
+		b3 = q(1, b3) ^ byte(key[3], 3);
 
-    case 3: b0 = q(1, b0) ^ byte(key[2], 0);
+	case 3: b0 = q(1, b0) ^ byte(key[2], 0);
 
-        b1 = q(1, b1) ^ byte(key[2], 1);
+		b1 = q(1, b1) ^ byte(key[2], 1);
 
-        b2 = q(0, b2) ^ byte(key[2], 2);
+		b2 = q(0, b2) ^ byte(key[2], 2);
 
-        b3 = q(0, b3) ^ byte(key[2], 3);
+		b3 = q(0, b3) ^ byte(key[2], 3);
 
-    case 2: b0 = q(0, q(0, b0) ^ byte(key[1], 0)) ^ byte(key[0], 0);
+	case 2: b0 = q(0, q(0, b0) ^ byte(key[1], 0)) ^ byte(key[0], 0);
 
-        b1 = q(0, q(1, b1) ^ byte(key[1], 1)) ^ byte(key[0], 1);
+		b1 = q(0, q(1, b1) ^ byte(key[1], 1)) ^ byte(key[0], 1);
 
-        b2 = q(1, q(0, b2) ^ byte(key[1], 2)) ^ byte(key[0], 2);
+		b2 = q(1, q(0, b2) ^ byte(key[1], 2)) ^ byte(key[0], 2);
 
-        b3 = q(1, q(1, b3) ^ byte(key[1], 3)) ^ byte(key[0], 3);
+		b3 = q(1, q(1, b3) ^ byte(key[1], 3)) ^ byte(key[0], 3);
 
-    }
+	}
 
 #ifdef  M_TABLE
 
 
 
-    return  mds(0, b0) ^ mds(1, b1) ^ mds(2, b2) ^ mds(3, b3);
+	return  mds(0, b0) ^ mds(1, b1) ^ mds(2, b2) ^ mds(3, b3);
 
 
 
@@ -565,19 +520,19 @@ u32 h_fun(const u32 x, const u32 key[])
 
 
 
-    b0 = q(1, b0); b1 = q(0, b1); b2 = q(1, b2); b3 = q(0, b3);
+	b0 = q(1, b0); b1 = q(0, b1); b2 = q(1, b2); b3 = q(0, b3);
 
-    m5b_b0 = ffm_5b(b0); m5b_b1 = ffm_5b(b1); m5b_b2 = ffm_5b(b2); m5b_b3 = ffm_5b(b3);
+	m5b_b0 = ffm_5b(b0); m5b_b1 = ffm_5b(b1); m5b_b2 = ffm_5b(b2); m5b_b3 = ffm_5b(b3);
 
-    mef_b0 = ffm_ef(b0); mef_b1 = ffm_ef(b1); mef_b2 = ffm_ef(b2); mef_b3 = ffm_ef(b3);
+	mef_b0 = ffm_ef(b0); mef_b1 = ffm_ef(b1); mef_b2 = ffm_ef(b2); mef_b3 = ffm_ef(b3);
 
-    b0 ^= mef_b1 ^ m5b_b2 ^ m5b_b3; b3 ^= m5b_b0 ^ mef_b1 ^ mef_b2;
+	b0 ^= mef_b1 ^ m5b_b2 ^ m5b_b3; b3 ^= m5b_b0 ^ mef_b1 ^ mef_b2;
 
-    b2 ^= mef_b0 ^ m5b_b1 ^ mef_b3; b1 ^= mef_b0 ^ mef_b2 ^ m5b_b3;
+	b2 ^= mef_b0 ^ m5b_b1 ^ mef_b3; b1 ^= mef_b0 ^ mef_b2 ^ m5b_b3;
 
 
 
-    return b0 | (b3 << 8) | (b2 << 16) | (b1 << 24);
+	return b0 | (b3 << 8) | (b2 << 16) | (b1 << 24);
 
 
 
@@ -636,91 +591,91 @@ u8  sb[4][256];
 void gen_mk_tab(u32 key[])
 
 {
-    u32  i;
+	u32  i;
 
-    u8  by;
-
-
-
-    switch (k_len)
-
-    {
-
-    case 2: for (i = 0; i < 256; ++i)
-
-    {
-
-        by = (u8)i;
-
-#ifdef ONE_STEP
-
-        mk_tab[0][i] = mds(0, q20(by)); mk_tab[1][i] = mds(1, q21(by));
-
-        mk_tab[2][i] = mds(2, q22(by)); mk_tab[3][i] = mds(3, q23(by));
-
-#else
-
-        sb[0][i] = q20(by); sb[1][i] = q21(by);
-
-        sb[2][i] = q22(by); sb[3][i] = q23(by);
-
-#endif
-
-    }
-
-          break;
+	u8  by;
 
 
 
-    case 3: for (i = 0; i < 256; ++i)
+	switch (k_len)
 
-    {
+	{
 
-        by = (u8)i;
+	case 2: for (i = 0; i < 256; ++i)
+
+	{
+
+		by = (u8)i;
 
 #ifdef ONE_STEP
 
-        mk_tab[0][i] = mds(0, q30(by)); mk_tab[1][i] = mds(1, q31(by));
+		mk_tab[0][i] = mds(0, q20(by)); mk_tab[1][i] = mds(1, q21(by));
 
-        mk_tab[2][i] = mds(2, q32(by)); mk_tab[3][i] = mds(3, q33(by));
+		mk_tab[2][i] = mds(2, q22(by)); mk_tab[3][i] = mds(3, q23(by));
 
 #else
 
-        sb[0][i] = q30(by); sb[1][i] = q31(by);
+		sb[0][i] = q20(by); sb[1][i] = q21(by);
 
-        sb[2][i] = q32(by); sb[3][i] = q33(by);
+		sb[2][i] = q22(by); sb[3][i] = q23(by);
 
 #endif
 
-    }
+	}
 
-          break;
+		  break;
 
 
 
-    case 4: for (i = 0; i < 256; ++i)
+	case 3: for (i = 0; i < 256; ++i)
 
-    {
+	{
 
-        by = (u8)i;
+		by = (u8)i;
 
 #ifdef ONE_STEP
 
-        mk_tab[0][i] = mds(0, q40(by)); mk_tab[1][i] = mds(1, q41(by));
+		mk_tab[0][i] = mds(0, q30(by)); mk_tab[1][i] = mds(1, q31(by));
 
-        mk_tab[2][i] = mds(2, q42(by)); mk_tab[3][i] = mds(3, q43(by));
+		mk_tab[2][i] = mds(2, q32(by)); mk_tab[3][i] = mds(3, q33(by));
 
 #else
 
-        sb[0][i] = q40(by); sb[1][i] = q41(by);
+		sb[0][i] = q30(by); sb[1][i] = q31(by);
 
-        sb[2][i] = q42(by); sb[3][i] = q43(by);
+		sb[2][i] = q32(by); sb[3][i] = q33(by);
 
 #endif
 
-    }
+	}
 
-    }
+		  break;
+
+
+
+	case 4: for (i = 0; i < 256; ++i)
+
+	{
+
+		by = (u8)i;
+
+#ifdef ONE_STEP
+
+		mk_tab[0][i] = mds(0, q40(by)); mk_tab[1][i] = mds(1, q41(by));
+
+		mk_tab[2][i] = mds(2, q42(by)); mk_tab[3][i] = mds(3, q43(by));
+
+#else
+
+		sb[0][i] = q40(by); sb[1][i] = q41(by);
+
+		sb[2][i] = q42(by); sb[3][i] = q43(by);
+
+#endif
+
+	}
+
+	}
 
 };
 
@@ -732,7 +687,7 @@ void gen_mk_tab(u32 key[])
 ^ mk_tab[2][byte(x, 2)] ^ mk_tab[3][byte(x, 3)])
 
 #    define g1_fun(x) ( mk_tab[0][byte(x,3)] ^ mk_tab[1][byte(x,0)] \
-    ^ mk_tab[2][byte(x, 1)] ^ mk_tab[3][byte(x, 2)])
+	^ mk_tab[2][byte(x, 1)] ^ mk_tab[3][byte(x, 2)])
 
 #  else
 
@@ -740,7 +695,7 @@ void gen_mk_tab(u32 key[])
 ^ mds(2, sb[2][byte(x, 2)]) ^ mds(3, sb[3][byte(x, 3)]))
 
 #    define g1_fun(x) ( mds(0, sb[0][byte(x,3)]) ^ mds(1, sb[1][byte(x,0)]) \
-    ^ mds(2, sb[2][byte(x, 1)]) ^ mds(3, sb[3][byte(x, 2)]))
+	^ mds(2, sb[2][byte(x, 1)]) ^ mds(3, sb[3][byte(x, 2)]))
 
 #  endif
 
@@ -821,61 +776,61 @@ to implement.
 u32 mds_rem(u32 p0, u32 p1)
 
 {
-    u32  i, t, u;
+	u32  i, t, u;
 
 
 
-    for (i = 0; i < 8; ++i)
+	for (i = 0; i < 8; ++i)
 
-    {
+	{
 
-        t = p1 >> 24;   // get most significant coefficient
-
-
-
-        p1 = (p1 << 8) | (p0 >> 24); p0 <<= 8;  // shift others up
+		t = p1 >> 24;   // get most significant coefficient
 
 
 
-        // multiply t by a (the primitive element - i.e. left shift)
+		p1 = (p1 << 8) | (p0 >> 24); p0 <<= 8;  // shift others up
 
 
 
-        u = (t << 1);
+		// multiply t by a (the primitive element - i.e. left shift)
 
 
 
-        if (t & 0x80)            // subtract modular polynomial on overflow
+		u = (t << 1);
 
 
 
-            u ^= G_MOD;
+		if (t & 0x80)            // subtract modular polynomial on overflow
 
 
 
-        p1 ^= t ^ (u << 16);    // remove t * (a * x^2 + 1)  
+			u ^= G_MOD;
 
 
 
-        u ^= (t >> 1);          // form u = a * t + t / a = t * (a + 1 / a); 
+		p1 ^= t ^ (u << 16);    // remove t * (a * x^2 + 1)  
 
 
 
-        if (t & 0x01)            // add the modular polynomial on underflow
+		u ^= (t >> 1);          // form u = a * t + t / a = t * (a + 1 / a); 
 
 
 
-            u ^= G_MOD >> 1;
+		if (t & 0x01)            // add the modular polynomial on underflow
 
 
 
-        p1 ^= (u << 24) | (u << 8); // remove t * (a + 1/a) * (x^3 + x)
-
-    }
+			u ^= G_MOD >> 1;
 
 
 
-    return p1;
+		p1 ^= (u << 24) | (u << 8); // remove t * (a + 1/a) * (x^3 + x)
+
+	}
+
+
+
+	return p1;
 
 };
 
@@ -888,19 +843,19 @@ u32 mds_rem(u32 p0, u32 p1)
 u32* set_key(const u32 in_key[], const u32 key_len)
 
 {
-    u32  i, a, b, me_key[4], mo_key[4];
+	u32  i, a, b, me_key[4], mo_key[4];
 
 
 
 #ifdef Q_TABLES
 
-    if (!qt_gen)
+	if (!qt_gen)
 
-    {
+	{
 
-        gen_qtab(); qt_gen = 1;
+		gen_qtab(); qt_gen = 1;
 
-    }
+	}
 
 #endif
 
@@ -908,63 +863,63 @@ u32* set_key(const u32 in_key[], const u32 key_len)
 
 #ifdef M_TABLE
 
-    if (!mt_gen)
+	if (!mt_gen)
 
-    {
+	{
 
-        gen_mtab(); mt_gen = 1;
+		gen_mtab(); mt_gen = 1;
 
-    }
+	}
 
 #endif
 
 
 
-    k_len = key_len / 64;   /* 2, 3 or 4 */
+	k_len = key_len / 64;   /* 2, 3 or 4 */
 
 
 
-    for (i = 0; i < k_len; ++i)
+	for (i = 0; i < k_len; ++i)
 
-    {
+	{
 
-        a = in_key[i + i];     me_key[i] = a;
+		a = in_key[i + i];     me_key[i] = a;
 
-        b = in_key[i + i + 1]; mo_key[i] = b;
+		b = in_key[i + i + 1]; mo_key[i] = b;
 
-        s_key[k_len - i - 1] = mds_rem(a, b);
+		s_key[k_len - i - 1] = mds_rem(a, b);
 
-    }
+	}
 
 
 
-    for (i = 0; i < 40; i += 2)
+	for (i = 0; i < 40; i += 2)
 
-    {
+	{
 
-        a = 0x01010101 * i; b = a + 0x01010101;
+		a = 0x01010101 * i; b = a + 0x01010101;
 
-        a = h_fun(a, me_key);
+		a = h_fun(a, me_key);
 
-        b = rotl(h_fun(b, mo_key), 8);
+		b = rotl(h_fun(b, mo_key), 8);
 
-        l_key[i] = a + b;
+		l_key[i] = a + b;
 
-        l_key[i + 1] = rotl(a + 2 * b, 9);
+		l_key[i + 1] = rotl(a + 2 * b, 9);
 
-    }
+	}
 
 
 
 #ifdef MK_TABLE
 
-    gen_mk_tab(s_key);
+	gen_mk_tab(s_key);
 
 #endif
 
 
 
-    return l_key;
+	return l_key;
 
 };
 
@@ -987,33 +942,33 @@ blk[1] = rotl(blk[1], 1) ^ (t0 + 2 * t1 + l_key[4 * (i)+11])
 void encrypt(const u32 in_blk[4], u32 out_blk[])
 
 {
-    u32  t0, t1, blk[4];
+	u32  t0, t1, blk[4];
 
 
 
-    blk[0] = in_blk[0] ^ l_key[0];
+	blk[0] = in_blk[0] ^ l_key[0];
 
-    blk[1] = in_blk[1] ^ l_key[1];
+	blk[1] = in_blk[1] ^ l_key[1];
 
-    blk[2] = in_blk[2] ^ l_key[2];
+	blk[2] = in_blk[2] ^ l_key[2];
 
-    blk[3] = in_blk[3] ^ l_key[3];
-
-
-
-    f_rnd(0); f_rnd(1); f_rnd(2); f_rnd(3);
-
-    f_rnd(4); f_rnd(5); f_rnd(6); f_rnd(7);
+	blk[3] = in_blk[3] ^ l_key[3];
 
 
 
-    out_blk[0] = blk[2] ^ l_key[4];
+	f_rnd(0); f_rnd(1); f_rnd(2); f_rnd(3);
 
-    out_blk[1] = blk[3] ^ l_key[5];
+	f_rnd(4); f_rnd(5); f_rnd(6); f_rnd(7);
 
-    out_blk[2] = blk[0] ^ l_key[6];
 
-    out_blk[3] = blk[1] ^ l_key[7];
+
+	out_blk[0] = blk[2] ^ l_key[4];
+
+	out_blk[1] = blk[3] ^ l_key[5];
+
+	out_blk[2] = blk[0] ^ l_key[6];
+
+	out_blk[3] = blk[1] ^ l_key[7];
 
 };
 
@@ -1036,33 +991,33 @@ blk[1] = rotr(blk[1] ^ (t0 + 2 * t1 + l_key[4 * (i)+9]), 1)
 void decrypt(const u32 in_blk[4], u32 out_blk[4])
 
 {
-    u32  t0, t1, blk[4];
+	u32  t0, t1, blk[4];
 
 
 
-    blk[0] = in_blk[0] ^ l_key[4];
+	blk[0] = in_blk[0] ^ l_key[4];
 
-    blk[1] = in_blk[1] ^ l_key[5];
+	blk[1] = in_blk[1] ^ l_key[5];
 
-    blk[2] = in_blk[2] ^ l_key[6];
+	blk[2] = in_blk[2] ^ l_key[6];
 
-    blk[3] = in_blk[3] ^ l_key[7];
-
-
-
-    i_rnd(7); i_rnd(6); i_rnd(5); i_rnd(4);
-
-    i_rnd(3); i_rnd(2); i_rnd(1); i_rnd(0);
+	blk[3] = in_blk[3] ^ l_key[7];
 
 
 
-    out_blk[0] = blk[2] ^ l_key[0];
+	i_rnd(7); i_rnd(6); i_rnd(5); i_rnd(4);
 
-    out_blk[1] = blk[3] ^ l_key[1];
+	i_rnd(3); i_rnd(2); i_rnd(1); i_rnd(0);
 
-    out_blk[2] = blk[0] ^ l_key[2];
 
-    out_blk[3] = blk[1] ^ l_key[3];
+
+	out_blk[0] = blk[2] ^ l_key[0];
+
+	out_blk[1] = blk[3] ^ l_key[1];
+
+	out_blk[2] = blk[0] ^ l_key[2];
+
+	out_blk[3] = blk[1] ^ l_key[3];
 
 };
 

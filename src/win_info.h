@@ -305,28 +305,28 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 //+ Fixing windows' bad design: //TODO(fran): move to richedit .h file
 const cstr* get_richedit_class(int setclass = 0 /*for internal use, not end user*/) {
-    static int v = 1;
-    if (setclass) v = setclass;
-    switch (v) {
-    case 1: return L"RICHEDIT";     //v1.0
-    case 2:
-    case 3: return L"RichEdit20W"; //v3.0 or 2.0
-    case 4: return L"RICHEDIT50W";  //v4.1
-    default: return L"";
-    }
+	static int v = 1;
+	if (setclass) v = setclass;
+	switch (v) {
+	case 1: return L"RICHEDIT";     //v1.0
+	case 2:
+	case 3: return L"RichEdit20W"; //v3.0 or 2.0
+	case 4: return L"RICHEDIT50W";  //v4.1
+	default: return L"";
+	}
 }
 
 BOOL load_richedit() {//NOTE: use RICHEDIT_CLASS for the window's class name
-    int success = false;
-    if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Msftedit.dll")); if (success)success = 4; } //v4.1
-    if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Riched20.dll")); if (success)success = 2; } //v3.0 or 2.0
-    if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Riched32.dll")); if (success)success = 1; } //v1.0
-    get_richedit_class(success);
-    return success;
+	int success = false;
+	if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Msftedit.dll")); if (success)success = 4; } //v4.1
+	if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Riched20.dll")); if (success)success = 2; } //v3.0 or 2.0
+	if (!success) { success = (int)(UINT_PTR)LoadLibrary(_t("Riched32.dll")); if (success)success = 1; } //v1.0
+	get_richedit_class(success);
+	return success;
 }
 
 void setup_window_classes(HINSTANCE hInstance) {
-    bool richedit = load_richedit(); runtime_assert(richedit, L"Couldn't find any Rich Edit library");
+	bool richedit = load_richedit(); runtime_assert(richedit, L"Couldn't find any Rich Edit library");
 }
 //+
 

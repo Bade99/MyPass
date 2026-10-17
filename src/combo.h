@@ -71,7 +71,7 @@ void set_function_render_listbox_element(HWND wnd, listbox::listbox_func_rendere
 }
 
 //TODO(fran): instead of working as a pasamanos it'd be best to provide an attach_listbox() function with a full configured listbox that abides by our listbox specification
-void set_listbox_dimensions(HWND wnd, listbox::dimensions dims) {
+void set_listbox_dimensions(HWND wnd, listbox::Dimensions dims) {
 	auto& state = *get_state(wnd);
 	if (&state) {
 		listbox::set_dimensions(state.controls.listbox, dims);
@@ -121,7 +121,7 @@ HWND __hookmouseclick_store_hwnd(HWND _wnd = (HWND)INT32_MIN) {
 	return wnd;
 }
 
-LRESULT CALLBACK hookmouseclick(int code, WPARAM wparam, LPARAM lparam) {
+LRESULT CALLBACK mouse_click_hook_proc(int code, WPARAM wparam, LPARAM lparam) {
 	//printf("MOUSECLICKHOOK:0x%08x\n", wparam);
 	if (code == HC_ACTION) {//TODO(fran): WH_MOUSE also includes a HC_NOREMOVE code
 		switch (wparam) {
@@ -167,12 +167,12 @@ void show_listbox(State& state, bool show) {
 		ShowWindow(state.controls.listbox, SW_SHOWNA);//TODO(fran): make sure it's on top of the z order, at least on top of us
 #endif
 		//We need to know when the user clicks outside of our editbox/listbox to be able to hide the listbox
-		if (!state.impl.hookmouseclick) {
+		if (!state.impl.mouse_click_hook) {
 			//TODO(fran): maybe this should be standard implementation in the listbox
 			__hookmouseclick_store_hwnd(state.wnd);
-			state.impl.hookmouseclick = SetWindowsHookEx(WH_MOUSE, hookmouseclick, 0, GetCurrentThreadId()); //attach the hook
-			//state.impl.hookmouseclick = SetWindowsHookEx(WH_MOUSE_LL, hookmouseclick, 0, GetCurrentThreadId()); //TODO(fran): I wanted to use this one but apparently low level hooks cannot be run on debug threads, the docs recommend using raw input instead //https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-rawmouse
-			Assert(state.impl.hookmouseclick);
+			state.impl.mouse_click_hook = SetWindowsHookEx(WH_MOUSE, mouse_click_hook_proc, 0, GetCurrentThreadId()); //attach the hook
+			//state.impl.mouse_click_hook = SetWindowsHookEx(WH_MOUSE_LL, mouse_click_hook_proc, 0, GetCurrentThreadId()); //TODO(fran): I wanted to use this one but apparently low level hooks cannot be run on debug threads, the docs recommend using raw input instead //https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-rawmouse
+			Assert(state.impl.mouse_click_hook);
 		}
 
 	}
@@ -180,8 +180,8 @@ void show_listbox(State& state, bool show) {
 		//printf("SEARCHBOX:HIDE LISTBOX\n");
 		ShowWindow(state.controls.listbox, SW_HIDE);
 
-		UnhookWindowsHookEx(state.impl.hookmouseclick); // remove the hook
-		state.impl.hookmouseclick = 0;
+		UnhookWindowsHookEx(state.impl.mouse_click_hook); // remove the hook
+		state.impl.mouse_click_hook = 0;
 	}
 }
 
@@ -198,12 +198,12 @@ LRESULT CALLBACK ButtonPaintProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lPar
 			HDC dc = BeginPaint(button_state.wnd, &ps); defer{ EndPaint(button_state.wnd, &ps); };
 			RECT rc; GetClientRect(button_state.wnd, &rc);
 
-			render_flags flags;
-			flags.onClicked = button_state.onMouseOver && button_state.onLMouseClick;
-			//NOTE: on button focus here we mark the button flags as onMouseover, I think that this is a good solution to avoid having to include an additional render step to render something like what we do with buttons, showing a thick focus border
-			flags.onMouseover = button_state.onMouseOver || button_state.OnMouseTracking || (GetFocus() == button_state.wnd);
-			flags.isEnabled = IsWindowEnabled(button_state.wnd);
-			flags.isListboxOpen = is_listbox_open(parent);
+			RenderFlags flags;
+			flags.on_clicked = button_state.onMouseOver && button_state.onLMouseClick;
+			//NOTE: on button focus here we mark the button flags as on_mouseover, I think that this is a good solution to avoid having to include an additional render step to render something like what we do with buttons, showing a thick focus border
+			flags.on_mouseover = button_state.onMouseOver || button_state.OnMouseTracking || (GetFocus() == button_state.wnd);
+			flags.is_enabled = IsWindowEnabled(button_state.wnd);
+			flags.is_listbox_open = is_listbox_open(parent);
 
 			combo_state.render_combobox(dc, rect_i32::create_from(rc), flags, listbox::get_sel_element(combo_state.controls.listbox), combo_state.user_extra);
 			return 0;
@@ -258,7 +258,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		MoveWindow(state.controls.button, 0, 0, w, h, FALSE);
 
 		//TODO(fran): this should be set by the user, we need to add the measure listbox so we know the window height they want
-		listbox::set_dimensions(state.controls.listbox, listbox::dimensions().set_border_thickness(1).set_element_h(h));
+		listbox::set_dimensions(state.controls.listbox, listbox::Dimensions().set_border_thickness(1).set_element_h(h));
 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;

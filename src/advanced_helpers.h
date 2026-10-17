@@ -4,12 +4,12 @@
   * Tooltip
   */
 
-struct tooltip_props {
+struct TooltipProps {
 	bool multiline = false;
 	u32 delay_ms = U32MAX; // delay between start of mouse over and showing the tooltip
 	u32 duration_ms = U32MAX; // time that the tooltip remains visible
 };
-static auto add_mouseover_tooltip(HWND target, u64 msg_resource_id, tooltip_props props = {}) {
+static auto add_mouseover_tooltip(HWND target, u64 msg_resource_id, TooltipProps props = {}) {
 	//TODO(fran): we could have two types of tooltips, a singular tooltip for each nonclient window, that you can use for generic tooltips, for that one just call the TTM_ADDTOOL with all the controls we want it to look over. Then also allow custom tooltips, which will require the creation of a new tooltip control, eg for cases where it needs to have a different delay_ms
 	auto tooltip = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL,
 		WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
@@ -17,13 +17,13 @@ static auto add_mouseover_tooltip(HWND target, u64 msg_resource_id, tooltip_prop
 		target, nil, nil, nil);
 	Assert(tooltip);
 
-	TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
-	toolInfo.hwnd = target;
-	toolInfo.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
-	toolInfo.uId = (decltype(toolInfo.uId))target;
-	toolInfo.hinst = GetModuleHandle(nil);
-	toolInfo.lpszText = (decltype(toolInfo.lpszText))msg_resource_id;
-	auto addtool_res = SendMessage(tooltip, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
+	TOOLINFO tool_info{ TTTOOLINFO_V1_SIZE };
+	tool_info.hwnd = target;
+	tool_info.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+	tool_info.uId = (decltype(tool_info.uId))target;
+	tool_info.hinst = GetModuleHandle(nil);
+	tool_info.lpszText = (decltype(tool_info.lpszText))msg_resource_id;
+	auto addtool_res = SendMessage(tooltip, TTM_ADDTOOL, 0, (LPARAM)&tool_info);
 	Assert(addtool_res);
 
 	if (props.multiline) 
@@ -55,18 +55,18 @@ namespace MBP {
 	};
 }
 struct MsgBoxPlacement { 
-    HWND relative_to; multiflag<MBP::MBP> flags; bool processed; 
+	HWND relative_to; multiflag<MBP::MBP> flags; bool processed; 
 
-    //INFO: flags defaults: left (if left or right or center isnt selected) and top (if top or bottom or center isnt selected)
-    void set(HWND relative_to, multiflag<MBP::MBP> flags) {
-        //Set defaults
-        if (!(flags & MBP::left || flags & MBP::right || flags & MBP::center)) flags |= MBP::left;
-        if (!(flags & MBP::top || flags & MBP::bottom || flags & MBP::center)) flags |= MBP::top;
+	//INFO: flags defaults: left (if left or right or center isnt selected) and top (if top or bottom or center isnt selected)
+	void set(HWND relative_to, multiflag<MBP::MBP> flags) {
+		//Set defaults
+		if (!(flags & MBP::left || flags & MBP::right || flags & MBP::center)) flags |= MBP::left;
+		if (!(flags & MBP::top || flags & MBP::bottom || flags & MBP::center)) flags |= MBP::top;
 
-        this->relative_to = relative_to;
-        this->flags = flags;
-        this->processed = false;
-    }
+		this->relative_to = relative_to;
+		this->flags = flags;
+		this->processed = false;
+	}
 
 } static msgbox_placement{ 0 };
 static LRESULT CALLBACK __msgbox_hook(int code, WPARAM wparam, LPARAM lparam)
@@ -79,7 +79,7 @@ static LRESULT CALLBACK __msgbox_hook(int code, WPARAM wparam, LPARAM lparam)
 
 		if (auto& placement = msgbox_placement; ((pcs->style & WS_DLGFRAME) || (pcs->style & WS_POPUP)) && !placement.processed)
 		{
-            placement.processed = true;
+			placement.processed = true;
 
 			HWND wnd = (HWND)wparam;//Msgbox
 
@@ -121,7 +121,7 @@ static LRESULT CALLBACK __msgbox_hook(int code, WPARAM wparam, LPARAM lparam)
 }
 
 static int CustomMessageBox(HWND relative_to, const cstr* lpText, const cstr* lpCaption, UINT uType, multiflag<MBP::MBP> placement) {
-    msgbox_placement.set(relative_to, placement);
+	msgbox_placement.set(relative_to, placement);
 	HHOOK hook_proc = SetWindowsHookEx(WH_CBT, __msgbox_hook, 0, GetCurrentThreadId()); defer{ UnhookWindowsHookEx(hook_proc); };
 	int res = MessageBox(relative_to, lpText, lpCaption, uType);
 	return res;
@@ -132,155 +132,155 @@ static int CustomMessageBox(HWND relative_to, const cstr* lpText, const cstr* lp
   * Bitmap
   */
 
-HBITMAP flip_bitmap(HBITMAP srcBitmap, bool flipHorizontal, bool flipVertical) {
-	Assert(flipHorizontal || flipVertical);
-    if (!srcBitmap) return nil;
+HBITMAP flip_bitmap(HBITMAP source_bitmap, bool flip_horizontal, bool flip_vertical) {
+	Assert(flip_horizontal || flip_vertical);
+	if (!source_bitmap) return nil;
 
-    DIBSECTION dib{};
-    if (!GetObject(srcBitmap, sizeof(dib), &dib)) return nil;
-    if (!dib.dsBm.bmBits) return nil;
+	DIBSECTION dib{};
+	if (!GetObject(source_bitmap, sizeof(dib), &dib)) return nil;
+	if (!dib.dsBm.bmBits) return nil;
 
-    const int width = dib.dsBm.bmWidth;
-    const int height = dib.dsBm.bmHeight;
-    const int bitsPerPixel = dib.dsBm.bmBitsPixel;
-	Assert(bitsPerPixel == 8); // Doesnt properly support all other bpps
+	const int width = dib.dsBm.bmWidth;
+	const int height = dib.dsBm.bmHeight;
+	const int bits_per_pixel = dib.dsBm.bmBitsPixel;
+	Assert(bits_per_pixel == 8); // Doesnt properly support all other bpps
 
-    // Row stride aligned to 4 bytes
-    const int stride = ((width * bitsPerPixel + 31) / 32) * 4;
+	// Row stride aligned to 4 bytes
+	const int stride = ((width * bits_per_pixel + 31) / 32) * 4;
 
-    BITMAPINFO bmi{};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = width;
-    bmi.bmiHeader.biHeight = height;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = bitsPerPixel;
-    bmi.bmiHeader.biCompression = BI_RGB;
+	BITMAPINFO bmi{};
+	bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+	bmi.bmiHeader.biWidth = width;
+	bmi.bmiHeader.biHeight = height;
+	bmi.bmiHeader.biPlanes = 1;
+	bmi.bmiHeader.biBitCount = bits_per_pixel;
+	bmi.bmiHeader.biCompression = BI_RGB;
 
-    void* dstBits = nil;
-    HDC screenDC = GetDC(nil);
-    HBITMAP dstBitmap = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &dstBits, nil, 0);
-    ReleaseDC(nil, screenDC);
-    if (!dstBitmap || !dstBits) return nil;
+	void* destination_bits = nil;
+	HDC screen_dc = GetDC(nil);
+	HBITMAP destination_bitmap = CreateDIBSection(screen_dc, &bmi, DIB_RGB_COLORS, &destination_bits, nil, 0);
+	ReleaseDC(nil, screen_dc);
+	if (!destination_bitmap || !destination_bits) return nil;
 
-    const auto* src = (const u8*)(dib.dsBm.bmBits);
-    auto* dst = (u8*)(dstBits);
+	const auto* src = (const u8*)(dib.dsBm.bmBits);
+	auto* dst = (u8*)(destination_bits);
 
-    for (int y = 0; y < height; y++) {
-        const int srcY = flipVertical ? (height - 1 - y) : y;
+	for (int y = 0; y < height; y++) {
+		const int source_y = flip_vertical ? (height - 1 - y) : y;
 
-        const auto* srcRow = src + srcY * stride;
-        auto* dstRow = dst + y * stride;
+		const auto* source_row = src + source_y * stride;
+		auto* destination_row = dst + y * stride;
 
-        if (!flipHorizontal) memcpy(dstRow, srcRow, stride);
-        else {
-            const int bytesPerPixel = bitsPerPixel / 8;
+		if (!flip_horizontal) memcpy(destination_row, source_row, stride);
+		else {
+			const int bytes_per_pixel = bits_per_pixel / 8;
 
-            // Optimized path for 8-bit
-            if (bitsPerPixel == 8) for (int x = 0; x < width; x++) dstRow[x] = srcRow[width - 1 - x];
-            else {
-                // Generic path
-                for (int x = 0; x < width; x++) {
-                    const int srcX = width - 1 - x;
+			// Optimized path for 8-bit
+			if (bits_per_pixel == 8) for (int x = 0; x < width; x++) destination_row[x] = source_row[width - 1 - x];
+			else {
+				// Generic path
+				for (int x = 0; x < width; x++) {
+					const int source_x = width - 1 - x;
 
-                    memcpy(dstRow + x * bytesPerPixel, srcRow + srcX * bytesPerPixel, bytesPerPixel);
-                }
-            }
-        }
-    }
+					memcpy(destination_row + x * bytes_per_pixel, source_row + source_x * bytes_per_pixel, bytes_per_pixel);
+				}
+			}
+		}
+	}
 
-    return dstBitmap;
+	return destination_bitmap;
 }
 
-enum class Rotation { CW90, CW180, CW270 };
-static HBITMAP rotate_bitmap1(HBITMAP srcBitmap, Rotation rotation) { //AI generated, unoptimized
-    auto get_bit = [](const u8* bits, int stride, int x, int y) {
-        u8 byte = bits[y * stride + (x >> 3)];
-        return (byte & (0x80 >> (x & 7))) != 0;
-    };
+enum class Rotation { clockwise_90, clockwise_180, clockwise_270 };
+static HBITMAP rotate_bitmap1(HBITMAP source_bitmap, Rotation rotation) { //AI generated, unoptimized
+	auto get_bit = [](const u8* bits, int stride, int x, int y) {
+		u8 byte = bits[y * stride + (x >> 3)];
+		return (byte & (0x80 >> (x & 7))) != 0;
+	};
 
-    auto set_bit = [](u8* bits, int stride, int x, int y, bool value) {
-        u8& byte = bits[y * stride + (x >> 3)];
+	auto set_bit = [](u8* bits, int stride, int x, int y, bool value) {
+		u8& byte = bits[y * stride + (x >> 3)];
 
-        const u8 mask = (u8)(0x80 >> (x & 7));
+		const u8 mask = (u8)(0x80 >> (x & 7));
 
-        if (value) byte |= mask;
-        else byte &= ~mask;
-    };
+		if (value) byte |= mask;
+		else byte &= ~mask;
+	};
 
-    if (!srcBitmap) return nil;
+	if (!source_bitmap) return nil;
 
-    BITMAP bm{};
-    if (!GetObject(srcBitmap, sizeof(bm), &bm)) return nil;
+	BITMAP bm{};
+	if (!GetObject(source_bitmap, sizeof(bm), &bm)) return nil;
 
-    Assert(bm.bmBitsPixel == 1);
-    if (bm.bmBitsPixel != 1) return nil;
+	Assert(bm.bmBitsPixel == 1);
+	if (bm.bmBitsPixel != 1) return nil;
 
-    const int srcWidth = bm.bmWidth;
-    const int srcHeight = bm.bmHeight;
+	const int source_width = bm.bmWidth;
+	const int source_height = bm.bmHeight;
 
-    const int srcStride = ((srcWidth + 15) / 16) * 2;
+	const int source_stride = ((source_width + 15) / 16) * 2;
 
-    const u32 srcSize = srcStride * srcHeight;
+	const u32 source_size = source_stride * source_height;
 
-    std::vector<u8> srcBits(srcSize);
+	std::vector<u8> source_bits(source_size);
 
-    if (GetBitmapBits(srcBitmap, srcSize, srcBits.data()) != srcSize) return nil;
+	if (GetBitmapBits(source_bitmap, source_size, source_bits.data()) != source_size) return nil;
 
-    int dstWidth, dstHeight;
-    switch (rotation) {
-    case Rotation::CW180:
-        dstWidth = srcWidth;
-        dstHeight = srcHeight;
-        break;
-    default:
-        dstWidth = srcHeight;
-        dstHeight = srcWidth;
-        break;
-    }
+	int destination_width, destination_height;
+	switch (rotation) {
+	case Rotation::clockwise_180:
+		destination_width = source_width;
+		destination_height = source_height;
+		break;
+	default:
+		destination_width = source_height;
+		destination_height = source_width;
+		break;
+	}
 
-    const int dstStride = ((dstWidth + 15) / 16) * 2;
+	const int destination_stride = ((destination_width + 15) / 16) * 2;
 
-    const u32 dstSize = dstStride * dstHeight;
+	const u32 destination_size = destination_stride * destination_height;
 
-    std::vector<u8> dstBits(dstSize, 0);
+	std::vector<u8> destination_bits(destination_size, 0);
 
-    for (int sy = 0; sy < srcHeight; sy++) {
-        for (int sx = 0; sx < srcWidth; sx++)
-        {
-            const bool pixel = get_bit(srcBits.data(), srcStride, sx, sy);
+	for (int sy = 0; sy < source_height; sy++) {
+		for (int sx = 0; sx < source_width; sx++)
+		{
+			const bool pixel = get_bit(source_bits.data(), source_stride, sx, sy);
 
-            int dx, dy;
+			int dx, dy;
 
-            switch (rotation) {
-            case Rotation::CW90:
-                dx = srcHeight - 1 - sy;
-                dy = sx;
-                break;
-            case Rotation::CW180:
-                dx = srcWidth - 1 - sx;
-                dy = srcHeight - 1 - sy;
-                break;
-            case Rotation::CW270:
-                dx = sy;
-                dy = srcWidth - 1 - sx;
-                break;
-            }
+			switch (rotation) {
+			case Rotation::clockwise_90:
+				dx = source_height - 1 - sy;
+				dy = sx;
+				break;
+			case Rotation::clockwise_180:
+				dx = source_width - 1 - sx;
+				dy = source_height - 1 - sy;
+				break;
+			case Rotation::clockwise_270:
+				dx = sy;
+				dy = source_width - 1 - sx;
+				break;
+			}
 
-            set_bit(dstBits.data(), dstStride, dx, dy, pixel);
-        }
-    }
+			set_bit(destination_bits.data(), destination_stride, dx, dy, pixel);
+		}
+	}
 
-    HBITMAP dstBitmap = CreateBitmap(dstWidth, dstHeight, 1, 1, nil);
+	HBITMAP destination_bitmap = CreateBitmap(destination_width, destination_height, 1, 1, nil);
 
-    if (!dstBitmap) return nil;
+	if (!destination_bitmap) return nil;
 
-    if (SetBitmapBits(dstBitmap, dstSize, dstBits.data()) != dstSize)
-    {
-        DeleteObject(dstBitmap);
-        return nil;
-    }
+	if (SetBitmapBits(destination_bitmap, destination_size, destination_bits.data()) != destination_size)
+	{
+		DeleteObject(destination_bitmap);
+		return nil;
+	}
 
-    return dstBitmap;
+	return destination_bitmap;
 }
 
 
@@ -323,5 +323,5 @@ static bool set_menu_background_color(HMENU menu, HBRUSH color) {
   */
 
 void open_link(const cstr* url){
-    ShellExecute(nil, _t("open"), url, nil, nil, SW_SHOWNORMAL);
+	ShellExecute(nil, _t("open"), url, nil, nil, SW_SHOWNORMAL);
 }

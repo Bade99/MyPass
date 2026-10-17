@@ -1,8 +1,8 @@
 #pragma once
 
-struct _string_traversal { size_t p; bool reached_limit; }; //NOTE: string::npos seems worse since it doesnt give you a valid last pos
+struct StringTraversalResult { size_t p; bool reached_limit; }; //NOTE: string::npos seems worse since it doesnt give you a valid last pos
 
-static _string_traversal skip_whitespace(utf16_str s, size_t start_p, int direction) {
+static StringTraversalResult skip_whitespace(utf16_str s, size_t start_p, int direction) {
 	size_t last_valid_i;
 	for (size_t i = start_p; i < s.sz_char(); i += direction) {
 		last_valid_i = i;
@@ -15,7 +15,7 @@ static _string_traversal skip_whitespace(utf16_str s, size_t start_p, int direct
 
 //goes to first character in word or punctuation group (skips whitespaces)
 //TODO(fran): what to do if we're already at the start of a group?
-static _string_traversal goto_start_of_group(utf16_str s, size_t start_p, int direction) {
+static StringTraversalResult goto_start_of_group(utf16_str s, size_t start_p, int direction) {
 	Assert(direction < 0);
 
 	auto [x, reached_limit] = skip_whitespace(s, start_p, direction);
@@ -34,7 +34,7 @@ static _string_traversal goto_start_of_group(utf16_str s, size_t start_p, int di
 
 //goes one past the last character in word or punctuation group (skips whitespaces)
 //TODO(fran): what to do if we're already at the end of a group?
-static _string_traversal goto_end_of_group(utf16_str s, size_t start_p, int direction) {
+static StringTraversalResult goto_end_of_group(utf16_str s, size_t start_p, int direction) {
 	Assert(direction > 0);
 
 	auto [x, reached_limit] = skip_whitespace(s, start_p, direction);

@@ -39,9 +39,9 @@ namespace toast {
 		} wnd_pos;
 	};
 
-	enum class type { success, failure };
+	enum class Type { success, failure };
 
-	struct QueueItem { str msg; toast::type type; };
+	struct QueueItem { str msg; toast::Type type; };
 
 	struct State : WindowState {
 		Controls controls;

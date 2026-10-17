@@ -166,7 +166,7 @@ static void save_to_file_serialized(str content, str folder, str filename = _t("
 namespace userial {
 
 	static str serialize(str var) {
-		str res = _t("`") + var + _t("´");
+		str res = _t("`") + var + _t("Â´");
 		return res;
 	}
 
@@ -198,7 +198,7 @@ namespace userial {
 	static bool deserialize(str& var, str name, const str& content) {
 		str start = name + _keyvaluesepartor + _t("`");
 		size_t s = find_identifier(content, 0, start);
-		size_t e = find_closing_str(content, s + start.size(), _t("`"), _t("´"));
+		size_t e = find_closing_str(content, s + start.size(), _t("`"), _t("Â´"));
 		if (str_found(s) && str_found(e)) {
 			s += start.size();
 			str substr = content.substr(s, e - s);

@@ -40,22 +40,22 @@ struct Data {
 	Settings* settings;
 };
 
-struct file_header_base {
+struct FileHeaderBase {
 	utf8 magic[4]{ 'm','y','p','s' };
 	u32 version = 1;
 };
-static_assert(sizeof(file_header_base) == 8 && sizeof(file_header_base::magic) == 4 && sizeof(file_header_base::version) == 4, "Base file header cannot be modified");
+static_assert(sizeof(FileHeaderBase) == 8 && sizeof(FileHeaderBase::magic) == 4 && sizeof(FileHeaderBase::version) == 4, "Base file header cannot be modified");
 
-struct file_header_v1 : file_header_base {
+struct FileHeaderV1 : FileHeaderBase {
 	utf16 salt[8];
 };
-static_assert(alignof(file_header_v1) % 4 == 0);
+static_assert(alignof(FileHeaderV1) % 4 == 0);
 
-struct file_footer_v1 {
+struct FileFooterV1 {
 	u8 auth_integrity_hash[32];
 };
 
-enum class sort_option {
+enum class SortOption {
 	date_modified_newest = 0, date_modified_oldest,
 	alphabetic_az, alphabetic_za,
 	date_created_newest, date_created_oldest,
@@ -63,18 +63,18 @@ enum class sort_option {
 	__last
 };
 
-struct sort_combo_item { 
-	sort_option value; 
+struct SortComboItem {
+	SortOption value;
 	u32 label_id; 
 	private: void _(){ static_assert(sizeof(*this) == sizeof(void*)); }
 };
 
-enum class mode {
+enum class Mode {
 	normal = 0, transition_v0
 };
 
 namespace custom_message {
-	enum custom_message {
+	enum CustomMessage {
 		show_transition_v0_msgbox = WM_USER + 1,
 		show_used_backup_msgbox,
 	};
@@ -127,9 +127,9 @@ struct State {
 	utf16 salt[8];
 	bool passwords_need_save;
 
-	sort_option sorting;
+	SortOption sorting;
 
-	mode mode;
+	Mode mode;
 
 	void init() {
 		controls.password_editors = decltype(controls.password_editors)();

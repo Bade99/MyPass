@@ -34,11 +34,12 @@ static LRESULT handle_wm_measureitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM l
 	if (item->CtlType == ODT_MENU && item->itemData) { //menu with parent HMENU
 		//item->CtlID is not used
 		//Determine which type of menu we're to measure
-		MENUITEMINFO menu_type;
+		MENUITEMINFO menu_type{};
 		menu_type.cbSize = sizeof(menu_type);
 		menu_type.fMask = MIIM_FTYPE;
-		GetMenuItemInfo((HMENU)item->itemData, item->itemID, FALSE, &menu_type);
-		menu_type.fType ^= MFT_OWNERDRAW; //remove ownerdraw since we know all guys should be //TODO(fran): I think we should still check for the flag being there
+		if (!GetMenuItemInfo((HMENU)item->itemData, item->itemID, FALSE, &menu_type))
+			return DefWindowProc(wnd, msg, wparam, lparam);
+		menu_type.fType &= ~MFT_OWNERDRAW;
 		switch (menu_type.fType) {
 		case MFT_STRING:
 		{
@@ -86,11 +87,12 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 		//NOTE: do not use itemData here, go straight for item->hwndItem
 
 		//Determine which type of menu we're to draw
-		MENUITEMINFO menu_type;
+		MENUITEMINFO menu_type{};
 		menu_type.cbSize = sizeof(menu_type);
 		menu_type.fMask = MIIM_FTYPE | MIIM_SUBMENU;
-		GetMenuItemInfo((HMENU)item->hwndItem, item->itemID, FALSE, &menu_type);
-		menu_type.fType ^= MFT_OWNERDRAW; //remove ownerdraw since we know all guys should be
+		if (!GetMenuItemInfo((HMENU)item->hwndItem, item->itemID, FALSE, &menu_type))
+			return DefWindowProc(wnd, msg, wparam, lparam);
+		menu_type.fType &= ~MFT_OWNERDRAW;
 
 		switch (menu_type.fType) {
 			//NOTE: MFT_BITMAP, MFT_SEPARATOR, and MFT_STRING cannot be combined with one another, so we know those are separate types

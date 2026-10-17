@@ -236,7 +236,7 @@ void update_btn_visibility(State& state) {
 	auto set_visibility = [](HWND wnd, bool new_visibility) {
 		if (IsWindowVisible(wnd) != new_visibility) ShowWindow(wnd, new_visibility ? SW_SHOW : SW_HIDE);
 	};
-	bool new_visibility = state.onLMouseClickBk || state.onMouseOverSb || state.onMouseTrackingSb || state.onMouseOverControl;
+	bool new_visibility = state.background_pressed || state.mouse_over_bar || state.tracking_bar || state.mouse_over_control;
 
 	for (auto& btn : state.controls.all) set_visibility(btn, new_visibility);
 }
@@ -267,13 +267,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_CANCELMODE:
 	{
-		if (state.onMouseTrackingSb) {
+		if (state.tracking_bar) {
 			ReleaseCapture();
-			state.onMouseTrackingSb = false;
+			state.tracking_bar = false;
 		}
-		state.onLMouseClickBk = false;
-		state.onMouseOverSb = false;
-		state.onMouseOverControl = false;
+		state.background_pressed = false;
+		state.mouse_over_bar = false;
+		state.mouse_over_control = false;
 		update_btn_visibility(state);
 		ask_window_for_repaint(state.wnd);
 	} break;
@@ -284,23 +284,23 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_LBUTTONUP:
 	{
-		if (state.onMouseTrackingSb) {
+		if (state.tracking_bar) {
 			ReleaseCapture();
-			state.onMouseTrackingSb = false;
+			state.tracking_bar = false;
 		}
-		state.onLMouseClickBk = false;
+		state.background_pressed = false;
 		update_btn_visibility(state);
 	} break;
 	case WM_LBUTTONDOWN:
 	{
 		POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
 		
-		if (state.onMouseOverSb) {
+		if (state.mouse_over_bar) {
 			//Click happened inside the bar, so we want to capture the mouse movement in case the user starts moving the mouse trying to scroll
 
-			if (!state.onMouseTrackingSb) { //Check that we are not already tracking to prevent shadow clicks from affecting us
+			if (!state.tracking_bar) { //Check that we are not already tracking to prevent shadow clicks from affecting us
 				SetCapture(state.wnd);//Keep capturing the mouse while the user is still pressing the button, even if the mouse leaves our client area
-				state.onMouseTrackingSb = true;
+				state.tracking_bar = true;
 
 				state.mouse_start_p = is_vertical(state) ? mouse.y : mouse.x;
 				state.stored_pos = state.pos;
@@ -309,7 +309,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		else {
 			//Mouse is inside the background
 			//TODO(fran): make sure it's inside the bk, cause when we are tracking we may still get this msg from outside the client area
-			state.onLMouseClickBk = true;
+			state.background_pressed = true;
 
 			//Notify parent
 			RECT sb_rc = calc_scrollbar(state);
@@ -318,7 +318,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			static void (*bk_scroll_proc)(HWND, UINT, UINT_PTR, DWORD) = [](HWND wnd, UINT, UINT_PTR anim_id, DWORD) {
 				KillTimer(wnd, anim_id);
 				auto& state = *get_state(wnd);
-				if (&state && state.onLMouseClickBk) {
+				if (&state && state.background_pressed) {
 					//Check the mouse is still in the bk area, it could be that it moved away or that the bar reached the timer's position
 					POINT mouse; GetCursorPos(&mouse); ScreenToClient(state.wnd, &mouse);
 					RECT client_rc; GetClientRect(state.wnd, &client_rc);
@@ -338,11 +338,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_MOUSELEAVE:
 	{
 		POINT mouse; GetCursorPos(&mouse); ScreenToClient(state.wnd, &mouse);
-		bool prev_onMouseOverSb = state.onMouseOverSb;
-		bool prev_onMouseOverControl = state.onMouseOverControl;
-		state.onMouseOverSb = test_pt_rc(mouse, calc_scrollbar(state));
-		state.onMouseOverControl = test_pt_rc(mouse, get_client_rect(state.wnd));
-		bool state_change = prev_onMouseOverSb != state.onMouseOverSb || prev_onMouseOverControl != state.onMouseOverControl;
+		bool previous_mouse_over_bar = state.mouse_over_bar;
+		bool previous_mouse_over_control = state.mouse_over_control;
+		state.mouse_over_bar = test_pt_rc(mouse, calc_scrollbar(state));
+		state.mouse_over_control = test_pt_rc(mouse, get_client_rect(state.wnd));
+		bool state_change = previous_mouse_over_bar != state.mouse_over_bar || previous_mouse_over_control != state.mouse_over_control;
 		if (state_change) {
 			ask_window_for_repaint(state.wnd);
 			update_btn_visibility(state);
@@ -352,14 +352,14 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
 
-		bool prev_onMouseOverSb = state.onMouseOverSb;
-		bool prev_OnMouseTrackingSb = state.onMouseTrackingSb;
-		bool prev_onMouseOverControl = state.onMouseOverControl;
+		bool previous_mouse_over_bar = state.mouse_over_bar;
+		bool previous_tracking_bar = state.tracking_bar;
+		bool previous_mouse_over_control = state.mouse_over_control;
 
-		state.onMouseOverSb = test_pt_rc(mouse, calc_scrollbar(state));
-		state.onMouseOverControl = test_pt_rc(mouse, get_client_rect(state.wnd));
+		state.mouse_over_bar = test_pt_rc(mouse, calc_scrollbar(state));
+		state.mouse_over_control = test_pt_rc(mouse, get_client_rect(state.wnd));
 
-		if (state.onMouseTrackingSb) {
+		if (state.tracking_bar) {
 			//We are tracking the mouse to move the scrollbar
 			RECT sb_work_area = get_scrollbar_work_area(state);
 
@@ -386,7 +386,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			ask_window_for_repaint(state.wnd);
 		}
 
-		bool state_change = prev_onMouseOverSb != state.onMouseOverSb || prev_OnMouseTrackingSb != state.onMouseTrackingSb || prev_onMouseOverControl != state.onMouseOverControl;
+		bool state_change = previous_mouse_over_bar != state.mouse_over_bar || previous_tracking_bar != state.tracking_bar || previous_mouse_over_control != state.mouse_over_control;
 		if (state_change) {
 			ask_window_for_repaint(state.wnd);
 			update_btn_visibility(state);
@@ -476,7 +476,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			auto& brushes = state.theme.brushes;
 			RECT rc = calc_scrollbar(state);
 			HBRUSH bk, border;
-			if (state.onMouseOverSb || state.onMouseTrackingSb) {
+			if (state.mouse_over_bar || state.tracking_bar) {
 				border = brushes.bar_border.mouseover;
 				bk = brushes.bar_bk.mouseover;
 			}

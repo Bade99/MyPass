@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "win_sdk.h"
 #include "platform.h"
 #include "helpers.h"
@@ -12,9 +12,7 @@ auto search(State& state, bool search_in_current_selection) {
 	//TODO(fran): extra param, search from sel_start or sel_end, when the user presses the enter key or the find button they want to start from sel_end, while they are writing they want to start from sel_start
 	//INFO: from_sel_start: taking by reference point a search downwards if true the search happens from the start of the current selection, otherwise from the end, the same desired behaviour will happen for searching up where from_sel_start true will mean to search from the end, yes confusing, just take into account how it works for searching downwards and it will automatically work perfectly for searching up
 	
-	//TODO(fran): searching should roll over, say we get to the end of the file and dont find anything then we go from the start, and only then can we say to the user that we didnt find anything
-
-	struct search_result { int p, sz_char; } res, fail_res{.p = -1};
+	struct SearchResult { int p, sz_char; } res, fail_res{.p = -1};
 
 	int match_len = (int)SendMessage(state.controls.edit_match, WM_GETTEXTLENGTH, 0, 0) + 1;//lenght in characters, includes null terminator
 	res.sz_char = match_len-1;
@@ -304,13 +302,13 @@ void resize_controls(State& state) {
 		btn_case_sensitive_w = !btn_case_sensitive_off ? left_button_w : 0;
 
 		//then "whole word"
-		btn_whole_word_x = btn_case_sensitive_x + btn_case_sensitive_w + !btn_whole_word_off ? w_pad : 0;
+		btn_whole_word_x = btn_case_sensitive_x + btn_case_sensitive_w + (!btn_whole_word_off ? w_pad : 0);
 		btn_whole_word_y = btn_case_sensitive_y;
 		btn_whole_word_w = !btn_whole_word_off ? left_button_w : 0;
 		btn_whole_word_h = btn_whole_word_w;
 
 		//"wrap around"
-		btn_wrap_x = btn_whole_word_x + btn_whole_word_w + !btn_wrap_off ? w_pad : 0;
+		btn_wrap_x = btn_whole_word_x + btn_whole_word_w + (!btn_wrap_off ? w_pad : 0);
 		btn_wrap_y = btn_case_sensitive_y;
 		btn_wrap_w = !btn_wrap_off ? left_button_w : 0;
 		btn_wrap_h = btn_wrap_w;

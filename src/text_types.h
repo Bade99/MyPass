@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "undo_history.h"
 
@@ -54,7 +54,7 @@ constexpr UINT clipboard_format =
 	CF_TEXT;
 #endif
 
-struct char_sel {
+struct CharSel {
 	using type = size_t;
 	type anchor;//Eg ABC		anchor=1	anchor is between A and B
 	type cursor;//Eg ABC		cursor=1	cursor is between A and B
@@ -83,9 +83,9 @@ struct char_sel {
 struct Theme {
 	union {
 		struct {
-			brush_group foreground, bk, border, selection, placeholder; //NOTE: for now we use the border color for the caret color
+			BrushGroup foreground, bk, border, selection, placeholder; //NOTE: for now we use the border color for the caret color
 		};
-		brush_group all[5];
+		BrushGroup all[5];
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 	} brushes;
 		
@@ -118,8 +118,8 @@ private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 };
 
 //TODO(fran): now that I think about it I believe this would be much better done once you need the contents from the editbox, you can perform a one time check, send one notification to the user informing of the problem and that's it
-struct _has_invalid_chars { bool res; str explanation; };
-typedef _has_invalid_chars(*func_has_invalid_chars)(const utf16* txt, size_t char_cnt, void* user_extra);
+struct InvalidCharactersResult { bool res; str explanation; };
+typedef InvalidCharactersResult(*func_has_invalid_chars)(const utf16* txt, size_t char_cnt, void* user_extra);
 typedef void(*func_on_change)(void* user_extra, HWND wnd);
 
 union Functions {
@@ -131,49 +131,49 @@ union Functions {
 private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 };
 
-struct text_edit_entry {
+struct TextEditEntry {
 	/*
 	TODO: Simpler entry struct, see if we can reduce this one down to this:
-		struct text_edit_entry {
-			enum class type { insert, erase } type;
+		struct TextEditEntry {
+			enum class Type { insert, erase } type;
 			size_t pos;
 			str text;
 			// Optional: selection before/after
 		};
 	*/
 
-	enum class kind { //TODO: we can add these guys to undo_merge_state::type as well together with an extra check (can_merge(old type) && old type == new type, where can_merge will only be true for typing, backspace, delete_forward). We could also not add them and still do the same, with can_merge false for type::none
+	enum class Kind { //TODO: we can add these guys to UndoMergeState::Type as well together with an extra check (can_merge(old type) && old type == new type, where can_merge will only be true for typing, backspace, delete_forward). We could also not add them and still do the same, with can_merge false for Type::none
 		typing, backspace, delete_forward, paste, cut, ime, programmatic,
 	};
-	kind edit_kind;
+	Kind edit_kind;
 
 	size_t position_x_min;
 	str removed_text, inserted_text;
 
-	char_sel selection_before, selection_after; //NOTE: selection_after could be safely inferred
+	CharSel selection_before, selection_after; //NOTE: selection_after could be safely inferred
 	bool selection_before_trailing, selection_after_trailing;
 
 	size_t memory_size() const { return sizeof(*this) + (removed_text.capacity() + inserted_text.capacity()) * sizeof(decltype(removed_text)::value_type); }
 };
 
-struct ime_composition_state {
+struct ImeCompositionState {
 	bool active;
 	bool document_replaced;
 	bool has_result;
 
 	size_t position_x_min;
 	str removed_text, committed_text, provisional_text;
-	char_sel selection_before;
+	CharSel selection_before;
 	bool selection_before_trailing;
 };
 
-struct text_caret_stop {
+struct TextCaretStop {
 	size_t character_index;
 	f32 x;
 	bool trailing;
 };
 
-struct text_line_layout {
+struct TextLineLayout {
 	size_t text_start;
 	size_t text_length;
 	SIZE size;
@@ -182,10 +182,10 @@ struct text_line_layout {
 	std::vector<f32> trailing_caret_positions;
 	std::vector<u8> caret_stops;
 	std::vector<u8> whitespace_characters;
-	std::vector<text_caret_stop> visual_caret_stops;
+	std::vector<TextCaretStop> visual_caret_stops;
 };
 
-struct undo_merge_state {
+struct UndoMergeState {
 	/*
 	Usage:
 
@@ -199,45 +199,45 @@ struct undo_merge_state {
 
 	using clock = std::chrono::steady_clock;
 
-	enum class type { other, typing, backspace, delete_forward, }; //NOTE: vscode uses an extra type: space, breaks operations by a space and never by time, in practice that means that, for languages that use spaces, every undo operation removes the last word and space you typed
+	enum class Type { other, typing, backspace, delete_forward, }; //NOTE: vscode uses an extra type: space, breaks operations by a space and never by time, in practice that means that, for languages that use spaces, every undo operation removes the last word and space you typed
 
-	text_edit_entry::kind transient_kind = text_edit_entry::kind::typing;
-	type active_type = type::other;
-	char_sel selection_after{};
+	TextEditEntry::Kind transient_kind = TextEditEntry::Kind::typing;
+	Type active_type = Type::other;
+	CharSel selection_after{};
 	clock::time_point last_edit_time{};
 	static constexpr auto max_delay_ms = std::chrono::milliseconds{ 2000 };
 
-	bool can_merge(type incoming_type, const char_sel& selection_before) const {
-		bool same_mergeable_type = active_type == incoming_type && active_type != type::other;
+	bool can_merge(Type incoming_type, const CharSel& selection_before) const {
+		bool same_mergeable_type = active_type == incoming_type && active_type != Type::other;
 		bool selections_are_empty = !selection_after.has_selection() && !selection_before.has_selection();
 		bool selection_is_contiguous = selection_after.cursor == selection_before.cursor;
 		bool close_in_time = clock::now() - last_edit_time <= max_delay_ms;
 		return same_mergeable_type && selections_are_empty && selection_is_contiguous && close_in_time;
 	}
 
-	static type map_kind_to_type(text_edit_entry::kind kind) {
+	static Type map_kind_to_type(TextEditEntry::Kind kind) {
 		switch (kind) {
-		case text_edit_entry::kind::typing: return type::typing;
-		case text_edit_entry::kind::backspace: return type::backspace;
-		case text_edit_entry::kind::delete_forward: return type::delete_forward;
-		default: return type::other;
+		case TextEditEntry::Kind::typing: return Type::typing;
+		case TextEditEntry::Kind::backspace: return Type::backspace;
+		case TextEditEntry::Kind::delete_forward: return Type::delete_forward;
+		default: return Type::other;
 		}
 	};
 
-	bool can_merge(const char_sel& selection_before) const {
+	bool can_merge(const CharSel& selection_before) const {
 		return can_merge(map_kind_to_type(transient_kind), selection_before);
 	}
 
-	void record_transient_edit(text_edit_entry::kind edit_kind) {
+	void record_transient_edit(TextEditEntry::Kind edit_kind) {
 		transient_kind = edit_kind;
 	}
 
-	void record_edit(type edit_type, const char_sel& new_selection_after) {
+	void record_edit(Type edit_type, const CharSel& new_selection_after) {
 		active_type = edit_type;
 		selection_after = new_selection_after;
 		last_edit_time = clock::now();
 	}
-	void record_edit(text_edit_entry::kind edit_kind, const char_sel& new_selection_after) {
+	void record_edit(TextEditEntry::Kind edit_kind, const CharSel& new_selection_after) {
 		record_edit(map_kind_to_type(edit_kind), new_selection_after);
 	}
 
@@ -251,7 +251,7 @@ struct undo_merge_state {
 		- Programmatic text changes.
 		- An IME composition is committed or cancelled.
 		*/
-		active_type = type::other;
+		active_type = Type::other;
 	}
 };
 
@@ -262,11 +262,11 @@ struct State : WindowState {
 
 	u64 char_max_sz;//doesnt include terminating null, also we wont have terminating null
 
-	char_sel selection;//current selection, in "character" coordinates, zero-based //TODO(fran): cache selection's starting line
+	CharSel selection;//current selection, in "character" coordinates, zero-based //TODO(fran): cache selection's starting line
 
 	f32 vertical_selection_stored_width;
 
-	struct caretnfo {
+	struct CaretInfo {
 		HBITMAP bmp;
 		SIZE dim;
 		POINT pos;//client coords, it's also top down so this is the _top_ of the caret
@@ -275,11 +275,11 @@ struct State : WindowState {
 
 	str char_text;//much simpler to work with and debug
 	std::vector<size_t> line_breaks; //Indices into the text string where line breaks occur
-	std::vector<text_line_layout> line_layouts;
+	std::vector<TextLineLayout> line_layouts;
 
-	undo_history<text_edit_entry> history;
-	undo_merge_state history_helper;
-	ime_composition_state ime_composition;
+	UndoHistory<TextEditEntry> history;
+	UndoMergeState history_helper;
+	ImeCompositionState ime_composition;
 
 	v2_i32 padding; //NOTE: x,y offset from where characters start being placed on the screen, relative to the client area, positive values 'shrink' the rendering area. For a left aligned control this will be offset from the left, for right aligned it'll be offset from the right, and for center alignment it'll be the left most position from where chars will be drawn
 
@@ -290,8 +290,8 @@ struct State : WindowState {
 
 	bool on_mouse_tracking;//true when capturing the mouse while the user remains with left click down
 
-	bool hide_IME_wnd;
-	bool ignore_IME_candidates;
+	bool hide_ime_window;
+	bool ignore_ime_candidates;
 
 	void* user_extra;
 
@@ -311,7 +311,7 @@ namespace ETP {
 }
 
 namespace menu {
-	enum menu : u32 {
+	enum Menu : u32 {
 		undo = 300, redo, cut, copy, paste, del, find, select_all
 	};
 }
