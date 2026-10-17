@@ -55,18 +55,18 @@ namespace MBP {
 	};
 }
 struct MsgBoxPlacement { 
-    HWND relative_to; multiflag<MBP::MBP> flags; bool processed; 
+	HWND relative_to; multiflag<MBP::MBP> flags; bool processed; 
 
-    //INFO: flags defaults: left (if left or right or center isnt selected) and top (if top or bottom or center isnt selected)
-    void set(HWND relative_to, multiflag<MBP::MBP> flags) {
-        //Set defaults
-        if (!(flags & MBP::left || flags & MBP::right || flags & MBP::center)) flags |= MBP::left;
-        if (!(flags & MBP::top || flags & MBP::bottom || flags & MBP::center)) flags |= MBP::top;
+	//INFO: flags defaults: left (if left or right or center isnt selected) and top (if top or bottom or center isnt selected)
+	void set(HWND relative_to, multiflag<MBP::MBP> flags) {
+		//Set defaults
+		if (!(flags & MBP::left || flags & MBP::right || flags & MBP::center)) flags |= MBP::left;
+		if (!(flags & MBP::top || flags & MBP::bottom || flags & MBP::center)) flags |= MBP::top;
 
-        this->relative_to = relative_to;
-        this->flags = flags;
-        this->processed = false;
-    }
+		this->relative_to = relative_to;
+		this->flags = flags;
+		this->processed = false;
+	}
 
 } static msgbox_placement{ 0 };
 static LRESULT CALLBACK __msgbox_hook(int code, WPARAM wparam, LPARAM lparam)
@@ -79,7 +79,7 @@ static LRESULT CALLBACK __msgbox_hook(int code, WPARAM wparam, LPARAM lparam)
 
 		if (auto& placement = msgbox_placement; ((pcs->style & WS_DLGFRAME) || (pcs->style & WS_POPUP)) && !placement.processed)
 		{
-            placement.processed = true;
+			placement.processed = true;
 
 			HWND wnd = (HWND)wparam;//Msgbox
 
@@ -121,7 +121,7 @@ static LRESULT CALLBACK __msgbox_hook(int code, WPARAM wparam, LPARAM lparam)
 }
 
 static int CustomMessageBox(HWND relative_to, const cstr* lpText, const cstr* lpCaption, UINT uType, multiflag<MBP::MBP> placement) {
-    msgbox_placement.set(relative_to, placement);
+	msgbox_placement.set(relative_to, placement);
 	HHOOK hook_proc = SetWindowsHookEx(WH_CBT, __msgbox_hook, 0, GetCurrentThreadId()); defer{ UnhookWindowsHookEx(hook_proc); };
 	int res = MessageBox(relative_to, lpText, lpCaption, uType);
 	return res;
@@ -134,153 +134,153 @@ static int CustomMessageBox(HWND relative_to, const cstr* lpText, const cstr* lp
 
 HBITMAP flip_bitmap(HBITMAP source_bitmap, bool flip_horizontal, bool flip_vertical) {
 	Assert(flip_horizontal || flip_vertical);
-    if (!source_bitmap) return nil;
+	if (!source_bitmap) return nil;
 
-    DIBSECTION dib{};
-    if (!GetObject(source_bitmap, sizeof(dib), &dib)) return nil;
-    if (!dib.dsBm.bmBits) return nil;
+	DIBSECTION dib{};
+	if (!GetObject(source_bitmap, sizeof(dib), &dib)) return nil;
+	if (!dib.dsBm.bmBits) return nil;
 
-    const int width = dib.dsBm.bmWidth;
-    const int height = dib.dsBm.bmHeight;
-    const int bits_per_pixel = dib.dsBm.bmBitsPixel;
+	const int width = dib.dsBm.bmWidth;
+	const int height = dib.dsBm.bmHeight;
+	const int bits_per_pixel = dib.dsBm.bmBitsPixel;
 	Assert(bits_per_pixel == 8); // Doesnt properly support all other bpps
 
-    // Row stride aligned to 4 bytes
-    const int stride = ((width * bits_per_pixel + 31) / 32) * 4;
+	// Row stride aligned to 4 bytes
+	const int stride = ((width * bits_per_pixel + 31) / 32) * 4;
 
-    BITMAPINFO bmi{};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = width;
-    bmi.bmiHeader.biHeight = height;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = bits_per_pixel;
-    bmi.bmiHeader.biCompression = BI_RGB;
+	BITMAPINFO bmi{};
+	bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+	bmi.bmiHeader.biWidth = width;
+	bmi.bmiHeader.biHeight = height;
+	bmi.bmiHeader.biPlanes = 1;
+	bmi.bmiHeader.biBitCount = bits_per_pixel;
+	bmi.bmiHeader.biCompression = BI_RGB;
 
-    void* destination_bits = nil;
-    HDC screen_dc = GetDC(nil);
-    HBITMAP destination_bitmap = CreateDIBSection(screen_dc, &bmi, DIB_RGB_COLORS, &destination_bits, nil, 0);
-    ReleaseDC(nil, screen_dc);
-    if (!destination_bitmap || !destination_bits) return nil;
+	void* destination_bits = nil;
+	HDC screen_dc = GetDC(nil);
+	HBITMAP destination_bitmap = CreateDIBSection(screen_dc, &bmi, DIB_RGB_COLORS, &destination_bits, nil, 0);
+	ReleaseDC(nil, screen_dc);
+	if (!destination_bitmap || !destination_bits) return nil;
 
-    const auto* src = (const u8*)(dib.dsBm.bmBits);
-    auto* dst = (u8*)(destination_bits);
+	const auto* src = (const u8*)(dib.dsBm.bmBits);
+	auto* dst = (u8*)(destination_bits);
 
-    for (int y = 0; y < height; y++) {
-        const int source_y = flip_vertical ? (height - 1 - y) : y;
+	for (int y = 0; y < height; y++) {
+		const int source_y = flip_vertical ? (height - 1 - y) : y;
 
-        const auto* source_row = src + source_y * stride;
-        auto* destination_row = dst + y * stride;
+		const auto* source_row = src + source_y * stride;
+		auto* destination_row = dst + y * stride;
 
-        if (!flip_horizontal) memcpy(destination_row, source_row, stride);
-        else {
-            const int bytes_per_pixel = bits_per_pixel / 8;
+		if (!flip_horizontal) memcpy(destination_row, source_row, stride);
+		else {
+			const int bytes_per_pixel = bits_per_pixel / 8;
 
-            // Optimized path for 8-bit
-            if (bits_per_pixel == 8) for (int x = 0; x < width; x++) destination_row[x] = source_row[width - 1 - x];
-            else {
-                // Generic path
-                for (int x = 0; x < width; x++) {
-                    const int source_x = width - 1 - x;
+			// Optimized path for 8-bit
+			if (bits_per_pixel == 8) for (int x = 0; x < width; x++) destination_row[x] = source_row[width - 1 - x];
+			else {
+				// Generic path
+				for (int x = 0; x < width; x++) {
+					const int source_x = width - 1 - x;
 
-                    memcpy(destination_row + x * bytes_per_pixel, source_row + source_x * bytes_per_pixel, bytes_per_pixel);
-                }
-            }
-        }
-    }
+					memcpy(destination_row + x * bytes_per_pixel, source_row + source_x * bytes_per_pixel, bytes_per_pixel);
+				}
+			}
+		}
+	}
 
-    return destination_bitmap;
+	return destination_bitmap;
 }
 
 enum class Rotation { clockwise_90, clockwise_180, clockwise_270 };
 static HBITMAP rotate_bitmap1(HBITMAP source_bitmap, Rotation rotation) { //AI generated, unoptimized
-    auto get_bit = [](const u8* bits, int stride, int x, int y) {
-        u8 byte = bits[y * stride + (x >> 3)];
-        return (byte & (0x80 >> (x & 7))) != 0;
-    };
+	auto get_bit = [](const u8* bits, int stride, int x, int y) {
+		u8 byte = bits[y * stride + (x >> 3)];
+		return (byte & (0x80 >> (x & 7))) != 0;
+	};
 
-    auto set_bit = [](u8* bits, int stride, int x, int y, bool value) {
-        u8& byte = bits[y * stride + (x >> 3)];
+	auto set_bit = [](u8* bits, int stride, int x, int y, bool value) {
+		u8& byte = bits[y * stride + (x >> 3)];
 
-        const u8 mask = (u8)(0x80 >> (x & 7));
+		const u8 mask = (u8)(0x80 >> (x & 7));
 
-        if (value) byte |= mask;
-        else byte &= ~mask;
-    };
+		if (value) byte |= mask;
+		else byte &= ~mask;
+	};
 
-    if (!source_bitmap) return nil;
+	if (!source_bitmap) return nil;
 
-    BITMAP bm{};
-    if (!GetObject(source_bitmap, sizeof(bm), &bm)) return nil;
+	BITMAP bm{};
+	if (!GetObject(source_bitmap, sizeof(bm), &bm)) return nil;
 
-    Assert(bm.bmBitsPixel == 1);
-    if (bm.bmBitsPixel != 1) return nil;
+	Assert(bm.bmBitsPixel == 1);
+	if (bm.bmBitsPixel != 1) return nil;
 
-    const int source_width = bm.bmWidth;
-    const int source_height = bm.bmHeight;
+	const int source_width = bm.bmWidth;
+	const int source_height = bm.bmHeight;
 
-    const int source_stride = ((source_width + 15) / 16) * 2;
+	const int source_stride = ((source_width + 15) / 16) * 2;
 
-    const u32 source_size = source_stride * source_height;
+	const u32 source_size = source_stride * source_height;
 
-    std::vector<u8> source_bits(source_size);
+	std::vector<u8> source_bits(source_size);
 
-    if (GetBitmapBits(source_bitmap, source_size, source_bits.data()) != source_size) return nil;
+	if (GetBitmapBits(source_bitmap, source_size, source_bits.data()) != source_size) return nil;
 
-    int destination_width, destination_height;
-    switch (rotation) {
-    case Rotation::clockwise_180:
-        destination_width = source_width;
-        destination_height = source_height;
-        break;
-    default:
-        destination_width = source_height;
-        destination_height = source_width;
-        break;
-    }
+	int destination_width, destination_height;
+	switch (rotation) {
+	case Rotation::clockwise_180:
+		destination_width = source_width;
+		destination_height = source_height;
+		break;
+	default:
+		destination_width = source_height;
+		destination_height = source_width;
+		break;
+	}
 
-    const int destination_stride = ((destination_width + 15) / 16) * 2;
+	const int destination_stride = ((destination_width + 15) / 16) * 2;
 
-    const u32 destination_size = destination_stride * destination_height;
+	const u32 destination_size = destination_stride * destination_height;
 
-    std::vector<u8> destination_bits(destination_size, 0);
+	std::vector<u8> destination_bits(destination_size, 0);
 
-    for (int sy = 0; sy < source_height; sy++) {
-        for (int sx = 0; sx < source_width; sx++)
-        {
-            const bool pixel = get_bit(source_bits.data(), source_stride, sx, sy);
+	for (int sy = 0; sy < source_height; sy++) {
+		for (int sx = 0; sx < source_width; sx++)
+		{
+			const bool pixel = get_bit(source_bits.data(), source_stride, sx, sy);
 
-            int dx, dy;
+			int dx, dy;
 
-            switch (rotation) {
-            case Rotation::clockwise_90:
-                dx = source_height - 1 - sy;
-                dy = sx;
-                break;
-            case Rotation::clockwise_180:
-                dx = source_width - 1 - sx;
-                dy = source_height - 1 - sy;
-                break;
-            case Rotation::clockwise_270:
-                dx = sy;
-                dy = source_width - 1 - sx;
-                break;
-            }
+			switch (rotation) {
+			case Rotation::clockwise_90:
+				dx = source_height - 1 - sy;
+				dy = sx;
+				break;
+			case Rotation::clockwise_180:
+				dx = source_width - 1 - sx;
+				dy = source_height - 1 - sy;
+				break;
+			case Rotation::clockwise_270:
+				dx = sy;
+				dy = source_width - 1 - sx;
+				break;
+			}
 
-            set_bit(destination_bits.data(), destination_stride, dx, dy, pixel);
-        }
-    }
+			set_bit(destination_bits.data(), destination_stride, dx, dy, pixel);
+		}
+	}
 
-    HBITMAP destination_bitmap = CreateBitmap(destination_width, destination_height, 1, 1, nil);
+	HBITMAP destination_bitmap = CreateBitmap(destination_width, destination_height, 1, 1, nil);
 
-    if (!destination_bitmap) return nil;
+	if (!destination_bitmap) return nil;
 
-    if (SetBitmapBits(destination_bitmap, destination_size, destination_bits.data()) != destination_size)
-    {
-        DeleteObject(destination_bitmap);
-        return nil;
-    }
+	if (SetBitmapBits(destination_bitmap, destination_size, destination_bits.data()) != destination_size)
+	{
+		DeleteObject(destination_bitmap);
+		return nil;
+	}
 
-    return destination_bitmap;
+	return destination_bitmap;
 }
 
 
@@ -323,5 +323,5 @@ static bool set_menu_background_color(HMENU menu, HBRUSH color) {
   */
 
 void open_link(const cstr* url){
-    ShellExecute(nil, _t("open"), url, nil, nil, SW_SHOWNORMAL);
+	ShellExecute(nil, _t("open"), url, nil, nil, SW_SHOWNORMAL);
 }

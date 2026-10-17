@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "win_sdk.h"
 #include "helpers.h"
 #include "global.h"

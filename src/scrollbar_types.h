@@ -80,11 +80,11 @@ namespace scrollbar {
 		f32 mouse_start_p;
 		i32 stored_pos;
 
-		bool onMouseOverSb;//The mouse is over our bar
-		bool onMouseOverControl;//The mouse is over our control
-		bool onLMouseClickBk;//The left click is being pressed on the background area
-		bool onMouseTrackingSb; //Left click was pressed in our bar and now is still being held, the user will probably be moving the mouse around, so we want to track it to move the scrollbar
-		//NOTE: we'll probably also need a onMouseOverBk or just general mouseOver
+		bool mouse_over_bar;//The mouse is over our bar
+		bool mouse_over_control;//The mouse is over our control
+		bool background_pressed;//The left click is being pressed on the background area
+		bool tracking_bar; //Left click was pressed in our bar and now is still being held, the user will probably be moving the mouse around, so we want to track it to move the scrollbar
+		//NOTE: we'll probably also need a mouse_over_background or just general mouse_over
 
 		bool autohide;
 

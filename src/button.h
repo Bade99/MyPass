@@ -78,7 +78,7 @@ void draw_image(State& state, HDC dc, HBRUSH br, DWORD style, rect_i32& bounds, 
 				if ((bitmap.bmWidth % 2) == 0) max_sz = bitmap.bmWidth / 2;
 				else max_sz = bitmap.bmWidth; //More HACKs
 			}
-			if (max_sz > bitmap.bmWidth) max_sz = bitmap.bmWidth;//TODO(fran): HACK nº 1000, for this specific program (MyPass) some if we scale some icons bigger than their original size they look terrible (specially the close button), therefore we dont allow it. Solution: stop using 1 bit images and use 8 bit grayscale
+			if (max_sz > bitmap.bmWidth) max_sz = bitmap.bmWidth;//TODO(fran): HACK nÂº 1000, for this specific program (MyPass) some if we scale some icons bigger than their original size they look terrible (specially the close button), therefore we dont allow it. Solution: stop using 1 bit images and use 8 bit grayscale
 		} elif(bitmap.bmBitsPixel == 8) {
 			if (max_sz < bitmap.bmWidth) {
 				auto test_w = bitmap.bmWidth;

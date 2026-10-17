@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "undo_history.h"
 
@@ -290,8 +290,8 @@ struct State : WindowState {
 
 	bool on_mouse_tracking;//true when capturing the mouse while the user remains with left click down
 
-	bool hide_IME_wnd;
-	bool ignore_IME_candidates;
+	bool hide_ime_window;
+	bool ignore_ime_candidates;
 
 	void* user_extra;
 

@@ -33,7 +33,7 @@ enum Language
 {
 #define _foreach_language(op) \
 				op(English,=1)  \
-				op(Espa駉l,)  \
+				op(Espa帽ol,)  \
 
 	_foreach_language(_generate_enum_member)
 };
@@ -46,7 +46,7 @@ Language from_language_name(utf16 c1, utf16 c2, utf16 c3) {
 	auto pack_chars_in_u32 = [](utf8 c1, utf8 c2, utf8 c3 = 0) { return (((u32)c1) << 16) | (((u32)c2) << 8) | c3; };
 	switch (pack_chars_in_u32(tolower(c1), tolower(c2), isalpha(c3) ? tolower(c3) : 0)) {
 	case pack_chars_in_u32('e','n'): return Language::English;
-	case pack_chars_in_u32('e','s'): return Language::Espa駉l;
+	case pack_chars_in_u32('e','s'): return Language::Espa帽ol;
 	default: return (Language)0;
 	}
 }
@@ -113,10 +113,10 @@ public:
 
 	//INFO: all Add... functions send the text update message when called, for dynamic hwnds you should create everything first and only then add it
 
-	//稟dds the hwnd to the list of managed hwnds and sets its text corresponding to stringID and the current language
-	//稭any hwnds can use the same stringID
-	//種ext time there is a language change the window will be automatically updated
-	//稲eturns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
+	//路Adds the hwnd to the list of managed hwnds and sets its text corresponding to stringID and the current language
+	//路Many hwnds can use the same stringID
+	//路Next time there is a language change the window will be automatically updated
+	//路Returns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
 	BOOL AddWindowText(HWND hwnd, UINT stringID)
 	{
 		BOOL res = UpdateHwnd(hwnd, stringID);
@@ -124,29 +124,29 @@ public:
 		return res;
 	}
 
-	//稟dds the hwnd to the list of managed hwnds and sets its default text corresponding to stringID and the current language
-	//稭any hwnds can use the same stringID
-	//種ext time there is a language change the window will be automatically updated
-	//稲eturns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
+	//路Adds the hwnd to the list of managed hwnds and sets its default text corresponding to stringID and the current language
+	//路Many hwnds can use the same stringID
+	//路Next time there is a language change the window will be automatically updated
+	//路Returns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
 	BOOL AddWindowDefaultText(HWND hwnd, u32 stringID) {
 		BOOL res = UpdateHwndDefault(hwnd, stringID);
 		if (res) this->HwndsDefault[hwnd] = stringID;
 		return res;
 	}
 
-	//稟dds the hwnd to the list of managed hwnds and sets its tooltip text corresponding to stringID and the current language
-	//稭any hwnds can use the same stringID
-	//種ext time there is a language change the window will be automatically updated
-	//稲eturns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
+	//路Adds the hwnd to the list of managed hwnds and sets its tooltip text corresponding to stringID and the current language
+	//路Many hwnds can use the same stringID
+	//路Next time there is a language change the window will be automatically updated
+	//路Returns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
 	BOOL AddWindowTooltipText(HWND hwnd, u32 stringID) {
 		BOOL res = UpdateHwndTooltip(hwnd, stringID);
 		if (res) this->HwndsTooltip[hwnd] = stringID;
 		return res;
 	}
 
-	//稶pdates all managed objects to the new language, all the ones added after this call will also use the new language
-	//稯n success returns the new LANGID (language) //TODO(fran): should I return the previous langid? it feels more useful
-	//稯n failure returns (LANGID)-2 if the language is invalid, (LANGID)-3 if failed to change the language
+	//路Updates all managed objects to the new language, all the ones added after this call will also use the new language
+	//路On success returns the new LANGID (language) //TODO(fran): should I return the previous langid? it feels more useful
+	//路On failure returns (LANGID)-2 if the language is invalid, (LANGID)-3 if failed to change the language
 	LANGID ChangeLanguage(Language newLang)
 	{
 		//if (newLang == this->CurrentLanguage) return -1;//TODO: negative values wrap around to huge values, I assume not all lcid values are valid, find out if these arent
@@ -188,8 +188,8 @@ public:
 		return (lang_res == newLANGID ? lang_res : -3);//is this NULL when failed?
 	}
 
-	//稲eturns the requested string in the current language
-	//稩f stringID is invalid returns L"" //TODO(fran): check this is true
+	//路Returns the requested string in the current language
+	//路If stringID is invalid returns L"" //TODO(fran): check this is true
 	//INFO: uses temporary string that lives till the end of the full expression it appears in
 	str RequestString(UINT stringID)
 	{
@@ -201,8 +201,8 @@ public:
 		return res;
 	}
 
-	//稟dds the hwnd to the list of managed comboboxes and sets its text for the specified ID(element in the list) corresponding to stringID and the current language
-	//種ext time there is a language change the window will be automatically updated
+	//路Adds the hwnd to the list of managed comboboxes and sets its text for the specified ID(element in the list) corresponding to stringID and the current language
+	//路Next time there is a language change the window will be automatically updated
 	BOOL AddComboboxText(HWND hwnd, UINT ID, UINT stringID)
 	{
 		BOOL res = UpdateCombo(hwnd, ID, stringID);
@@ -345,7 +345,7 @@ private:
 		switch (lang) {
 		case Language::English:
 			return MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_NEUTRAL), SORT_DEFAULT); //TODO(fran):this is deprecated and not great for macros, unless we set each enum to this values
-		case Language::Espa駉l:
+		case Language::Espa帽ol:
 			return MAKELCID(MAKELANGID(LANG_SPANISH, SUBLANG_NEUTRAL), SORT_DEFAULT);
 		default:
 			Assert(0);
@@ -359,7 +359,7 @@ private:
 		switch (lang) {
 		case Language::English:
 			return MAKELANGID(LANG_ENGLISH, SUBLANG_NEUTRAL);//TODO(fran): same as GetLCID
-		case Language::Espa駉l:
+		case Language::Espa帽ol:
 			return MAKELANGID(LANG_SPANISH, SUBLANG_NEUTRAL);
 		default:
 			Assert(0);

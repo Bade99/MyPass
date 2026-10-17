@@ -70,11 +70,11 @@
   */
 //Thanks to https://handmade.network/forums/t/1273-post_your_c_c++_macro_tricks/3
 template <typename F> struct Defer { Defer(F f) : f(f) {} ~Defer() { f(); } F f; };
-template <typename F> Defer<F> makeDefer(F f) { return Defer<F>(f); };
+template <typename F> Defer<F> make_defer(F f) { return Defer<F>(f); };
 #define __defer( line ) defer_ ## line
 #define _defer( line ) __defer( line )
 struct DeferDummy {};
-template<typename F> Defer<F> operator+(DeferDummy, F&& f) { return makeDefer<F>(std::forward<F>(f)); }
+template<typename F> Defer<F> operator+(DeferDummy, F&& f) { return make_defer<F>(std::forward<F>(f)); }
 //usage: defer{block of code;}; //the last defer in a scope gets executed first (LIFO)
 #define defer auto _defer( __LINE__ ) = DeferDummy( ) + [ & ]( )
 

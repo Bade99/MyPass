@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "win_sdk.h"
 #include "helpers.h"
 #include "string.h"
@@ -1082,7 +1082,7 @@ bool end_IME_composition(State& state) {
 	composition.removed_text.clear();
 	composition.committed_text.clear();
 	composition.provisional_text.clear();
-	state.ignore_IME_candidates = false;
+	state.ignore_ime_candidates = false;
 	state.history_helper.break_group();
 	return committed_change;
 }
@@ -1283,7 +1283,7 @@ void set_composition_pos(State& state)//TODO(fran): this must set the other stuf
 			cf.ptCurrentPos.y = 0;
 		}
 #else //IME window no longer draws the unnecessary border with resizing and button, it is placed at cf.ptCurrentPos and has a max size of cf.rcArea in the x axis, the y axis can extend a lot longer, basically it does what it wants with y
-		if (!state.hide_IME_wnd) {
+		if (!state.hide_ime_window) {
 			cf.dwStyle = CFS_RECT;
 
 			//TODO(fran): should I place the IME in line with the caret or below so the user can see what's already written in that line?
@@ -1325,7 +1325,7 @@ void set_composition_pos(State& state)//TODO(fran): this must set the other stuf
 void set_IME_wnd(HWND wnd, bool hidden) {
 	State& state = *get_state(wnd);
 	if (&state) {
-		state.hide_IME_wnd = hidden;
+		state.hide_ime_window = hidden;
 	}
 }
 
@@ -2256,12 +2256,12 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 			//TODO(fran): check that the candidates window has some candidates, if it doesnt then we can simply continue as if nothing happened
 			if (scancode == 0x148/*up arrow*/) {
-				state.ignore_IME_candidates = true;
+				state.ignore_ime_candidates = true;
 				//PostMessage(state.wnd, WM_KEYDOWN, VK_UP, lparam); TODO(fran): uncomment this and find out what it was for
 				reset_v_sel_stored_w = false;
 			}
 			if (scancode == 0x150/*down arrow*/) {
-				state.ignore_IME_candidates = true;
+				state.ignore_ime_candidates = true;
 				//PostMessage(state.wnd, WM_KEYDOWN, VK_DOWN, lparam); TODO(fran): uncomment this and find out what it was for
 				reset_v_sel_stored_w = false;
 			}
@@ -2450,7 +2450,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//TODO(fran): with this I get to hide the candidate window & in set_composition_pos I can "hide" the composition window, only problem left is the up and down arrow keys are still bound to the IME window and interact with the now hidden candidate window, I need to block the up&down arrows from getting to the IME and use them myself, or Create my own IME window that's more configurable
 		//TODO(fran): maybe I can intercept the "new candidate request" through WM_IME_NOTIFY or somewhere else, stop it from getting to the IME window and transforming it into a WM_LBUTTONDOWN with up or down arrow as key
 #if 1
-		if (state.hide_IME_wnd) {
+		if (state.hide_ime_window) {
 			lparam = 0;//TODO(fran): after this is executed, it takes two WM_IME_SETCONTEXT from two other different controls that _do_ want IME visible for the IME window to fix itself
 		}
 #endif
@@ -2506,8 +2506,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		if (!lparam) { change = "CANCEL IME"; printf("%s\n", change); }
 #endif
 
-		if (state.hide_IME_wnd && state.ignore_IME_candidates) {
-			state.ignore_IME_candidates = false;
+		if (state.hide_ime_window && state.ignore_ime_candidates) {
+			state.ignore_ime_candidates = false;
 			//TODO(fran): join this with the other cases, for example we probably want to have default handling on lparam==0
 			HIMC imc = ImmGetContext(state.wnd);
 			if (imc != NULL) {
@@ -2564,7 +2564,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			}
 		}
 
-		if (state.hide_IME_wnd && lparam & GCS_RESULTSTR)
+		if (state.hide_ime_window && lparam & GCS_RESULTSTR)
 			return 0;
 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -2576,7 +2576,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 #ifndef UNICODE
 		Assert(0);//TODO(fran): DBCS
 #endif 
-		if (!state.ime_composition.active && !state.hide_IME_wnd) {
+		if (!state.ime_composition.active && !state.hide_ime_window) {
 			PostMessage(state.wnd, WM_CHAR, wparam, lparam);
 		}
 
