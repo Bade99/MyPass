@@ -274,8 +274,6 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 	} break;
 	case WM_PAINT:
 	{
-		//IMPORTANT TODO(fran): fix rendering bugs, sometimes part of the borders dont get drawn, I think I found the bug, border br doesnt adapt like bk, we have push, mouseover, etc, the border is just one so it's probably creating inconsistency problems
-
 		PAINTSTRUCT ps;
 		HDC dc = BeginPaint(state.wnd, &ps); defer{ EndPaint(state.wnd, &ps); };
 
@@ -289,13 +287,15 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 		if (!IsWindowEnabled(state.wnd)) {
 			bkbr = theme.brushes.bk.disabled;
 			forebr = theme.brushes.foreground.disabled;
-			borderbr = theme.brushes.border.disabled;
+			if (theme.brushes.border.disabled) borderbr = theme.brushes.border.disabled;
 		} elif ((state.onMouseOver && state.onLMouseClick) || state.selected) {
 			bkbr = theme.brushes.bk.clicked;
 			forebr = theme.brushes.foreground.clicked;
+			if (theme.brushes.border.clicked) borderbr = theme.brushes.border.clicked;
 		} elif (state.onMouseOver || state.OnMouseTracking || (GetFocus()==state.wnd)) {
 			bkbr = theme.brushes.bk.mouseover;
 			forebr = theme.brushes.foreground.mouseover;
+			if (theme.brushes.border.mouseover) borderbr = theme.brushes.border.mouseover;
 		} else {
 			bkbr = theme.brushes.bk.normal;
 			forebr = theme.brushes.foreground.normal;
