@@ -249,13 +249,16 @@ void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 
 			menu_str[menu_str_char_cnt + 1] = TEXT(' ');//ending space
 
-			// Calculate vertical and horizontal position for the string so that it will be centered
-			//NOTE: TabbedTextOut doesnt care for alignment (SetTextAlign)
-			TEXTMETRIC mtm; GetTextMetrics(dc, &mtm);
-			int yPos = (menuitemrc.bottom + menuitemrc.top - mtm.tmHeight) / 2;
-			int xPos = menuitemrc.left;
-			LONG txtsz = TabbedTextOut(dc, xPos, yPos, menu_str, menu_str_char_cnt + 2, 0, 0, xPos);
-			WORD txtw = LOWORD(txtsz);
+			str_view menu_text(menu_str, menu_str_char_cnt + 2);
+			auto txtw = urender::measure_text(dc, fonts.Menu, menu_text).cx;
+			RECT text_bounds = menuitemrc;
+			text_bounds.right = text_bounds.left + txtw;
+			OffsetRect(&text_bounds, -menurc.left, -menurc.top);
+			POINT old_origin{};
+			SetViewportOrgEx(dc, 0, 0, &old_origin);
+			utf16_str text{ menu_str, (menu_text.size() + 1) * sizeof(utf16) };
+			urender::draw_text(dc, text_bounds, text, fonts.Menu, txtbr, urender::TextAlignment::left, 0);
+			SetViewportOrgEx(dc, old_origin.x, old_origin.y, nil);
 
 			//Store menu item rc
 			state.menubar_items[i] = RECT{ 

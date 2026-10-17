@@ -547,6 +547,26 @@ namespace urender {
 		return size;
 	}
 
+	struct MenuText {
+		str_view label;
+		str_view shortcut;
+	};
+
+	MenuText split_menu_text(str_view text) {
+		auto tab = text.find(L'\t');
+		if (tab == str_view::npos) return { text, {} };
+		return { text.substr(0, tab), text.substr(tab + 1) };
+	}
+
+	SIZE measure_menu_text(HDC dc, HFONT font, str_view text) {
+		auto parts = split_menu_text(text);
+		auto label_size = measure_text(dc, font, parts.label);
+		if (parts.shortcut.empty()) return label_size;
+		auto shortcut_size = measure_text(dc, font, parts.shortcut);
+		auto gap = measure_text(dc, font, L"    ").cx;
+		return { label_size.cx + gap + shortcut_size.cx, maximum(label_size.cy, shortcut_size.cy) };
+	}
+
 	//Intended for a single line of text
 	void draw_text(HDC dc, const RECT& r, utf16_str txt, HFONT f, HBRUSH txt_br, TextAlignment alignment, i32 pad_x,
 		TextVerticalAlignment vertical_alignment = TextVerticalAlignment::center, i32 pad_y = 0) {
@@ -612,6 +632,20 @@ namespace urender {
 
 		//TODO(fran): TabbedTextOut for completeness
 		//TODO(fran): transparent bk color (if possible without gdi+)
+	}
+
+	void draw_menu_text(HDC dc, const RECT& bounds, str_view text, HFONT font, HBRUSH brush) {
+		auto parts = split_menu_text(text);
+		RECT label_bounds = bounds;
+		if (!parts.shortcut.empty()) {
+			auto shortcut_width = measure_text(dc, font, parts.shortcut).cx;
+			auto gap = measure_text(dc, font, L"    ").cx;
+			label_bounds.right = maximum(label_bounds.left, bounds.right - shortcut_width - gap);
+			utf16_str shortcut{ const_cast<utf16*>(parts.shortcut.data()), (parts.shortcut.size() + 1) * sizeof(utf16) };
+			draw_text(dc, bounds, shortcut, font, brush, TextAlignment::right, 0);
+		}
+		utf16_str label{ const_cast<utf16*>(parts.label.data()), (parts.label.size() + 1) * sizeof(utf16) };
+		draw_text(dc, label_bounds, label, font, brush, TextAlignment::left, 0);
 	}
 
 	i32 draw_bitmap_1bpp_right(HBITMAP bmp, HDC dc, rect_i32 r, int x_pad, HBRUSH color) {
