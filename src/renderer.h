@@ -129,7 +129,7 @@ int FillRectAlpha(HDC dc, const RECT& r, HBRUSH br, u8 alpha) {
 	return res;
 }
 
-struct img {
+struct MaskImage {
 	i32 width;
 	i32 height;
 	i32 pitch;
@@ -137,8 +137,8 @@ struct img {
 	void* mem;
 };
 
-struct mask_bilinear_sample { u8 sample[4]; };
-mask_bilinear_sample sample_bilinear_mask(img* mask, i32 x, i32 y) {
+struct MaskBilinearSample { u8 sample[4]; };
+MaskBilinearSample sample_bilinear_mask(MaskImage* mask, i32 x, i32 y) {
 	//NOTE: handmade 108 1:20:00 interesting, once you scale an img to half size or more you get sampling errors cause you're no longer sampling all the pixels involved, that's when you need MIPMAPPING
 
 	u8 idx = 7 - (x % 8);
@@ -155,14 +155,14 @@ mask_bilinear_sample sample_bilinear_mask(img* mask, i32 x, i32 y) {
 	tex[2] = y < mask->height ? (*(u8*)(texel_ptr + mask->pitch)) & (1 << idx) : 0xFF;
 	tex[3] = idx == 0 ? (x < mask->width ? (*(u8*)(texel_ptr + mask->pitch + 1)) & (1 << 7) : 0xFF) : (y < mask->height ? (*(u8*)(texel_ptr + mask->pitch)) & (1 << (idx - 1)) : 0xFF);
 
-	mask_bilinear_sample sample;
+	MaskBilinearSample sample;
 	for (int i = 0; i < 4; i++)
 		sample.sample[i] = tex[i];
 
 	return sample;
 }
 
-u8 sample_mask(img* mask, i32 x, i32 y) {
+u8 sample_mask(MaskImage* mask, i32 x, i32 y) {
 	u8 idx = 7 - (x % 8);
 	x /= 8;
 	u8* texel_ptr = ((u8*)mask->mem + y * mask->pitch + x * 1);
@@ -171,7 +171,7 @@ u8 sample_mask(img* mask, i32 x, i32 y) {
 }
 
 //TODO: bilinear sampling, steal again from space_typers
-u8 sample_mask8(img* texture, i32 x, i32 y) {
+u8 sample_mask8(MaskImage* texture, i32 x, i32 y) {
 	constexpr auto IMG_BYTES_PER_PIXEL = 1;
 	u8* texel_ptr = ((u8*)texture->mem + y * texture->pitch + x * IMG_BYTES_PER_PIXEL);
 	u8 res = *(u8*)texel_ptr;
@@ -227,7 +227,7 @@ namespace urender {
 	HBITMAP scale_mask(HBITMAP mask_bmp, int destW, int destH) {
 
 		BITMAP masknfo; GetObject(mask_bmp, sizeof(masknfo), &masknfo); Assert(masknfo.bmBitsPixel == 1);
-		img mask;
+		MaskImage mask;
 		mask.width = masknfo.bmWidth;
 		mask.height = masknfo.bmHeight;
 		mask.bits_per_pixel = 1;
@@ -238,7 +238,7 @@ namespace urender {
 		int getbits = GetBitmapBits(mask_bmp, mask_sz, mask.mem);
 		Assert(getbits == mask_sz);
 
-		img scaled_mask;
+		MaskImage scaled_mask;
 		scaled_mask.width = destW;
 		scaled_mask.height = destH;
 		scaled_mask.bits_per_pixel = 1;
@@ -301,7 +301,7 @@ namespace urender {
 				Assert(i_y >= 0 && i_y < mask.height);
 
 				//Bilinear filtering
-				mask_bilinear_sample sample = sample_bilinear_mask(&mask, i_x, i_y);
+				MaskBilinearSample sample = sample_bilinear_mask(&mask, i_x, i_y);
 				v4 f_sample;
 				//TODO(fran): lerp and f_x f_y
 				for (int i = 0; i < 4; i++) {
@@ -334,7 +334,7 @@ namespace urender {
 
 		HBITMAP scaled_mask = (wDest != wSrc || hDest != hSrc) ? scale_mask(mask, wDest, hDest) : mask; //NOTE: beware of applying any modification to scaled_mask, you could be modifying the original mask
 		BITMAP masknfo; GetObject(scaled_mask, sizeof(masknfo), &masknfo); Assert(masknfo.bmBitsPixel == 1);
-		img mask_img;
+		MaskImage mask_img;
 		mask_img.width = masknfo.bmWidth;
 		mask_img.height = masknfo.bmHeight;
 		mask_img.bits_per_pixel = 1;
@@ -369,7 +369,7 @@ namespace urender {
 		//TODO: cache results for reuse
 
 		BITMAP masknfo; GetObject(mask, sizeof(masknfo), &masknfo); Assert(masknfo.bmBitsPixel == 8);
-		img mask_img;
+		MaskImage mask_img;
 		mask_img.width = masknfo.bmWidth;
 		mask_img.height = masknfo.bmHeight;
 		mask_img.bits_per_pixel = masknfo.bmBitsPixel;
@@ -527,10 +527,10 @@ namespace urender {
 		}
 	}
 
-	enum class txt_align { center, left, right };
+	enum class TextAlignment { center, left, right };
 
 	//Intended for a single line of text
-	void draw_text(HDC dc, const RECT& r, utf16_str txt, HFONT f, HBRUSH txt_br, txt_align alignment, i32 pad_x) {
+	void draw_text(HDC dc, const RECT& r, utf16_str txt, HFONT f, HBRUSH txt_br, TextAlignment alignment, i32 pad_x) {
 		HFONT oldfont = SelectFont(dc, f); defer{ SelectFont(dc, oldfont); };
 		UINT oldalign = GetTextAlign(dc); defer{ SetTextAlign(dc,oldalign); };
 
@@ -584,18 +584,18 @@ namespace urender {
 
 
 	#ifdef USE_GDIPLUS
-	struct pre_post_main {
-		ULONG_PTR gdiplusToken;
+	struct GdiplusLifetime {
+		ULONG_PTR gdiplus_token;
 
-		pre_post_main() {
+		GdiplusLifetime() {
 			// Initialize GDI+
-			Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-			Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, nil);
+			Gdiplus::GdiplusStartupInput gdiplus_startup_input;
+			Gdiplus::GdiplusStartup(&gdiplus_token, &gdiplus_startup_input, nil);
 		}
-		~pre_post_main() { 
+		~GdiplusLifetime() {
 			//Uninitialize GDI+
-			Gdiplus::GdiplusShutdown(gdiplusToken);
+			Gdiplus::GdiplusShutdown(gdiplus_token);
 		}
-	} static const PREMAIN_POSTMAIN;
+	} static const gdiplus_lifetime;
 	#endif
 }

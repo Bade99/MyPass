@@ -73,11 +73,11 @@ concept StringCodeUnit =
     std::same_as<CharT, wchar_t> || std::same_as<CharT, char16_t> ||
     std::same_as<CharT, char32_t>;
 
-struct raw_buffer_reader {
+struct RawBufferReader {
     std::span<const u8> bytes{};
     std::size_t pos{};
 
-    raw_buffer_reader(const void* data, std::size_t sz_bytes) : bytes((const u8*)data, sz_bytes) { 
+    RawBufferReader(const void* data, std::size_t sz_bytes) : bytes((const u8*)data, sz_bytes) {
         Assert((std::uintptr_t)data % 4 == 0); 
     }
 

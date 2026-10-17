@@ -50,9 +50,9 @@ namespace search {
 	struct Theme {
 		union {
 			struct {
-				brush_group bk, border;
+				BrushGroup bk, border;
 			};
-			brush_group all[2];
+			BrushGroup all[2];
 		private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 		} brushes;
 		struct {

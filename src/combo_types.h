@@ -51,7 +51,7 @@ namespace combobox {
 		func_on_listbox_opening on_listbox_opening;
 
 		struct {
-			HHOOK hookmouseclick;
+			HHOOK mouse_click_hook;
 		}impl;
 
 		bool reject_button;//do not open listbox on the next button press if the listbox is already open and the button is clicked

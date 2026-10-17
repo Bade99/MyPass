@@ -944,8 +944,8 @@ void init_wndclass(HINSTANCE inst) {
 	ATOM class_atom = RegisterClassEx(&wcex); Assert(class_atom);
 	wndclass_atom = class_atom;
 }
-struct pre_post_main {
-	pre_post_main() { init_wndclass(GetModuleHandle(nil)); }
-	~pre_post_main() {}
-} static const PREMAIN_POSTMAIN;
+struct WindowClassRegistration {
+	WindowClassRegistration() { init_wndclass(GetModuleHandle(nil)); }
+	~WindowClassRegistration() {}
+} static const window_class_registration;
 }

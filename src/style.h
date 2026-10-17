@@ -89,7 +89,7 @@ void load_styles() {
 	auto hollow_brush = (HBRUSH)GetStockObject(HOLLOW_BRUSH);
 	auto arrow_cursor = LoadCursor(nil, IDC_ARROW);
 	auto hand_cursor = LoadCursor(nil, IDC_HAND);
-	UINumber percent50 = { .type = UINumber::type::percent, .value = 50 };
+	UINumber percent50 = { .type = UINumber::Type::percent, .value = 50 };
 
 	themes.base_table = [&]()->auto {
 		table::Theme base_table{};
@@ -112,7 +112,7 @@ void load_styles() {
 		base_btn.brushes.foreground.disabled = colors.ControlTxt_Disabled;
 		base_btn.brushes.border.normal = colors.Img;//TODO(fran): global::colors.ControlBorder
 		base_btn.cursor = hand_cursor;
-		base_btn.dimensions.border_radius = { .type = UINumber::type::dpi, .value = 10 };
+		base_btn.dimensions.border_radius = { .type = UINumber::Type::dpi, .value = 10 };
 		//TODO(fran): use the extra brushes, fore_push,... , border_mouseover,...
 		base_btn.font = fonts.General;
 		return base_btn;
@@ -220,7 +220,7 @@ void load_styles() {
 		for (auto& b : t.brushes.bk.all) b = colors.ControlBk_Disabled;
 		for (auto& b : t.brushes.foreground.all) b = colors.ControlTxt_Disabled_Strong;
 		for (auto& b : t.brushes.border.all) b = hollow_brush;
-		t.dimensions.border_radius = { .type = UINumber::type::dpi, .value = 10 };
+		t.dimensions.border_radius = { .type = UINumber::Type::dpi, .value = 10 };
 		return t;
 	}();
 

@@ -17,7 +17,7 @@
 #endif
 
 /* Structure to save state of computation between the single steps.  */
-struct sha256_ctx
+struct Sha256Context
 {
     u32 H[8];
     union
@@ -84,7 +84,7 @@ static const u32 K[64] =
 /* Process LEN bytes of BUFFER, accumulating context into CTX.
    It is assumed that LEN % 64 == 0.  */
 void
-__sha256_process_block(const void* buffer, size_t len, struct sha256_ctx* ctx)
+__sha256_process_block(const void* buffer, size_t len, struct Sha256Context* ctx)
 {
     const u32* words = (const u32*)buffer;
     size_t nwords = len / sizeof(u32);
@@ -171,7 +171,7 @@ __sha256_process_block(const void* buffer, size_t len, struct sha256_ctx* ctx)
 /* Initialize structure containing state of computation.
    (FIPS 180-2:5.3.2)  */
 void
-__sha256_init_ctx(struct sha256_ctx* ctx)
+__sha256_init_ctx(struct Sha256Context* ctx)
 {
     ctx->H[0] = 0x6a09e667;
     ctx->H[1] = 0xbb67ae85;
@@ -189,7 +189,7 @@ __sha256_init_ctx(struct sha256_ctx* ctx)
    IMPORTANT: On some systems it is required that RESBUF is correctly
    aligned for a 32 bits value.  */
 void*
-__sha256_finish_ctx(struct sha256_ctx* ctx, void* resbuf)
+__sha256_finish_ctx(struct Sha256Context* ctx, void* resbuf)
 {
     /* Take yet unprocessed bytes into account.  */
     u32 bytes = ctx->buflen;
@@ -218,7 +218,7 @@ __sha256_finish_ctx(struct sha256_ctx* ctx, void* resbuf)
    starting at BUFFER.
    It is NOT required that LEN is a multiple of 64.  */
 void
-__sha256_process_bytes(const void* buffer, size_t len, struct sha256_ctx* ctx)
+__sha256_process_bytes(const void* buffer, size_t len, struct Sha256Context* ctx)
 {
     /* When we already have some bits in our internal buffer concatenate
        both inputs first.  */

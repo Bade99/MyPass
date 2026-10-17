@@ -385,7 +385,7 @@ void create_controls(State& state) {
 	table::Theme tbl_theme = themes.base_table; 
 	tbl_theme.cells = {
 		.row_h = 30,
-		.columns_w = {UINumber{.value = 100}, UINumber{.type = UINumber::type::dyn}}
+		.columns_w = {UINumber{.value = 100}, UINumber{.type = UINumber::Type::dyn}}
 	};
 	table::set_theme(controls.tbl_values, tbl_theme);
 

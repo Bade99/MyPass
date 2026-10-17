@@ -20,9 +20,9 @@ namespace table {
 	struct Theme {
 		union {
 			struct {
-				brush_group bk, border;//NOTE: the page itself renders nothing but the background
+				BrushGroup bk, border;//NOTE: the page itself renders nothing but the background
 			};
-			brush_group all[2];
+			BrushGroup all[2];
 		private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 		} brushes;
 		struct {

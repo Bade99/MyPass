@@ -29,10 +29,10 @@ static void free_file_memory(void* memory) {
 	if (memory) VirtualFree(memory, 0, MEM_RELEASE);
 }
 
-struct read_entire_file_res { void* mem; u32 sz;/*bytes*/ };
+struct ReadEntireFileResult { void* mem; u32 sz;/*bytes*/ };
 //NOTE: free the memory with free_file_memory()
-static read_entire_file_res read_entire_file(const cstr* filename) {
-	read_entire_file_res res{ 0 };
+static ReadEntireFileResult read_entire_file(const cstr* filename) {
+	ReadEntireFileResult res{ 0 };
 	HANDLE hFile = CreateFile(filename, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
 	if (hFile != INVALID_HANDLE_VALUE) {
 		defer{ CloseHandle(hFile); };
@@ -348,13 +348,13 @@ static RECT bounding_box(HWND reference, HWND* wnds, int cnt) {
 //NOTE: since we are talking about childs, the coordinates of "r" should be relative to the client area of the parent
 static RECT clip_fit_childs(HWND parent, HWND child, RECT r) {
 	RECT res;
-	struct clip_fit_childs_test { HWND parent; HWND child; HRGN rgn; };
-	clip_fit_childs_test t; t.parent = parent;  t.child = child; t.rgn = CreateRectRgn(r.left, r.top, r.right, r.bottom); defer{ DeleteObject(t.rgn); };
+	struct ClipFitChildrenTest { HWND parent; HWND child; HRGN rgn; };
+	ClipFitChildrenTest t; t.parent = parent;  t.child = child; t.rgn = CreateRectRgn(r.left, r.top, r.right, r.bottom); defer{ DeleteObject(t.rgn); };
 
 	EnumChildWindows(
 		parent,
 		[](HWND other_child, LPARAM lparam) {
-			clip_fit_childs_test* test = (clip_fit_childs_test*)lparam;
+			ClipFitChildrenTest* test = (ClipFitChildrenTest*)lparam;
 			if (other_child != test->child && GetParent(other_child)==test->parent /*avoid enumerating childs of childs*/) {//TODO(fran): we should also filter non visible wnds I think, if everybody starts using this it could work well, maybe not
 				RECT subtract_rc;
 				GetClientRect(other_child, &subtract_rc);
@@ -478,7 +478,7 @@ static COLORREF ColorFromBrush(HBRUSH br) {
 	return lb.lbColor;
 }
 
-union brush_group {
+union BrushGroup {
 	struct {
 		HBRUSH normal, disabled, mouseover, clicked;
 	};
@@ -488,7 +488,7 @@ union brush_group {
 	 * Copy all non null elements, ignore the rest.
 	 * Returns true if any modification was made.
 	 */
-	bool copy_from(const brush_group& src)
+	bool copy_from(const BrushGroup& src)
 	{
 		bool copied = false;
 		for (auto i = 0; i < ARRAYSIZE(this->all); i++) 
@@ -575,20 +575,20 @@ static f32 DPI(f32 val) { return dpiCorrection(val); }
 
 
 struct UINumber {
-	enum class type {
+	enum class Type {
 		px,     // Specific pixel value
 		dpi,    // DPI aware (scaled) pixel value
 		dyn,    // Fills whatever space is left
 		percent	// Percentage of a reference dimension
-	} type = type::dpi;
+	} type = Type::dpi;
 	f32 value;
 
 	f32 to_px(u32 reference = 0) const {
 		switch (type) {
-		case type::px:      return value;
-		case type::dpi:     return DPI(value);
-		case type::dyn:     return reference; //Not meant to be used like this, it's mostly a marker to start further calculation to assign a size to multiple dyn elements in contention for the same space
-		case type::percent: return reference * (value / 100.f);
+		case Type::px:      return value;
+		case Type::dpi:     return DPI(value);
+		case Type::dyn:     return reference; //Not meant to be used like this, it's mostly a marker to start further calculation to assign a size to multiple dyn elements in contention for the same space
+		case Type::percent: return reference * (value / 100.f);
 		default: Assert(0); return 0;
 		}
 	}
@@ -629,7 +629,7 @@ struct StatefulFunction {
 };
 
 static void init_wndclass(const cstr* class_name, WNDPROC proc, UINT extra_styles = 0, cstr* default_cursor = IDC_ARROW, HINSTANCE inst = GetModuleHandle(nil)) {
-	//INFO: Now that we use pre_post_main we cant depend on anything that isnt calculated at compile time for class creation
+	//INFO: Now that we use WindowClassRegistration we cant depend on anything that isnt calculated at compile time for class creation
 	WNDCLASSEX wcex;
 	wcex.cbSize = sizeof(WNDCLASSEX);
 	wcex.style = CS_HREDRAW | CS_VREDRAW | extra_styles;
@@ -652,10 +652,10 @@ static void init_wndclass(const cstr* class_name, WNDPROC proc, UINT extra_style
   * Classes are de-registered automatically by the os, so no need to do it ourselves in the destructor
   */
 #define _init_wndclass_at_startup \
-	struct pre_post_main {	\
-		pre_post_main() { init_wndclass(wndclass, proc); } \
-		~pre_post_main() {} \
-	} static const PREMAIN_POSTMAIN; 
+	struct WindowClassRegistration {	\
+		WindowClassRegistration() { init_wndclass(wndclass, proc); } \
+		~WindowClassRegistration() {} \
+	} static const window_class_registration;
 
 static HWND create_root_window(HINSTANCE instance, RECT r, void* data = nil, const utf16* title = app_name, u32 extra_styles = 0, u32 extra_extended_styles = 0) {
 	HWND res = CreateWindowEx(

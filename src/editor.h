@@ -424,7 +424,7 @@ void add_controls(State& state) {
 		HFONT font = fonts.General;
 		RECT txt_rc = bk_rc;
 
-		urender::draw_text(dc, txt_rc, to_utf_str(txt), font, txt_br, urender::txt_align::left, avg_str_dim(font, 1).cx);
+		urender::draw_text(dc, txt_rc, to_utf_str(txt), font, txt_br, urender::TextAlignment::left, avg_str_dim(font, 1).cx);
 	});
 
 	auto scroll_area = page::create_scrollable_area(state.wnd);
@@ -597,7 +597,7 @@ bool save_to_file_user(str username, void* content, u32 content_sz) {
 	return file_matches_memory(full_path_primary.c_str(), content, content_sz);
 }
 
-read_entire_file_res load_file_user(str username, bool load_backup = false) {
+ReadEntireFileResult load_file_user(str username, bool load_backup = false) {
 	str path = get_save_path(username); //username functions as the folder name
 
 	CreateDirectory(path.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
@@ -753,7 +753,7 @@ void cleanup_password_editors_v1(State& state) {
 	vec.clear();
 }
 
-bool create_password_editors_v1(State& state, raw_buffer_reader& data) {
+bool create_password_editors_v1(State& state, RawBufferReader& data) {
 	/*struct PasswordEditorTrivialV1 {
 		time_t date_created;
 		time_t date_modified;
@@ -876,7 +876,7 @@ void add_controls_transition_v0(State& state) {
 }
 
 u32 detect_save_version(void* data, u32 sz_bytes) {
-	raw_buffer_reader r(data, sz_bytes);
+	RawBufferReader r(data, sz_bytes);
 	FileHeaderBase header;
 	return r.read(header) && !memcmp(header.magic, FileHeaderBase{}.magic, sizeof(FileHeaderBase::magic)) ? header.version : 0;
 }
@@ -920,7 +920,7 @@ login::AttemptResult startup(State& state, const Start* start, bool start_from_b
 			} break;
 			case 1:
 			{
-				raw_buffer_reader r(file_read.mem, file_read.sz);
+				RawBufferReader r(file_read.mem, file_read.sz);
 				if (FileHeaderV1 header; r.read(header)) {
 					u32 key[8];
 					hash_pwd_and_salt(start->password, header.salt, sizeof(header.salt), key);

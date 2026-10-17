@@ -19,10 +19,10 @@ private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 struct Theme {
 	union {
 		struct {
-			brush_group foreground, bk, border;
+			BrushGroup foreground, bk, border;
 			//TODO: try adding a 'selected' brush to the button theme for when it's selected boolean equals true
 		};
-		brush_group all[3];
+		BrushGroup all[3];
 		private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 	} brushes;
 	struct {

@@ -83,9 +83,9 @@ struct CharSel {
 struct Theme {
 	union {
 		struct {
-			brush_group foreground, bk, border, selection, placeholder; //NOTE: for now we use the border color for the caret color
+			BrushGroup foreground, bk, border, selection, placeholder; //NOTE: for now we use the border color for the caret color
 		};
-		brush_group all[5];
+		BrushGroup all[5];
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 	} brushes;
 		

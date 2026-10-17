@@ -32,14 +32,14 @@ u64 next_multiple_of_16(u64 n) {
 
 //TODO(fran): check output size
 void sha256(const void* input, size_t len_bytes, void* output /*32 bytes*/) { //TODO(fran): SHA3-256
-	sha256_ctx context;
+	Sha256Context context;
 	__sha256_init_ctx(&context);
 	__sha256_process_bytes(input,len_bytes,&context);
 	__sha256_finish_ctx(&context,output);
 }
 
 void hash_pwd_and_salt(text password, void* salt, size_t salt_len_bytes, u32(&output)[8]) {
-	sha256_ctx context;
+	Sha256Context context;
 	__sha256_init_ctx(&context);
 	__sha256_process_bytes(password.str, password.sz_chars * sizeof(*password.str), &context);
 	__sha256_process_bytes(salt, salt_len_bytes, &context);

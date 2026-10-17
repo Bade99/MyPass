@@ -7,7 +7,7 @@ namespace scrollbar {
 	  * Window Messages
 	  */
 	namespace custom_message {
-		enum custom_message {
+		enum Message {
 			// Auto resize and reposition
 			AUTORESIZE = (WM_USER + 300),
 
@@ -40,9 +40,9 @@ namespace scrollbar {
 	struct Theme {
 		union {
 			struct {
-				brush_group bar_bk, bar_border, bk, border;
+				BrushGroup bar_bk, bar_border, bk, border;
 			};
-			brush_group all[4];
+			BrushGroup all[4];
 		private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 		} brushes;
 		struct {

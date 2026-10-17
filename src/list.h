@@ -60,7 +60,7 @@ namespace listbox {
 
 	void render_backbuffer(State& state) {
 		if (state.backbuffer) {
-			HDC& dc = state.offscreendc;
+			HDC& dc = state.offscreen_dc;
 			auto oldbmp = SelectBitmap(dc, state.backbuffer); defer{ SelectBitmap(dc,oldbmp); };
 
 			RECT backbuffer_rc{ 0,0,state.backbuffer_dim.cx,state.backbuffer_dim.cy };
@@ -92,7 +92,7 @@ namespace listbox {
 					RenderFlags flags;
 					flags.on_clicked = state.clicked_element == i;
 					flags.on_selected = state.selected_element == i;
-					flags.on_mouseover = state.mousehover_element == i;
+					flags.on_mouseover = state.mouse_hover_element == i;
 
 					state.render_element(dc, elem_rc, flags, state.elements[i], state.user_extra);
 				}
@@ -103,7 +103,7 @@ namespace listbox {
 	void render_backbuffer_element(State& state, size_t elem_idx) {
 		//TODO(fran): this is a quick HACK reusing render_backbuffer()'s code
 		if (state.backbuffer && elem_idx < state.elements.size()) {
-			HDC& dc = state.offscreendc;
+			HDC& dc = state.offscreen_dc;
 			auto oldbmp = SelectBitmap(dc, state.backbuffer); defer{ SelectBitmap(dc,oldbmp); };
 
 			RECT backbuffer_rc{ 0,0,state.backbuffer_dim.cx,state.backbuffer_dim.cy };
@@ -133,7 +133,7 @@ namespace listbox {
 				RenderFlags flags;
 				flags.on_clicked = state.clicked_element == i;
 				flags.on_selected = state.selected_element == i;
-				flags.on_mouseover = state.mousehover_element == i;
+				flags.on_mouseover = state.mouse_hover_element == i;
 
 				state.render_element(dc, elem_rc, flags, state.elements[i], state.user_extra);
 			}
@@ -242,7 +242,7 @@ namespace listbox {
 	}
 
 	void clear_selection(State& state) {
-		state.selected_element = state.mousehover_element = state.clicked_element = state.stored_clicked_element = UINT32_MAX;
+		state.selected_element = state.mouse_hover_element = state.clicked_element = state.stored_clicked_element = UINT32_MAX;
 		//TODO(fran): not sure whether I want to clear everything or just the selected_element
 		notify_parent(state, LBN_SELCHANGE);
 	}
@@ -420,10 +420,10 @@ namespace listbox {
 			//Assert(st->parent == 0);//NOTE: we only handle floating listboxes for now
 			st->elements = decltype(st->elements)();
 
-			st->selected_element = st->mousehover_element = st->clicked_element = st->stored_clicked_element = UINT32_MAX;//TODO(fran): use std::limits<size_t>::max()
+			st->selected_element = st->mouse_hover_element = st->clicked_element = st->stored_clicked_element = UINT32_MAX;//TODO(fran): use std::limits<size_t>::max()
 
 			HDC __front_dc = GetDC(st->wnd); defer{ ReleaseDC(st->wnd,__front_dc); };
-			st->offscreendc = CreateCompatibleDC(__front_dc);
+			st->offscreen_dc = CreateCompatibleDC(__front_dc);
 
 			//TODO(fran): check styles
 
@@ -485,7 +485,7 @@ namespace listbox {
 			if (&state) {
 				if (state.backbuffer) { DeleteBitmap(state.backbuffer); state.backbuffer = 0; }
 				state.elements.~vector();
-				DeleteDC(state.offscreendc);
+				DeleteDC(state.offscreen_dc);
 				set_window_state(state.wnd, nil);
 				free(&state);
 			}
@@ -503,19 +503,19 @@ namespace listbox {
 		{
 			POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
 
-			size_t mousehover_element = mouse_element_at(state, mouse);
+			size_t mouse_hover_element = mouse_element_at(state, mouse);
 
-			if (state.mousehover_element != mousehover_element) {
-				size_t old_element = state.mousehover_element;
+			if (state.mouse_hover_element != mouse_hover_element) {
+				size_t old_element = state.mouse_hover_element;
 
-				state.mousehover_element = mousehover_element;
+				state.mouse_hover_element = mouse_hover_element;
 
 				if (old_element != UINT32_MAX && old_element < state.elements.size()) render_backbuffer_element(state, old_element);
-				if (state.mousehover_element != UINT32_MAX && state.mousehover_element < state.elements.size()) render_backbuffer_element(state, state.mousehover_element);
+				if (state.mouse_hover_element != UINT32_MAX && state.mouse_hover_element < state.elements.size()) render_backbuffer_element(state, state.mouse_hover_element);
 				//render_backbuffer(state);
 				ask_window_for_repaint(state.wnd);
 
-				//We now need to know when the mouse exits our window to clear the mousehover_element
+			//We now need to know when the mouse exits our window to clear the mouse_hover_element
 				TRACKMOUSEEVENT track;
 				track.cbSize = sizeof(track);
 				track.hwndTrack = state.wnd;
@@ -528,10 +528,10 @@ namespace listbox {
 		case WM_MOUSELEAVE:
 		{
 			//we asked TrackMouseEvent for this so we can update when the mouse leaves our client area, which we dont get notified about otherwise and is needed, for example when the user hovers on top an element and then hovers outside the wnd
-			//Clear the mousehover_element
-			if (state.mousehover_element != UINT32_MAX) {
-				size_t old_element = state.mousehover_element;
-				state.mousehover_element = UINT32_MAX;
+			//Clear the mouse_hover_element
+			if (state.mouse_hover_element != UINT32_MAX) {
+				size_t old_element = state.mouse_hover_element;
+				state.mouse_hover_element = UINT32_MAX;
 				if (old_element != UINT32_MAX && old_element < state.elements.size()) render_backbuffer_element(state, old_element);
 				//render_backbuffer(state);
 				ask_window_for_repaint(state.wnd);
@@ -598,7 +598,7 @@ namespace listbox {
 			int w = RECTW(rc), h = RECTH(rc);
 			int border_thickness = state.border_thickness;
 			HDC dc = BeginPaint(state.wnd, &ps);
-			HDC& offscreendc = state.offscreendc;
+			HDC& offscreen_dc = state.offscreen_dc;
 			bool window_enabled = IsWindowEnabled(state.wnd);
 			//TODO(fran): we need to re-render backbuf if the window is disabled and the dis_... are !=0 and != than the non dis_... brushes
 			LONG_PTR style = GetWindowLongPtr(state.wnd, GWL_STYLE);
@@ -608,9 +608,9 @@ namespace listbox {
 			int backbuf_w = w;
 			int backbuf_h = h;
 			if (state.backbuffer) {
-				auto oldbmp = SelectBitmap(offscreendc, state.backbuffer); defer{ SelectBitmap(offscreendc,oldbmp); };
+				auto oldbmp = SelectBitmap(offscreen_dc, state.backbuffer); defer{ SelectBitmap(offscreen_dc,oldbmp); };
 
-				BitBlt(dc, 0, 0, w, h, offscreendc, backbuf_x, backbuf_y, SRCCOPY);
+				BitBlt(dc, 0, 0, w, h, offscreen_dc, backbuf_x, backbuf_y, SRCCOPY);
 			}
 			// Border
 

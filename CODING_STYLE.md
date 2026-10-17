@@ -12,7 +12,7 @@
 
 Use lowercase abbreviations within `snake_case` names, such as `ime_composition` and `dpi_scale`. Avoid leading underscores in project-defined identifiers.
 
-Keep short fundamental aliases such as `u32`, `i64`, `f32`, `str`, and `utf16` as they are. Keep Windows SDK names and required callback or interface method names unchanged.
+Keep short foundational types and aliases such as `u32`, `i64`, `f32`, `str`, `utf16`, `text`, `v2`, and `rect_i32` as they are. Keep Windows SDK names and required callback or interface method names unchanged.
 
 Renaming a C++ identifier must not change serialized field names, resource IDs, window messages, or other externally stored values. Preserve those values explicitly when changing the corresponding code.
 

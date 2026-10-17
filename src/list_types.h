@@ -27,12 +27,12 @@ struct State {
 	i32 border_thickness;
 
 	size_t selected_element;//idx of the currently selected element
-	size_t mousehover_element;//idx of the element currently under the mouse
+	size_t mouse_hover_element;//idx of the element currently under the mouse
 	size_t clicked_element;//idx of the element that was clicked/pressed enter
 
 	size_t stored_clicked_element;//stores the last user chosen element, either via left click or enter key press
 
-	HDC offscreendc;
+	HDC offscreen_dc;
 
 	HBITMAP backbuffer;
 	SIZE backbuffer_dim;

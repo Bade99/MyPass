@@ -2753,8 +2753,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	return 0;
 }
 
-struct pre_post_main {
-	pre_post_main() { init_wndclass(wndclass, proc, CS_DBLCLKS, IDC_IBEAM); }
-	~pre_post_main() {}
-} static const PREMAIN_POSTMAIN;
+struct WindowClassRegistration {
+	WindowClassRegistration() { init_wndclass(wndclass, proc, CS_DBLCLKS, IDC_IBEAM); }
+	~WindowClassRegistration() {}
+} static const window_class_registration;
 }

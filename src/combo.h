@@ -121,7 +121,7 @@ HWND __hookmouseclick_store_hwnd(HWND _wnd = (HWND)INT32_MIN) {
 	return wnd;
 }
 
-LRESULT CALLBACK hookmouseclick(int code, WPARAM wparam, LPARAM lparam) {
+LRESULT CALLBACK mouse_click_hook_proc(int code, WPARAM wparam, LPARAM lparam) {
 	//printf("MOUSECLICKHOOK:0x%08x\n", wparam);
 	if (code == HC_ACTION) {//TODO(fran): WH_MOUSE also includes a HC_NOREMOVE code
 		switch (wparam) {
@@ -167,12 +167,12 @@ void show_listbox(State& state, bool show) {
 		ShowWindow(state.controls.listbox, SW_SHOWNA);//TODO(fran): make sure it's on top of the z order, at least on top of us
 #endif
 		//We need to know when the user clicks outside of our editbox/listbox to be able to hide the listbox
-		if (!state.impl.hookmouseclick) {
+		if (!state.impl.mouse_click_hook) {
 			//TODO(fran): maybe this should be standard implementation in the listbox
 			__hookmouseclick_store_hwnd(state.wnd);
-			state.impl.hookmouseclick = SetWindowsHookEx(WH_MOUSE, hookmouseclick, 0, GetCurrentThreadId()); //attach the hook
-			//state.impl.hookmouseclick = SetWindowsHookEx(WH_MOUSE_LL, hookmouseclick, 0, GetCurrentThreadId()); //TODO(fran): I wanted to use this one but apparently low level hooks cannot be run on debug threads, the docs recommend using raw input instead //https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-rawmouse
-			Assert(state.impl.hookmouseclick);
+			state.impl.mouse_click_hook = SetWindowsHookEx(WH_MOUSE, mouse_click_hook_proc, 0, GetCurrentThreadId()); //attach the hook
+			//state.impl.mouse_click_hook = SetWindowsHookEx(WH_MOUSE_LL, mouse_click_hook_proc, 0, GetCurrentThreadId()); //TODO(fran): I wanted to use this one but apparently low level hooks cannot be run on debug threads, the docs recommend using raw input instead //https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-rawmouse
+			Assert(state.impl.mouse_click_hook);
 		}
 
 	}
@@ -180,8 +180,8 @@ void show_listbox(State& state, bool show) {
 		//printf("SEARCHBOX:HIDE LISTBOX\n");
 		ShowWindow(state.controls.listbox, SW_HIDE);
 
-		UnhookWindowsHookEx(state.impl.hookmouseclick); // remove the hook
-		state.impl.hookmouseclick = 0;
+		UnhookWindowsHookEx(state.impl.mouse_click_hook); // remove the hook
+		state.impl.mouse_click_hook = 0;
 	}
 }
 

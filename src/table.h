@@ -24,7 +24,7 @@ namespace table {
 		for (u32 i = 0; i < column_cnt; i++) {
 			const auto& col = column_themes[i];
 			res[i] = col.to_px();
-			if (col.type == UINumber::type::dyn)
+			if (col.type == UINumber::Type::dyn)
 				dyn_cnt++;
 			w_used += res[i];
 		}
@@ -35,7 +35,7 @@ namespace table {
 			if (dyn_cnt) {
 				u32 col_w = (total_w - w_used) / dyn_cnt;
 				for (u32 i = 0; i < column_cnt; i++)
-					if (column_themes[i].type == UINumber::type::dyn)
+					if (column_themes[i].type == UINumber::Type::dyn)
 						res[i] = col_w;
 			}
 		}
