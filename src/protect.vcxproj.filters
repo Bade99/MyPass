@@ -123,6 +123,9 @@
     <ClInclude Include="text.h">
       <Filter>Header Files\Controls\Text</Filter>
     </ClInclude>
+    <ClInclude Include="text_render.h">
+      <Filter>Header Files\Controls\Text</Filter>
+    </ClInclude>
     <ClInclude Include="text_types.h">
       <Filter>Header Files\Controls\Text</Filter>
     </ClInclude>

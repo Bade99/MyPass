@@ -208,6 +208,7 @@
     <ClInclude Include="button_types.h" />
     <ClInclude Include="edit_subclass.h" />
     <ClInclude Include="text.h" />
+    <ClInclude Include="text_render.h" />
     <ClInclude Include="text_types.h" />
     <ClInclude Include="global.h" />
     <ClInclude Include="helpers.h" />

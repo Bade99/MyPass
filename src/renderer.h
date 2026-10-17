@@ -2,6 +2,7 @@
 #include "win_sdk.h"
 #include "helpers.h"
 #include "math.h"
+#include "text_render.h"
 
 #define USE_GDIPLUS /*For lazy bilinear filtered drawing*/
 
@@ -528,25 +529,93 @@ namespace urender {
 	}
 
 	enum class TextAlignment { center, left, right };
+	enum class TextVerticalAlignment { center, top, bottom };
+
+	SIZE measure_text(HDC dc, HFONT font, str_view text) {
+		IDWriteTextLayout* layout = nil;
+		if (text_render::create_text_layout(dc, font, text, &layout)) {
+			defer{ text_render::release_com(layout); };
+			DWRITE_TEXT_METRICS metrics{};
+			if (layout->GetMetrics(&metrics) == S_OK)
+				return { (LONG)ceilf(metrics.widthIncludingTrailingWhitespace), (LONG)ceilf(metrics.height) };
+		}
+		HFONT oldfont = font ? SelectFont(dc, font) : nil;
+		defer{ if (oldfont) SelectFont(dc, oldfont); };
+		SIZE size{};
+		if (text.size() <= (size_t)I32MAX)
+			GetTextExtentPoint32(dc, text.data(), (int)text.size(), &size);
+		return size;
+	}
+
+	struct MenuText {
+		str_view label;
+		str_view shortcut;
+	};
+
+	MenuText split_menu_text(str_view text) {
+		auto tab = text.find(L'\t');
+		if (tab == str_view::npos) return { text, {} };
+		return { text.substr(0, tab), text.substr(tab + 1) };
+	}
+
+	SIZE measure_menu_text(HDC dc, HFONT font, str_view text) {
+		auto parts = split_menu_text(text);
+		auto label_size = measure_text(dc, font, parts.label);
+		if (parts.shortcut.empty()) return label_size;
+		auto shortcut_size = measure_text(dc, font, parts.shortcut);
+		auto gap = measure_text(dc, font, L"    ").cx;
+		auto right_pad = measure_text(dc, font, L" ").cx;
+		return { label_size.cx + gap + shortcut_size.cx + right_pad, maximum(label_size.cy, shortcut_size.cy) };
+	}
 
 	//Intended for a single line of text
-	void draw_text(HDC dc, const RECT& r, utf16_str txt, HFONT f, HBRUSH txt_br, TextAlignment alignment, i32 pad_x) {
-		HFONT oldfont = SelectFont(dc, f); defer{ SelectFont(dc, oldfont); };
+	void draw_text(HDC dc, const RECT& r, utf16_str txt, HFONT f, HBRUSH txt_br, TextAlignment alignment, i32 pad_x,
+		TextVerticalAlignment vertical_alignment = TextVerticalAlignment::center, i32 pad_y = 0) {
+		if (!txt.str || !txt.cnt() || r.right <= r.left || r.bottom <= r.top) return;
+		IDWriteTextLayout* layout = nil;
+		if (text_render::create_text_layout(dc, f, { txt.str, txt.cnt() }, &layout)) {
+			defer{ text_render::release_com(layout); };
+			DWRITE_TEXT_METRICS metrics{};
+			if (layout->GetMetrics(&metrics) == S_OK) {
+				ID2D1DCRenderTarget* target = nil;
+				if (text_render::create_dc_render_target(dc, r, &target)) {
+					defer{ text_render::release_com(target); };
+					ID2D1SolidColorBrush* brush = nil;
+					if (text_render::create_text_brush(target, ColorFromBrush(txt_br), &brush)) {
+						defer{ text_render::release_com(brush); };
+						f32 width = (f32)(r.right - r.left);
+						f32 height = (f32)(r.bottom - r.top);
+						f32 x = alignment == TextAlignment::center ? (width - metrics.widthIncludingTrailingWhitespace) / 2.f
+							: alignment == TextAlignment::right ? width - pad_x - metrics.widthIncludingTrailingWhitespace : (f32)pad_x;
+						f32 y = vertical_alignment == TextVerticalAlignment::top ? (f32)pad_y
+							: vertical_alignment == TextVerticalAlignment::bottom ? height - pad_y - metrics.height
+							: (height - metrics.height) / 2.f;
+						target->BeginDraw();
+						target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
+						target->DrawTextLayout({ x, y }, layout, brush, D2D1_DRAW_TEXT_OPTIONS_NONE);
+						if (target->EndDraw() == S_OK) return;
+					}
+				}
+			}
+		}
+
+		HFONT oldfont = f ? SelectFont(dc, f) : nil;
+		defer{ if (oldfont) SelectFont(dc, oldfont); };
 		UINT oldalign = GetTextAlign(dc); defer{ SetTextAlign(dc,oldalign); };
 
 		COLORREF oldtxtcol = SetTextColor(dc, ColorFromBrush(txt_br)); defer{ SetTextColor(dc, oldtxtcol); };
 		auto oldbkmode = SetBkMode(dc, TRANSPARENT); defer{ SetBkMode(dc, oldbkmode); };
 
 		TEXTMETRIC tm; GetTextMetrics(dc, &tm);
-		// Calculate vertical position for the string so that it will be vertically centered
-		// We are single line so we want vertical alignment always
-		i32 yPos = (r.bottom + r.top - tm.tmHeight) / 2;
+		i32 yPos = vertical_alignment == TextVerticalAlignment::top ? r.top + pad_y
+			: vertical_alignment == TextVerticalAlignment::bottom ? r.bottom - pad_y - tm.tmHeight
+			: (r.bottom + r.top - tm.tmHeight) / 2;
 		i32 xPos;
 		switch (alignment) {
 		case decltype(alignment)::center:
 		{
 			SetTextAlign(dc, TA_CENTER);
-			xPos = (r.right - r.left) / 2;
+			xPos = (r.right + r.left) / 2;
 		} break;
 		case decltype(alignment)::left:
 		{
@@ -564,6 +633,21 @@ namespace urender {
 
 		//TODO(fran): TabbedTextOut for completeness
 		//TODO(fran): transparent bk color (if possible without gdi+)
+	}
+
+	void draw_menu_text(HDC dc, const RECT& bounds, str_view text, HFONT font, HBRUSH brush) {
+		auto parts = split_menu_text(text);
+		RECT label_bounds = bounds;
+		if (!parts.shortcut.empty()) {
+			auto shortcut_width = measure_text(dc, font, parts.shortcut).cx;
+			auto gap = measure_text(dc, font, L"    ").cx;
+			auto right_pad = measure_text(dc, font, L" ").cx;
+			label_bounds.right = maximum(label_bounds.left, bounds.right - shortcut_width - gap - right_pad);
+			utf16_str shortcut{ const_cast<utf16*>(parts.shortcut.data()), (parts.shortcut.size() + 1) * sizeof(utf16) };
+			draw_text(dc, bounds, shortcut, font, brush, TextAlignment::right, right_pad);
+		}
+		utf16_str label{ const_cast<utf16*>(parts.label.data()), (parts.label.size() + 1) * sizeof(utf16) };
+		draw_text(dc, label_bounds, label, font, brush, TextAlignment::left, 0);
 	}
 
 	i32 draw_bitmap_1bpp_right(HBITMAP bmp, HDC dc, rect_i32 r, int x_pad, HBRUSH color) {

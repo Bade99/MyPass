@@ -249,13 +249,16 @@ void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 
 			menu_str[menu_str_char_cnt + 1] = TEXT(' ');//ending space
 
-			// Calculate vertical and horizontal position for the string so that it will be centered
-			//NOTE: TabbedTextOut doesnt care for alignment (SetTextAlign)
-			TEXTMETRIC mtm; GetTextMetrics(dc, &mtm);
-			int yPos = (menuitemrc.bottom + menuitemrc.top - mtm.tmHeight) / 2;
-			int xPos = menuitemrc.left;
-			LONG txtsz = TabbedTextOut(dc, xPos, yPos, menu_str, menu_str_char_cnt + 2, 0, 0, xPos);
-			WORD txtw = LOWORD(txtsz);
+			str_view menu_text(menu_str, menu_str_char_cnt + 2);
+			auto txtw = urender::measure_text(dc, fonts.Menu, menu_text).cx;
+			RECT text_bounds = menuitemrc;
+			text_bounds.right = text_bounds.left + txtw;
+			OffsetRect(&text_bounds, -menurc.left, -menurc.top);
+			POINT old_origin{};
+			SetViewportOrgEx(dc, 0, 0, &old_origin);
+			utf16_str text{ menu_str, (menu_text.size() + 1) * sizeof(utf16) };
+			urender::draw_text(dc, text_bounds, text, fonts.Menu, txtbr, urender::TextAlignment::left, 0);
+			SetViewportOrgEx(dc, old_origin.x, old_origin.y, nil);
 
 			//Store menu item rc
 			state.menubar_items[i] = RECT{ 
@@ -406,8 +409,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			auto bk_rc = state.rc_caption; bk_rc.top += top_border_thickness;
 			FillRect(dc, &bk_rc, state.active ? colors.CaptionBk : colors.CaptionBk_Inactive);
 
-			SelectFont(dc, GetStockFont(DEFAULT_GUI_FONT));
-			TCHAR title[128]; int sz = GetWindowText(state.wnd, title, ARRAYSIZE(title));
+			HFONT caption_font = GetStockFont(DEFAULT_GUI_FONT);
+			SelectFont(dc, caption_font);
+			TCHAR title[128]{}; GetWindowText(state.wnd, title, ARRAYSIZE(title));
 			TEXTMETRIC tm; GetTextMetrics(dc, &tm);
 
 			auto offset_y = IsMaximized(state.wnd) ? maximized_offset_y : 0;
@@ -420,11 +424,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			auto iconnfo = MyGetIconInfo(icon);
 			urender::draw_icon(dc, icon_align_width, icon_align_height + offset_y, icon_width, icon_height, icon, 0, 0, iconnfo.w, iconnfo.h);
 
-			int yPos = (state.rc_caption.bottom + state.rc_caption.top - tm.tmHeight) / 2;
 			HBRUSH txtbr = state.active ? colors.ControlTxt : colors.ControlTxt_Inactive;
-			SetTextColor(dc, ColorFromBrush(txtbr)); SetBkMode(dc, TRANSPARENT);
-
-			TextOut(dc, icon_align_width * 2 + icon_width, yPos + offset_y, title, sz);
+			RECT title_rc = state.rc_caption;
+			title_rc.left = icon_align_width * 2 + icon_width;
+			title_rc.right = state.settings->can_maximize ? calc_btn_min_rc(state).left : calc_btn_max_rc(state).left;
+			title_rc.top += offset_y;
+			title_rc.bottom += offset_y;
+			urender::draw_text(dc, title_rc, to_utf_str(title), caption_font, txtbr, urender::TextAlignment::left, 0);
 
 			HBRUSH btn_border, btn_bk, btn_fore, btn_bk_push, btn_bk_mouseover;
 			if (state.active) {

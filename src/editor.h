@@ -397,15 +397,11 @@ void add_controls(State& state) {
 			txt_br = colors.ControlTxt_Disabled;
 		}
 
-		auto oldfont = SelectFont(dc, font); defer{ SelectFont(dc, oldfont); };
-		auto oldbkmode = SetBkMode(dc, TRANSPARENT); defer{ SetBkMode(dc, oldbkmode); };
-		SetTextColor(dc, ColorFromBrush(txt_br));
-
 		RECT txt_rc = r.to_RECT();
 		txt_rc.left += x_pad;
 		txt_rc.right = icon_x - x_pad;
 
-		DrawText(dc, txt.c_str(), txt.size(), &txt_rc, DT_EDITCONTROL | DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		urender::draw_text(dc, txt_rc, to_utf_str(txt), font, txt_br, urender::TextAlignment::left, 0);
 	});
 	combobox::set_function_render_listbox_element(controls.combo_sort, [](HDC dc, rect_i32 r, listbox::RenderFlags flags, void* element, void* user_extra) {
 		int w = r.w, h = r.h;

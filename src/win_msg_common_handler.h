@@ -50,8 +50,8 @@ static LRESULT handle_wm_measureitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM l
 			HDC dc = GetDC(wnd); defer{ ReleaseDC(wnd, dc); };
 			HFONT hfntPrev = (HFONT)SelectObject(dc, fonts.Menu); defer{ SelectObject(dc, hfntPrev); };//TODO(fran): theme
 			int old_mapmode = GetMapMode(dc); SetMapMode(dc, MM_TEXT); defer{ SetMapMode(dc, old_mapmode); };
-			WORD text_width = LOWORD(GetTabbedTextExtent(dc, menu_str, menu_str_char_cnt, 0, nil)); //TODO(fran): make common function for this and the one that does rendering, also look at how tabs work
-			WORD space_width = LOWORD(GetTabbedTextExtent(dc, TEXT(" "), 1, 0, nil)); //a space at the beginning
+			auto text_width = urender::measure_menu_text(dc, fonts.Menu, str_view(menu_str, menu_str_char_cnt)).cx;
+			auto space_width = urender::measure_text(dc, fonts.Menu, L" ").cx;
 
 			//Check if we are a "top level" menu
 			item->itemWidth = text_width + ((HMENU)item->itemData == top_level_menu ? space_width * 2 : GetSystemMetrics(SM_CXMENUCHECK) + space_width);
@@ -98,8 +98,6 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 			//NOTE: MFT_BITMAP, MFT_SEPARATOR, and MFT_STRING cannot be combined with one another, so we know those are separate types
 		case MFT_STRING: //Text menu
 		{//NOTE: we render the bitmaps inverted, cause I find it easier to edit on external programs, this may change later, not a hard change
-			int x, y;
-
 			// Set the appropriate foreground and background colors. 
 			HBRUSH txt_br, bk_br;
 			if (item->itemState & ODS_GRAYED) {
@@ -134,7 +132,7 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 			// Select the font and draw the text. //TODO(fran): parametric font
 			auto oldfont = (HFONT)SelectObject(item->hDC, fonts.Menu); defer{ SelectObject(item->hDC, oldfont); };
 
-			WORD x_pad = LOWORD(GetTabbedTextExtent(item->hDC, TEXT(" "), 1, 0, NULL)); //an extra 1 space before drawing text (for not top level menus)
+			auto x_pad = urender::measure_text(item->hDC, fonts.Menu, L" ").cx;
 			if (item->hwndItem == (HWND)top_level_menu) { //If we are on the menu bar (then hwndItem, our parent, will be the same as top_level_menu)
 				//we just want to draw the text, nothing more
 				//TODO(fran): clean this huge if-else, very bug prone with things being set/initialized in different parts
@@ -148,14 +146,8 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 
 				// Set new region, do drawing
 				IntersectClipRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom);//This is also stupid, did they have something against RECT ???????
-				UINT old_align = GetTextAlign(item->hDC);
-				SetTextAlign(item->hDC, TA_CENTER); //TODO(fran): VTA_CENTER for kanji and the like
-				// Calculate vertical and horizontal position for the string so that it will be centered
-				TEXTMETRIC tm; GetTextMetrics(item->hDC, &tm);
-				int yPos = (item->rcItem.bottom + item->rcItem.top - tm.tmHeight) / 2;
-				int xPos = item->rcItem.left + (item->rcItem.right - item->rcItem.left) / 2;
-				TextOut(item->hDC, xPos, yPos, menu_str, menu_str_char_cnt);
-				SetTextAlign(item->hDC, old_align);
+				urender::draw_text(item->hDC, item->rcItem, to_utf_str(menu_str), fonts.Menu, txt_br,
+					urender::TextAlignment::center, 0);
 
 				SelectClipRgn(item->hDC, restoreRegion); if (restoreRegion != NULL) DeleteObject(restoreRegion); //Restore old region
 			}
@@ -201,9 +193,7 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 				}
 
 				// Determine where to draw, leave space for a check mark and the extra 1 space
-				x = item->rcItem.left;
-				y = item->rcItem.top;
-				x += GetSystemMetrics(SM_CXMENUCHECK) + x_pad;
+				auto text_left = item->rcItem.left + GetSystemMetrics(SM_CXMENUCHECK) + x_pad;
 
 				TCHAR menu_str[64]; *menu_str = 0;
 				i32 menu_str_char_cnt = GetMenuString((HMENU)item->hwndItem, item->itemID, menu_str, ARRAYSIZE(menu_str), MF_BYCOMMAND);
@@ -219,7 +209,9 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 
 				// Set new region, do drawing
 				IntersectClipRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom);//This is also stupid, did they have something against RECT ???????
-				TabbedTextOut(item->hDC, x, y, menu_str, menu_str_char_cnt, 0, nil, x);
+				RECT text_bounds = item->rcItem;
+				text_bounds.left = text_left;
+				urender::draw_menu_text(item->hDC, text_bounds, str_view(menu_str, menu_str_char_cnt), fonts.Menu, txt_br);
 
 				SelectClipRgn(item->hDC, restoreRegion);
 				if (restoreRegion) DeleteObject(restoreRegion);

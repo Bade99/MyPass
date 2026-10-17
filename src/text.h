@@ -2,6 +2,7 @@
 #include "win_sdk.h"
 #include "helpers.h"
 #include "string.h"
+#include "text_render.h"
 
 //TODO(fran): 'show password' button (this needs to be a new element made up from 3 others: border + (editoneline + button)
 //TODO(fran): ballon tips, probably handmade since windows doesnt allow it anymore, the ballon tail makes it much clearer what the tip is referring to in cases where there's many controls next to each other
@@ -49,27 +50,8 @@ int calc_line_height_px(State& state) {
 	return res;
 }
 
-template<typename T>
-void release_com(T*& object) {
-	if (object) {
-		object->Release();
-		object = nil;
-	}
-}
-
-struct DirectWriteFactories {
-	IDWriteFactory* write;
-	ID2D1Factory* draw;
-};
-
-DirectWriteFactories& get_directwrite_factories() {
-	static DirectWriteFactories factories{};
-	if (!factories.write)
-		DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)&factories.write);
-	if (!factories.draw)
-		D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &factories.draw);
-	return factories;
-}
+using text_render::release_com;
+using text_render::get_directwrite_factories;
 
 bool is_high_surrogate(utf16 c);
 bool is_low_surrogate(utf16 c);
@@ -252,39 +234,10 @@ bool line_is_right_to_left(const State& state, const utf16* text, size_t text_le
 	return false;
 }
 
-bool create_text_format(State& state, HDC dc, IDWriteTextFormat** format) {
-	*format = nil;
-	auto& factories = get_directwrite_factories();
-	if (!factories.write) return false;
-
-	LOGFONT logfont{};
-	if (GetObject(state.theme.font, sizeof(logfont), &logfont) != sizeof(logfont)) return false;
-	TEXTMETRIC metrics{};
-	GetTextMetrics(dc, &metrics);
-	f32 font_size = (f32)(logfont.lfHeight < 0 ? -logfont.lfHeight : metrics.tmHeight - metrics.tmInternalLeading);
-	font_size = maximum(1.f, font_size);
-
-	utf16 locale_name[LOCALE_NAME_MAX_LENGTH]{};
-	if (!GetUserDefaultLocaleName(locale_name, ARRAYSIZE(locale_name))) wcscpy_s(locale_name, _t("en-us"));
-	DWRITE_FONT_WEIGHT weight = logfont.lfWeight ? (DWRITE_FONT_WEIGHT)clamp(1L, logfont.lfWeight, 999L) : DWRITE_FONT_WEIGHT_NORMAL;
-	DWRITE_FONT_STYLE font_style = logfont.lfItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL;
-	return factories.write->CreateTextFormat(logfont.lfFaceName, nil, weight, font_style,
-		DWRITE_FONT_STRETCH_NORMAL, font_size, locale_name, format) == S_OK;
-}
-
 bool create_line_text_layout(State& state, HDC dc, const TextLineLayout& line,
 	IDWriteTextLayout** text_layout, str& rendered_text, bool mask_password = true)
 {
 	*text_layout = nil;
-	if (line.text_length > (size_t)U32MAX) return false;
-	auto& factories = get_directwrite_factories();
-	if (!factories.write) return false;
-
-	IDWriteTextFormat* format = nil;
-	if (!create_text_format(state, dc, &format)) return false;
-	defer{ release_com(format); };
-	format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
-
 	bool password = mask_password && (GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_PASSWORD);
 	const utf16* text = state.char_text.c_str() + line.text_start;
 	if (password) {
@@ -292,16 +245,8 @@ bool create_line_text_layout(State& state, HDC dc, const TextLineLayout& line,
 		text = rendered_text.c_str();
 	}
 
-	HRESULT result = factories.write->CreateGdiCompatibleTextLayout(text, (UINT32)line.text_length,
-		format, 1000000.f, 1000000.f, 1.f, nil, FALSE, text_layout);
-	if (result != S_OK) return false;
-	(*text_layout)->SetReadingDirection(line.right_to_left ? DWRITE_READING_DIRECTION_RIGHT_TO_LEFT : DWRITE_READING_DIRECTION_LEFT_TO_RIGHT);
-	(*text_layout)->SetFlowDirection(DWRITE_FLOW_DIRECTION_TOP_TO_BOTTOM);
-	DWRITE_TEXT_METRICS metrics{};
-	if ((*text_layout)->GetMetrics(&metrics) == S_OK) {
-		(*text_layout)->SetMaxWidth(maximum(1.f, metrics.widthIncludingTrailingWhitespace));
-		(*text_layout)->SetMaxHeight(maximum(1.f, metrics.height));
-	}
+	if (!text_render::create_text_layout(dc, state.theme.font, { text, line.text_length }, text_layout,
+		line.right_to_left ? DWRITE_READING_DIRECTION_RIGHT_TO_LEFT : DWRITE_READING_DIRECTION_LEFT_TO_RIGHT)) return false;
 	return true;
 }
 
@@ -1660,8 +1605,7 @@ void render_selection(HDC dc, HBRUSH brush, CharSel sel, State& state, int yPos,
 	size_t newline_index = line->text_start + line->text_length;
 	bool newline_selected = line_index < state.line_breaks.size() && sel.x_min() <= newline_index && sel.x_max() > newline_index;
 	if (newline_selected) {
-		SIZE space_size{};
-		GetTextExtentPoint32(dc, _t(" "), 1, &space_size);
+		SIZE space_size = urender::measure_text(dc, state.theme.font, _t(" "));
 		f32 end_x = line_caret_x(*line, line->text_length, true);
 		f32 width = (f32)maximum(space_size.cx, 1L);
 		draw_rectangle(line->right_to_left ? end_x - width : end_x, 0,
@@ -1718,23 +1662,12 @@ void render(State& state, HDC dc) {
 		//TODO(fran): allow the user to select the vertical alignment (top, center, bottom)
 		//TODO(fran): BUG: vertical centering doesnt automatically occur when going from 2 lines to 1 by deleting the \n character, it remains with top centering until another letter is written by the user
 		int yPos = state.padding.y;
-		int xPos;
-
-		if (style & ES_CENTER) {
-			SetTextAlign(dc, TA_CENTER);
-			xPos = (rc.right - rc.left) / 2;
-		}
-		else if (style & ES_RIGHT) {
-			SetTextAlign(dc, TA_RIGHT);
-			xPos = rc.right - state.padding.x;
-		}
-		else /*ES_LEFT*/ {//NOTE: ES_LEFT==0, that was their way of defaulting to left
-			SetTextAlign(dc, TA_LEFT);
-			xPos = rc.left + state.padding.x;
-		}
 
 		if (show_placeholder) {
-			TextOut(dc, xPos, yPos, state.placeholder, (int)cstr_len(state.placeholder));
+			urender::TextAlignment alignment = style & ES_CENTER ? urender::TextAlignment::center
+				: style & ES_RIGHT ? urender::TextAlignment::right : urender::TextAlignment::left;
+			urender::draw_text(dc, rc, to_utf_str(state.placeholder), font, txt_br, alignment, state.padding.x,
+				urender::TextVerticalAlignment::top, state.padding.y);
 		}
 		else {
 			struct RenderedLine {
@@ -1772,24 +1705,12 @@ void render(State& state, HDC dc) {
 					text, (int)line.cached_layout->text_length);
 			};
 
-			auto& factories = get_directwrite_factories();
 			ID2D1DCRenderTarget* target = nil;
 			ID2D1SolidColorBrush* text_brush = nil;
-			if (factories.draw) {
-				D2D1_RENDER_TARGET_PROPERTIES properties{};
-				properties.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
-				properties.pixelFormat = { DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE };
-				properties.dpiX = properties.dpiY = 96.f;
-				properties.usage = D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE;
-				properties.minLevel = D2D1_FEATURE_LEVEL_DEFAULT;
-				factories.draw->CreateDCRenderTarget(&properties, &target);
-			}
 			bool directwrite_rendered = false;
-			if (target && target->BindDC(dc, &rc) == S_OK) {
+			if (text_render::create_dc_render_target(dc, rc, &target)) {
 				COLORREF color = ColorFromBrush(txt_br);
-				D2D1_COLOR_F brush_color{ GetRValue(color) / 255.f, GetGValue(color) / 255.f, GetBValue(color) / 255.f, 1.f };
-				target->CreateSolidColorBrush(brush_color, &text_brush);
-				if (text_brush) {
+				if (text_render::create_text_brush(target, color, &text_brush)) {
 					target->BeginDraw();
 					target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
 					for (const auto& line : rendered_lines) {

@@ -2,6 +2,7 @@
 #include "win_sdk.h"
 #include "platform.h"
 #include "helpers.h"
+#include "renderer.h"
 
 namespace search {
 
@@ -172,9 +173,9 @@ void resize_wnd(State& state) {
 	RECT r; GetWindowRect(state.parent, &r); //INFO: you cant use getclientrect with text editors since they seem to change their client rect when you scroll them and would cause the position of this control to start scrolling too
 	int w = RECTW(r);
 	int h = RECTH(r);
+	HFONT font = (HFONT)GetWindowFont(state.controls.edit_match);
 	int font_h;
 	{
-		HFONT font = (HFONT)GetWindowFont(state.controls.edit_match);
 		HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd, dc); };
 		HFONT oldfont = (HFONT)SelectObject(dc, font); defer{ SelectObject(dc, oldfont); };
 		TEXTMETRIC tm; GetTextMetrics(dc, &tm);
@@ -189,7 +190,7 @@ void resize_wnd(State& state) {
 		search_h = font_h * 2;
 		//search_w = (int)((float)w * .25f);//TODO(fran): there should be a max size, we just want a little thing in the corner
 		HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd, dc); };
-		SIZE a; GetTextExtentPoint32(dc, L"a", 1, &a);
+		SIZE a = urender::measure_text(dc, font, L"a");
 		search_w = a.cx * 33;
 	}
 	else {
