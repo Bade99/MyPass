@@ -4,12 +4,12 @@
   * Tooltip
   */
 
-struct tooltip_props {
+struct TooltipProps {
 	bool multiline = false;
 	u32 delay_ms = U32MAX; // delay between start of mouse over and showing the tooltip
 	u32 duration_ms = U32MAX; // time that the tooltip remains visible
 };
-static auto add_mouseover_tooltip(HWND target, u64 msg_resource_id, tooltip_props props = {}) {
+static auto add_mouseover_tooltip(HWND target, u64 msg_resource_id, TooltipProps props = {}) {
 	//TODO(fran): we could have two types of tooltips, a singular tooltip for each nonclient window, that you can use for generic tooltips, for that one just call the TTM_ADDTOOL with all the controls we want it to look over. Then also allow custom tooltips, which will require the creation of a new tooltip control, eg for cases where it needs to have a different delay_ms
 	auto tooltip = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL,
 		WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,

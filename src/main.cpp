@@ -215,12 +215,12 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
     
     PostMessage(0, WM_STATE_NEXT, 0, 0); //start the state machine
 
-    enum class wnd_task { login, show_passwords };
-    struct wnd_state { HWND wnd; wnd_task task; };
+    enum class WindowTask { login, show_passwords };
+    struct WindowTaskState { HWND wnd; WindowTask task; };
 
-    wnd_state state_machine[] = { 
-        {.wnd = login_wnd, .task = wnd_task::login},
-        {.wnd = editor_wnd, .task = wnd_task::show_passwords} 
+    WindowTaskState state_machine[] = {
+        {.wnd = login_wnd, .task = WindowTask::login},
+        {.wnd = editor_wnd, .task = WindowTask::show_passwords}
     };
     i32 state_idx = -1;
     constexpr i32 state_cnt = ARRAYSIZE(state_machine);
@@ -249,10 +249,10 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
         case WM_STATE_NEXT:
         {
             state_idx = next_state(state_idx);
-            wnd_state new_state = state_machine[state_idx];
-            wnd_state old_state = state_machine[prev_state(state_idx)];
+            WindowTaskState new_state = state_machine[state_idx];
+            WindowTaskState old_state = state_machine[prev_state(state_idx)];
             switch (new_state.task) {
-            case wnd_task::login:
+            case WindowTask::login:
             {
                 PostMessage(nonclient::get_state(old_state.wnd)->client, WM_STATE_RESET, 0, 0);
                 ShowWindow(old_state.wnd, SW_HIDE);
@@ -261,7 +261,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
                 debug_track_wnd = login_wnd;
                 #endif
             } break;
-            case wnd_task::show_passwords:
+            case WindowTask::show_passwords:
             {
                 SetCursor(loading_cursor); defer{ SetCursor(arrow_cursor); };
                 const editor::Start editor_start{ .username = login_results.username, .password = login_results.password, .signup = login_results.signup };

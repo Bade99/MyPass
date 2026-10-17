@@ -36,8 +36,8 @@ static const auto on_password_editor_change = [](void* data, HWND wnd) {
 	password_editor::set_properties(pw_ed, updated_props);
 };
 
-struct props { const utf16* title = nil; time_t date_created = 0, date_modified = 0; multiflag<password_editor::ItemFlag> flags = 0; };
-password_editor::State& add_password_editor(State& state, const props& properties, size_t at_idx) {
+struct Props { const utf16* title = nil; time_t date_created = 0, date_modified = 0; multiflag<password_editor::ItemFlag> flags = 0; };
+password_editor::State& add_password_editor(State& state, const Props& properties, size_t at_idx) {
 	auto wnd = create_window(state.controls.page, password_editor::wndclass, nil, WS_VISIBLE | WS_CHILD, WS_EX_CONTROLPARENT, 0, state.wnd);
 
 	//TODO(fran): I have to manually move the btn_add_end to the end of the Z order so traversal through pressing tab remains correct, a better solution would actually be to put the password_editors inside yet another empty page container, so that they are placed inside of it, removing the need to update the z-order of btn_add_end which would be on a different layer of the hierarchy
@@ -81,7 +81,7 @@ password_editor::State& add_password_editor(State& state, const props& propertie
 }
 
 void add_preset_password_editor(State& state, size_t at_idx) {
-	props properties{ .title = L"", .date_created = std::time(nil), .date_modified = properties.date_created };
+	Props properties{ .title = L"", .date_created = std::time(nil), .date_modified = properties.date_created };
 	auto& password_editor = add_password_editor(state, properties, at_idx);
 	auto usr_txt = RS(LANG_PWD_ED_TBL_USER);
 	auto pwd_txt = RS(LANG_PWD_ED_TBL_PASSWORD);
@@ -105,7 +105,7 @@ void resize_controls(State& state) {
 	i32 offset_y = 0;
 	{
 		i32 offset_x = 0;
-		if (state.mode == mode::transition_v0) {
+		if (state.mode == Mode::transition_v0) {
 			auto& controls = state.controls.transition_v0;
 			rect_i32 edit_showpasswords{ .x = 0, .y = 0, .w = w / 2, .h = h };
 			offset_x = edit_showpasswords.right();
@@ -203,20 +203,20 @@ void resize_controls(State& state) {
 
 void add_controls_transition_v0(State& state); //forward declaration to solve circular dependency with set_mode
 
-void set_mode(State& state, mode new_mode) {
+void set_mode(State& state, Mode new_mode) {
 	if (new_mode != state.mode) {
 		auto old_mode = state.mode;
 		state.mode = new_mode;
 
 		switch (state.mode) {
-		case mode::transition_v0:
+		case Mode::transition_v0:
 		{
 			//v0 data format detected, enabling UI to facilitate user transition to the new data format from their old data
 			add_controls_transition_v0(state);
 		} break;
-		case mode::normal:
+		case Mode::normal:
 		{
-			if (old_mode == mode::transition_v0) {
+			if (old_mode == Mode::transition_v0) {
 				for (auto& c : state.controls.transition_v0.all) { DestroyWindow(c); c = nil; }
 			}
 
@@ -274,13 +274,13 @@ void add_controls(State& state) {
 	auto setup_combobox_sorting_options = [](State& state, HWND combo) {
 		auto controls = combobox::get_controls(combo);
 		Assert(controls.listbox);
-		sort_combo_item items[] = {
-			{.value = sort_option::date_modified_newest, .label_id = LANG_EDITOR_SORT_DATE_MODIFIED_NEWEST },
-			{.value = sort_option::date_modified_oldest, .label_id = LANG_EDITOR_SORT_DATE_MODIFIED_OLDEST },
-			{.value = sort_option::alphabetic_az, .label_id = LANG_EDITOR_SORT_ALPHABETIC_AZ },
-			{.value = sort_option::alphabetic_za, .label_id = LANG_EDITOR_SORT_ALPHABETIC_ZA },
-			{.value = sort_option::date_created_newest, .label_id = LANG_EDITOR_SORT_DATE_CREATED_NEWEST },
-			{.value = sort_option::date_created_oldest, .label_id = LANG_EDITOR_SORT_DATE_CREATED_OLDEST },
+		SortComboItem items[] = {
+			{.value = SortOption::date_modified_newest, .label_id = LANG_EDITOR_SORT_DATE_MODIFIED_NEWEST },
+			{.value = SortOption::date_modified_oldest, .label_id = LANG_EDITOR_SORT_DATE_MODIFIED_OLDEST },
+			{.value = SortOption::alphabetic_az, .label_id = LANG_EDITOR_SORT_ALPHABETIC_AZ },
+			{.value = SortOption::alphabetic_za, .label_id = LANG_EDITOR_SORT_ALPHABETIC_ZA },
+			{.value = SortOption::date_created_newest, .label_id = LANG_EDITOR_SORT_DATE_CREATED_NEWEST },
+			{.value = SortOption::date_created_oldest, .label_id = LANG_EDITOR_SORT_DATE_CREATED_OLDEST },
 		};
 		listbox::add_elements_by_value(controls.listbox, (void**)items, ARRAYSIZE(items));
 
@@ -292,38 +292,38 @@ void add_controls(State& state) {
 	//combobox::set_function_desired_size_combobox(controls.combo_sort, langbox_func_desired_size);
 	combobox::set_function_on_selection_accepted(controls.combo_sort, [](void* element, void* user_extra) {
 		auto& state = *(State*)user_extra;
-		auto item = std::bit_cast<sort_combo_item>(element);
-		static_assert((i32)sort_option::__last == 6, "Enum element count changed, update sorting logic to consider the new values");
+		auto item = std::bit_cast<SortComboItem>(element);
+		static_assert((i32)SortOption::__last == 6, "Enum element count changed, update sorting logic to consider the new values");
 
 		combobox::set_cur_sel(state.controls.combo_sort, (size_t)item.value);
 
-		struct sort_alphabetic { HWND wnd; str title; };
-		struct sort_date { HWND wnd; time_t date; };
+		struct SortAlphabetic { HWND wnd; str title; };
+		struct SortDate { HWND wnd; time_t date; };
 
 		auto& vec = state.controls.password_editors;
 		switch (item.value) {
-		case sort_option::alphabetic_az:
-		case sort_option::alphabetic_za:
+		case SortOption::alphabetic_az:
+		case SortOption::alphabetic_za:
 		{
-			std::vector<sort_alphabetic> to_sort_pinned;
-			std::vector<sort_alphabetic> to_sort; to_sort.reserve(vec.size());
+			std::vector<SortAlphabetic> to_sort_pinned;
+			std::vector<SortAlphabetic> to_sort; to_sort.reserve(vec.size());
 			for (auto p : vec) {
 				auto& controls = password_editor::get_state(p)->controls;
 				bool pin = button::get_state(controls.btn_pin)->selected;
 				auto title = controls.edo_title;
 				auto len = GetWindowTextLength(title) + 1;
-				sort_alphabetic element;
+				SortAlphabetic element;
 				element.wnd = p;
 				element.title.resize_and_overwrite(len,
 					[=](utf16* buf, size_t buf_size) { return GetWindowText(title, buf, buf_size); });
 				if (pin) to_sort_pinned.push_back(std::move(element));
 				else to_sort.push_back(std::move(element));
 			}
-			auto sorting_function = (item.value == sort_option::alphabetic_az) ?
-				[](const sort_alphabetic& a, const sort_alphabetic& b) {
+			auto sorting_function = (item.value == SortOption::alphabetic_az) ?
+				[](const SortAlphabetic& a, const SortAlphabetic& b) {
 				return _wcsicmp(a.title.c_str(), b.title.c_str()) < 0;
 				} :
-				[](const sort_alphabetic& a, const sort_alphabetic& b) {
+				[](const SortAlphabetic& a, const SortAlphabetic& b) {
 					return _wcsicmp(a.title.c_str(), b.title.c_str()) > 0;
 				};
 			std::sort(to_sort_pinned.begin(), to_sort_pinned.end(), sorting_function);
@@ -331,39 +331,39 @@ void add_controls(State& state) {
 			for (const auto& [i, value] : to_sort_pinned | std::views::enumerate) vec[i] = value.wnd;
 			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i + to_sort_pinned.size()] = value.wnd;
 		} break;
-		case sort_option::date_modified_newest:
-		case sort_option::date_modified_oldest:
+		case SortOption::date_modified_newest:
+		case SortOption::date_modified_oldest:
 		{
-			std::vector<sort_date> to_sort_pinned;
-			std::vector<sort_date> to_sort; to_sort.reserve(vec.size());
+			std::vector<SortDate> to_sort_pinned;
+			std::vector<SortDate> to_sort; to_sort.reserve(vec.size());
 			for (auto p : vec) {
 				auto& state = *password_editor::get_state(p);
 				bool pin = button::get_state(state.controls.btn_pin)->selected;
 				if (pin) to_sort_pinned.emplace_back(p, state.properties.date_modified);
 				else to_sort.emplace_back(p, state.properties.date_modified);
 			}
-			auto sorting_function = (item.value == sort_option::date_modified_newest) ?
-				[](sort_date a, sort_date b) { return a.date > b.date; } :
-				[](sort_date a, sort_date b) { return a.date < b.date; };
+			auto sorting_function = (item.value == SortOption::date_modified_newest) ?
+				[](SortDate a, SortDate b) { return a.date > b.date; } :
+				[](SortDate a, SortDate b) { return a.date < b.date; };
 			std::sort(to_sort_pinned.begin(), to_sort_pinned.end(), sorting_function);
 			std::sort(to_sort.begin(), to_sort.end(), sorting_function);
 			for (const auto& [i, value] : to_sort_pinned | std::views::enumerate) vec[i] = value.wnd;
 			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i + to_sort_pinned.size()] = value.wnd;
 		} break;
-		case sort_option::date_created_newest:
-		case sort_option::date_created_oldest:
+		case SortOption::date_created_newest:
+		case SortOption::date_created_oldest:
 		{
-			std::vector<sort_date> to_sort_pinned;
-			std::vector<sort_date> to_sort; to_sort.reserve(vec.size());
+			std::vector<SortDate> to_sort_pinned;
+			std::vector<SortDate> to_sort; to_sort.reserve(vec.size());
 			for (auto p : vec) {
 				auto& state = *password_editor::get_state(p);
 				bool pin = button::get_state(state.controls.btn_pin)->selected;
 				if (pin) to_sort_pinned.emplace_back(p, state.properties.date_created);
 				else to_sort.emplace_back(p, state.properties.date_created);
 			}
-			auto sorting_function = (item.value == sort_option::date_created_newest) ?
-				[](sort_date a, sort_date b) { return a.date > b.date; } :
-				[](sort_date a, sort_date b) { return a.date < b.date; };
+			auto sorting_function = (item.value == SortOption::date_created_newest) ?
+				[](SortDate a, SortDate b) { return a.date > b.date; } :
+				[](SortDate a, SortDate b) { return a.date < b.date; };
 			std::sort(to_sort.begin(), to_sort.end(), sorting_function);
 			for (const auto& [i, value] : to_sort_pinned | std::views::enumerate) vec[i] = value.wnd;
 			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i + to_sort_pinned.size()] = value.wnd;
@@ -372,25 +372,25 @@ void add_controls(State& state) {
 		}
 		ask_window_for_resize(state.wnd);
 	});
-	combobox::set_function_render_combobox(controls.combo_sort, [](HDC dc, rect_i32 r, combobox::render_flags flags, void* element, void* user_extra) {
+	combobox::set_function_render_combobox(controls.combo_sort, [](HDC dc, rect_i32 r, combobox::RenderFlags flags, void* element, void* user_extra) {
 		auto& theme = themes.base_btn;
 		HFONT font = fonts.General;
 		HBRUSH bk_br, txt_br, border_br = theme.brushes.foreground.normal;
-		if (flags.isListboxOpen) bk_br = theme.brushes.bk.normal;
-		else if (flags.onClicked) bk_br = theme.brushes.bk.clicked;
-		else if (flags.onMouseover) bk_br = theme.brushes.bk.mouseover;
+		if (flags.is_listbox_open) bk_br = theme.brushes.bk.normal;
+		else if (flags.on_clicked) bk_br = theme.brushes.bk.clicked;
+		else if (flags.on_mouseover) bk_br = theme.brushes.bk.mouseover;
 		else bk_br = theme.brushes.bk.disabled;
 
 		int x_pad = avg_str_dim(font, 1).cx;
 
 		urender::draw_background(dc, r.to_RECT(), bk_br, border_br, theme.dimensions);
 		
-		auto bmp = flags.isListboxOpen ? bmps.dropdown_up : bmps.dropdown;
+		auto bmp = flags.is_listbox_open ? bmps.dropdown_up : bmps.dropdown;
 		int icon_x = urender::draw_bitmap_1bpp_right(bmp, dc, r, x_pad, theme.brushes.foreground.normal);
 
 		str txt;
 		if (element) {
-			txt = RS(std::bit_cast<sort_combo_item>(element).label_id);
+			txt = RS(std::bit_cast<SortComboItem>(element).label_id);
 			txt_br = colors.ControlTxt;
 		} else {
 			txt = RS(LANG_EDITOR_SORT);
@@ -407,15 +407,15 @@ void add_controls(State& state) {
 
 		DrawText(dc, txt.c_str(), txt.size(), &txt_rc, DT_EDITCONTROL | DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 	});
-	combobox::set_function_render_listbox_element(controls.combo_sort, [](HDC dc, rect_i32 r, listbox::renderflags flags, void* element, void* user_extra) {
+	combobox::set_function_render_listbox_element(controls.combo_sort, [](HDC dc, rect_i32 r, listbox::RenderFlags flags, void* element, void* user_extra) {
 		int w = r.w, h = r.h;
-		auto item = std::bit_cast<sort_combo_item>(element);
+		auto item = std::bit_cast<SortComboItem>(element);
 		auto txt = RS(item.label_id);
 
 		//Draw bk
 		HBRUSH bk_br = colors.ControlBk, txt_br = colors.ControlTxt;
-		if (flags.onMouseover || flags.onSelected) bk_br = colors.ControlBkMouseOver;
-		if (flags.onClicked) bk_br = colors.ControlBkPush;
+		if (flags.on_mouseover || flags.on_selected) bk_br = colors.ControlBkMouseOver;
+		if (flags.on_clicked) bk_br = colors.ControlBkPush;
 
 		RECT bk_rc = r.to_RECT();
 		FillRect(dc, &bk_rc, bk_br);
@@ -698,12 +698,12 @@ raw_buffer generate_save_data_v1(State& state) {
 	//header: [magic(4bytes "myps" ascii no terminator) | version(4bytes u32) | salt(16bytes, random, new one generated on every login)]
 	//data: [structured block data | padding | integrity hash(header + unencrypted data)]
 
-	file_header_v1 header;
+	FileHeaderV1 header;
 	static_assert(sizeof(header.salt) == sizeof(state.salt));
 	memcpy(header.salt, state.salt, sizeof(header.salt));
 
-	file_footer_v1 footer;
-	static_assert(sizeof(file_footer_v1) % 16 == 0, "Footer size must be a multiple of 16 bytes for encryption");
+	FileFooterV1 footer;
+	static_assert(sizeof(FileFooterV1) % 16 == 0, "Footer size must be a multiple of 16 bytes for encryption");
 
 	raw_buffer data;
 	append_to_buffer(data, header);
@@ -726,7 +726,7 @@ raw_buffer generate_save_data_v1(State& state) {
 
 bool save_passwords(State& state, bool complete_version_transition = false) {
 	bool res;
-	if (state.mode == mode::transition_v0 && !complete_version_transition) {
+	if (state.mode == Mode::transition_v0 && !complete_version_transition) {
 		//Prevent manual user saving while on a version transition until they confirm that the transition has been completed
 		res = false;
 		CustomMessageBox(state.wnd, RCS(LANG_ERROR_SAVE_ON_TRANSITION_TEXT), RCS(LANG_ERROR_SAVE_ON_TRANSITION_TITLE), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement);
@@ -754,24 +754,24 @@ void cleanup_password_editors_v1(State& state) {
 }
 
 bool create_password_editors_v1(State& state, raw_buffer_reader& data) {
-	/*struct pwd_ed_trivial_v1 {
+	/*struct PasswordEditorTrivialV1 {
 		time_t date_created;
 		time_t date_modified;
 		multiflag<password_editor::ItemFlag> flags;
 	};*/
 
-	struct pwd_ed_v1 /*: pwd_ed_trivial_v1*/ {
+	struct PasswordEditorV1 /*: PasswordEditorTrivialV1*/ {
 		str_view title; //TODO: consider switching to span<utf16> which does allow for mutations of the underlying
 		time64 date_created;
 		time64 date_modified;
 		multiflag<password_editor::ItemFlag> flags;
 	};
 
-	/*struct pwd_ed_row_trivial_v1 {
+	/*struct PasswordEditorRowTrivialV1 {
 		multiflag<password_editor::ValueCellFlag> flags = 0;
 	};*/
 
-	struct pwd_ed_row_v1 /*: pwd_ed_row_trivial_v1*/ {
+	struct PasswordEditorRowV1 /*: PasswordEditorRowTrivialV1*/ {
 		str_view description, value;
 		multiflag<password_editor::ValueCellFlag> flags = 0;
 	};
@@ -779,11 +779,11 @@ bool create_password_editors_v1(State& state, raw_buffer_reader& data) {
 	u64 editor_cnt;
 	if (!data.read(editor_cnt)) return false; //TODO(fran): for complex data reading it may be a good idea to use exceptions to make the code simpler and avoid if checks all over
 	for (u64 e = 0; e < editor_cnt; e++) {
-		pwd_ed_v1 editor;
+		PasswordEditorV1 editor;
 		if (!(data.read(editor.title) && data.read(editor.date_created) && data.read(editor.date_modified) && data.read(editor.flags)))
 			return false;
-		//if (!data.read((pwd_ed_trivial_v1&)editor)) return false; //TODO(fran): this will fail due to structure padding, when we save we do it element by element of the struct, but here we read the whole struct at once, which has extra padding, breaking everything, decide whether to both save and load the struct, or to do save and load element by element of the struct
-		props properties{ 
+		//if (!data.read((PasswordEditorTrivialV1&)editor)) return false; //TODO(fran): this will fail due to structure padding, when we save we do it element by element of the struct, but here we read the whole struct at once, which has extra padding, breaking everything, decide whether to both save and load the struct, or to do save and load element by element of the struct
+		Props properties{
 			.title = editor.title.data(),
 			.date_created = editor.date_created, 
 			.date_modified = editor.date_modified, 
@@ -795,7 +795,7 @@ bool create_password_editors_v1(State& state, raw_buffer_reader& data) {
 		u64 row_cnt;
 		if (!data.read(row_cnt)) return false;
 		for (u64 r = 0; r < row_cnt; r++) {
-			pwd_ed_row_v1 row;
+			PasswordEditorRowV1 row;
 			if (!(data.read(row.description) && data.read(row.value) && data.read(row.flags))) return false;
 
 			auto description_cell = password_editor::empty_description_cell;
@@ -833,7 +833,7 @@ void add_controls_transition_v0(State& state) {
 					RCS(LANG_MSG_CONFIRM_COMPLETE_TRANSITION_V0_TEXT), RCS(LANG_MSG_CONFIRM_COMPLETE_TRANSITION_V0_TITLE),
 					MB_YESNOCANCEL | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement) == IDYES)
 					if (save_passwords(state, true))
-						set_mode(state, mode::normal);
+						set_mode(state, Mode::normal);
 			}
 			});
 		AWT(controls.btn_confirm_transfer, LANG_TRANSITION_BTN_CONFIRM);
@@ -877,8 +877,8 @@ void add_controls_transition_v0(State& state) {
 
 u32 detect_save_version(void* data, u32 sz_bytes) {
 	raw_buffer_reader r(data, sz_bytes);
-	file_header_base header;
-	return r.read(header) && !memcmp(header.magic, file_header_base{}.magic, sizeof(file_header_base::magic)) ? header.version : 0;
+	FileHeaderBase header;
+	return r.read(header) && !memcmp(header.magic, FileHeaderBase{}.magic, sizeof(FileHeaderBase::magic)) ? header.version : 0;
 }
 
 login::AttemptResult startup(State& state, const Start* start, bool start_from_backup) {
@@ -906,7 +906,7 @@ login::AttemptResult startup(State& state, const Start* start, bool start_from_b
 					if (auto file_read_chars = file_read.sz / sizeof(state.current_user[0]);
 						file_read_chars >= state.current_user.size() && !wcsncmp(state.current_user.c_str(), (cstr*)file_read.mem, state.current_user.size())
 						) { //Valid password, provided username matches stored username
-						set_mode(state, mode::transition_v0);
+						set_mode(state, Mode::transition_v0);
 
 						SetWindowText(state.controls.transition_v0.edit_passwords, ((cstr*)file_read.mem) + start->username.sz_chars);
 						SecureZeroMemory(file_read.mem, file_read.sz);
@@ -921,7 +921,7 @@ login::AttemptResult startup(State& state, const Start* start, bool start_from_b
 			case 1:
 			{
 				raw_buffer_reader r(file_read.mem, file_read.sz);
-				if (file_header_v1 header; r.read(header)) {
+				if (FileHeaderV1 header; r.read(header)) {
 					u32 key[8];
 					hash_pwd_and_salt(start->password, header.salt, sizeof(header.salt), key);
 					twofish_setkey(key, sizeof(key));
@@ -931,7 +931,7 @@ login::AttemptResult startup(State& state, const Start* start, bool start_from_b
 						auto section_ptr = const_cast<u8*>(data_and_footer_section.data());
 						twofish_decrypt(section_ptr, data_and_footer_section.size(), section_ptr);
 
-						if (file_footer_v1 footer; r.cut_from_end(footer)) {
+						if (FileFooterV1 footer; r.cut_from_end(footer)) {
 							r.restart_position();
 							u8 auth_integrity_hash[32];
 							static_assert(sizeof(auth_integrity_hash) == sizeof(footer.auth_integrity_hash));
@@ -1122,7 +1122,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				twofish_setkey(key, sizeof(key));
 				SecureZeroMemory(key, sizeof(key));
 
-				if (state.mode == mode::transition_v0) PostMessage(state.wnd, custom_message::show_transition_v0_msgbox, 0, 0); //Delay show the messagebox so that our window has time to be shown first
+				if (state.mode == Mode::transition_v0) PostMessage(state.wnd, custom_message::show_transition_v0_msgbox, 0, 0); //Delay show the messagebox so that our window has time to be shown first
 				if (used_backup) PostMessage(state.wnd, custom_message::show_used_backup_msgbox, 0, 0);
 			}
 		}
@@ -1207,7 +1207,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			RECT btn_add_start = get_window_rect_at(state.controls.btn_add_start, state.wnd);
 			i32 w = RECTW(r), offset_x = 0, w_pad = 0;
 			auto spacing = DPI(10);
-			if (state.mode == mode::transition_v0) {
+			if (state.mode == Mode::transition_v0) {
 				offset_x = w / 2;
 				w -= offset_x;
 			}

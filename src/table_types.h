@@ -31,7 +31,7 @@ namespace table {
 		RowTheme cells;
 
 		auto copy_from(const Theme& src, bool copy_cell_theme = true) {
-			struct copy_res { bool repaint = false, resize = false; } res;
+			struct CopyResult { bool repaint = false, resize = false; } res;
 			for (u32 i = 0; auto& b : this->brushes.all)
 				res.repaint |= b.copy_from(src.brushes.all[i++]);
 

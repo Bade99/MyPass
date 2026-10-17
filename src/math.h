@@ -5,25 +5,20 @@
 
 //i32
 
-static i32 roundNup(i32 N, i32 num) {
-	//Thanks https://stackoverflow.com/questions/3407012/c-rounding-up-to-the-nearest-multiple-of-a-number
-	//TODO(fran): check to which side it rounds for negatives
-	Assert(N);
-	i32 isPositive = (i32)(num >= 0);
-	i32 res = ((num + isPositive * (N - 1)) / N) * N;
-	return res;
+static i32 roundNup(i32 multiple, i32 value) {
+	Assert(multiple > 0);
+	i64 rounded = ((i64)value + (value >= 0 ? (i64)multiple - 1 : 0)) / multiple * multiple;
+	return rounded > I32MAX ? I32MAX : (i32)rounded;
 }
 
-static i32 round2up(i32 n) {
-	return roundNup(2, n);
+static i32 round2up(i32 value) {
+	return roundNup(2, value);
 }
 
-static i32 roundNdown(i32 N, i32 num) {
-	//Thanks https://stackoverflow.com/questions/3407012/c-rounding-up-to-the-nearest-multiple-of-a-number
-	//TODO(fran): doesnt work for negatives
-	Assert(N);
-	i32 res = num - (num % N);
-	return res;
+static i32 roundNdown(i32 multiple, i32 value) {
+	Assert(multiple > 0);
+	i64 rounded = ((i64)value - (value < 0 ? (i64)multiple - 1 : 0)) / multiple * multiple;
+	return rounded < I32MIN ? I32MIN : (i32)rounded;
 }
 
 

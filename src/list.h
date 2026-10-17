@@ -20,12 +20,9 @@
 //TODO(fran): try to implement this, we'll need ws_ex_layered or ws_ex_transparent
 
 //TODO(fran): rendering: there's something clearly screwed up, when you hover with the mouse along many elements you can see a vertical cut as it changes from one to another, wtf is that? also it doesnt always happen
-//TODO(fran): clicking on the listbox should not deactivate the wnd that was previously active
-
 #define LBN_CLK (LBN_KILLFOCUS+10) //NOTE: LBN_KILLFOCUS is the last default listbox notif
 
 //TODO(fran): add extra functionality for non floating listboxes, eg VK_UP and VK_DOWN to change the selection
-//TODO(fran): BUG: reproduction: hold click on an element, move outside the window and only then release click, the element will remain in the clicked state, solution: CaptureMouse() probably
 
 namespace listbox {
 
@@ -92,10 +89,10 @@ namespace listbox {
 					};
 					//TODO(fran): offset rectangle by state.border_thickness
 
-					renderflags flags;
-					flags.onClicked = state.clicked_element == i;
-					flags.onSelected = state.selected_element == i;
-					flags.onMouseover = state.mousehover_element == i;
+					RenderFlags flags;
+					flags.on_clicked = state.clicked_element == i;
+					flags.on_selected = state.selected_element == i;
+					flags.on_mouseover = state.mousehover_element == i;
 
 					state.render_element(dc, elem_rc, flags, state.elements[i], state.user_extra);
 				}
@@ -105,7 +102,7 @@ namespace listbox {
 
 	void render_backbuffer_element(State& state, size_t elem_idx) {
 		//TODO(fran): this is a quick HACK reusing render_backbuffer()'s code
-		if (state.backbuffer) {
+		if (state.backbuffer && elem_idx < state.elements.size()) {
 			HDC& dc = state.offscreendc;
 			auto oldbmp = SelectBitmap(dc, state.backbuffer); defer{ SelectBitmap(dc,oldbmp); };
 
@@ -125,7 +122,6 @@ namespace listbox {
 			//Render the elements
 			//TODO(fran): we should have a list of changed elems so we know which ones need redrawing, otherwise this wont scale at all
 			if (state.render_element) {
-				Assert(elem_idx < state.elements.size()); //BUG(fran): there's some case that causes this to trigger at app startup with elem_idx = 1 & elements.size() = 1. INFO: apparently happens when the mouse is on top of the wnd just as it is being created, causing bad stuff to happen like getting negative mouse positions
 				size_t i = elem_idx;
 				rect_i32 elem_rc{
 						backbuffer_rc.left
@@ -134,13 +130,32 @@ namespace listbox {
 					, state.element_dim.cy
 				};
 
-				renderflags flags;
-				flags.onClicked = state.clicked_element == i;
-				flags.onSelected = state.selected_element == i;
-				flags.onMouseover = state.mousehover_element == i;
+				RenderFlags flags;
+				flags.on_clicked = state.clicked_element == i;
+				flags.on_selected = state.selected_element == i;
+				flags.on_mouseover = state.mousehover_element == i;
 
 				state.render_element(dc, elem_rc, flags, state.elements[i], state.user_extra);
 			}
+		}
+	}
+
+	size_t mouse_element_at(State& state, POINT mouse) {
+		RECT client_rc; GetClientRect(state.wnd, &client_rc);
+		if (!PtInRect(&client_rc, mouse) || state.element_dim.cy <= 0) return UINT32_MAX;
+
+		i64 backbuffer_y = (i64)(state.scroll_y * (f32)state.backbuffer_dim.cy) + mouse.y;
+		if (backbuffer_y < 0) return UINT32_MAX;
+		size_t element = (size_t)backbuffer_y / state.element_dim.cy;
+		return element < state.elements.size() && element != UINT32_MAX ? element : UINT32_MAX;
+	}
+
+	void clear_clicked_element(State& state) {
+		size_t old_element = state.clicked_element;
+		state.clicked_element = UINT32_MAX;
+		if (old_element != UINT32_MAX && old_element < state.elements.size()) {
+			render_backbuffer_element(state, old_element);
+			ask_window_for_repaint(state.wnd);
 		}
 	}
 
@@ -194,16 +209,16 @@ namespace listbox {
 		}
 	}
 
-	struct dimensions {
+	struct Dimensions {
 		//Border for the outside of the listbox
 		int border_thickness = INT32_MAX;
 		//Height of one element (all elements have the same width and height)
 		int element_h = INT32_MAX;
-		dimensions& set_border_thickness(int x) { border_thickness = x; return *this; }
-		dimensions& set_element_h(int x) { element_h = x; return *this; }
+		Dimensions& set_border_thickness(int x) { border_thickness = x; return *this; }
+		Dimensions& set_element_h(int x) { element_h = x; return *this; }
 	};
 
-	void set_dimensions(HWND wnd, dimensions dims) {
+	void set_dimensions(HWND wnd, Dimensions dims) {
 		auto& state = *get_state(wnd);
 		if (&state) {
 			bool redo_backbuffer = false;
@@ -488,27 +503,24 @@ namespace listbox {
 		{
 			POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
 
-			if (state.elements.size()) {
-				size_t mouse_on_backbuffer_y = (size_t)(state.scroll_y * (f32)state.backbuffer_dim.cy) + mouse.y;
-				size_t mousehover_element = mouse_on_backbuffer_y / state.element_dim.cy;
+			size_t mousehover_element = mouse_element_at(state, mouse);
 
-				if (state.mousehover_element != mousehover_element) {
-					size_t old_element = state.mousehover_element;
+			if (state.mousehover_element != mousehover_element) {
+				size_t old_element = state.mousehover_element;
 
-					state.mousehover_element = mousehover_element;
+				state.mousehover_element = mousehover_element;
 
-					if (old_element != UINT32_MAX)render_backbuffer_element(state, old_element);
-					render_backbuffer_element(state, state.mousehover_element);
-					//render_backbuffer(state);
-					ask_window_for_repaint(state.wnd);
+				if (old_element != UINT32_MAX && old_element < state.elements.size()) render_backbuffer_element(state, old_element);
+				if (state.mousehover_element != UINT32_MAX && state.mousehover_element < state.elements.size()) render_backbuffer_element(state, state.mousehover_element);
+				//render_backbuffer(state);
+				ask_window_for_repaint(state.wnd);
 
-					//We now need to know when the mouse exits our window to clear the mousehover_element
-					TRACKMOUSEEVENT track;
-					track.cbSize = sizeof(track);
-					track.hwndTrack = state.wnd;
-					track.dwFlags = TME_LEAVE;
-					TrackMouseEvent(&track);
-				}
+				//We now need to know when the mouse exits our window to clear the mousehover_element
+				TRACKMOUSEEVENT track;
+				track.cbSize = sizeof(track);
+				track.hwndTrack = state.wnd;
+				track.dwFlags = TME_LEAVE;
+				TrackMouseEvent(&track);
 			}
 
 			return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -520,7 +532,7 @@ namespace listbox {
 			if (state.mousehover_element != UINT32_MAX) {
 				size_t old_element = state.mousehover_element;
 				state.mousehover_element = UINT32_MAX;
-				render_backbuffer_element(state, old_element);
+				if (old_element != UINT32_MAX && old_element < state.elements.size()) render_backbuffer_element(state, old_element);
 				//render_backbuffer(state);
 				ask_window_for_repaint(state.wnd);
 			}
@@ -538,16 +550,17 @@ namespace listbox {
 			//wparam = test for virtual keys pressed
 			POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };//Client coords, relative to upper-left corner of client area
 
-			size_t mouse_on_backbuffer_y = (size_t)(state.scroll_y * (f32)state.backbuffer_dim.cy) + mouse.y;
-			size_t clicked_element = mouse_on_backbuffer_y / state.element_dim.cy;
+			size_t clicked_element = mouse_element_at(state, mouse);
 
 			if (state.clicked_element != clicked_element) {
+				clear_clicked_element(state);
 				state.clicked_element = clicked_element;
 
-				if (state.clicked_element != UINT32_MAX)render_backbuffer_element(state, state.clicked_element);
+				if (state.clicked_element != UINT32_MAX && state.clicked_element < state.elements.size()) render_backbuffer_element(state, state.clicked_element);
 				//render_backbuffer(state);
 				ask_window_for_repaint(state.wnd);
 			}
+			if (clicked_element != UINT32_MAX) SetCapture(state.wnd);
 
 			return 0;
 		} break;
@@ -558,21 +571,17 @@ namespace listbox {
 			//wparam = test for virtual keys pressed
 			POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };//Client coords, relative to upper-left corner of client area
 
-			size_t mouse_on_backbuffer_y = (size_t)(state.scroll_y * (f32)state.backbuffer_dim.cy) + mouse.y;
-			size_t unclicked_element = mouse_on_backbuffer_y / state.element_dim.cy;
+			size_t unclicked_element = mouse_element_at(state, mouse);
 
 			//Check the user released the click on the same element, otherwise they're canceling it
-			if (state.clicked_element == unclicked_element && state.clicked_element < state.elements.size()) {
+			if (state.clicked_element != UINT32_MAX && state.clicked_element == unclicked_element && state.clicked_element < state.elements.size()) {
 				//IMPORTANT: this must be sent via SendMessage since the selection/click will be cleared afterwards
 				state.stored_clicked_element = state.clicked_element;
 				notify_parent(state, LBN_CLK);
 			}
 			//Clear the clicked element since the mouse btn is now up
-			size_t old_clicked_element = state.clicked_element;
-			state.clicked_element = UINT32_MAX;
-			if (old_clicked_element != UINT32_MAX)render_backbuffer_element(state, old_clicked_element);
-			//render_backbuffer(state);
-			ask_window_for_repaint(state.wnd);
+			clear_clicked_element(state);
+			if (GetCapture() == state.wnd) ReleaseCapture();
 
 			return 0;
 		} break;
@@ -673,18 +682,17 @@ namespace listbox {
 			//NOTE: for key events in this control we should handle on WM_KEYDOWN _not_ up
 			return 0;
 		}
-		//case WM_CANCELMODE: //TODO(fran): stop capturing the mouse
-		//{
-		//	//We got canceled by the system, not really sure what it means but doc says we should cancel everything mouse capture related, so stop tracking
-		//	if (state.OnMouseTracking) {
-		//		ReleaseCapture();//stop capturing the mouse
-		//		state.OnMouseTracking = false;
-		//	}
-		//	state.onLMouseClick = false;
-		//	state.onMouseOver = false;
-		//	InvalidateRect(state.wnd, NULL, TRUE);
-		//	return 0;
-		//} break;
+		case WM_CANCELMODE:
+		{
+			clear_clicked_element(state);
+			if (GetCapture() == state.wnd) ReleaseCapture();
+			return 0;
+		} break;
+		case WM_CAPTURECHANGED:
+		{
+			clear_clicked_element(state);
+			return 0;
+		} break;
 		//---------Responses to the user---------:
 		case LB_GETCURSEL:
 		{

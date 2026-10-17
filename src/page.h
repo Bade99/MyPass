@@ -17,7 +17,7 @@ void set_scrolling(HWND wnd, bool does_scrolling) {
 }
 
 auto create_scrollable_area(HWND parent, const scrollbar::Theme& scrollbar_theme = themes.base_scrollbar) {
-	struct create_scrollable_area_res {
+	struct CreateScrollableAreaResult {
 		HWND scrollable_area;
 		struct { HWND content_area, v_scroll, h_scroll; } children;
 	} res{};
@@ -184,24 +184,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		return handle_wm_nchittest(state.wnd, lparam);
 	} break;
-	case WM_PAINT://NOTE: we could also do this on WM_ERASEBACKGROUND and return defwindowproc on WM_PAINT
+	case WM_PAINT:
 	{
-		return 0; //TODO(fran): i dont think we want to paint anything, just have the page be a helper for scrolling
 		PAINTSTRUCT ps;
-		HDC dc = BeginPaint(state.wnd, &ps); defer{ EndPaint(state.wnd, &ps); };
-		RECT rc; GetClientRect(state.wnd, &rc);
-		i32 w = RECTW(rc), h = RECTH(rc);
-		bool window_enabled = IsWindowEnabled(state.wnd);
-
-		//Bk
-		HBRUSH bk_br = window_enabled ? state.theme.brushes.bk.normal : state.theme.brushes.bk.disabled;
-		FillRect(dc, &rc, bk_br);
-
-		//Border
-		auto border_thickness = state.theme.dimensions.border_thickness;
-		HBRUSH border_br = window_enabled ? state.theme.brushes.border.normal : state.theme.brushes.border.disabled;
-		FillRectBorder(dc, rc, border_thickness, border_br, BORDERALL);
-		
+		BeginPaint(state.wnd, &ps);
+		EndPaint(state.wnd, &ps);
 		return 0;
 	} break;
 	case WM_MOUSEWHEEL:

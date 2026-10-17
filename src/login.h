@@ -100,7 +100,7 @@ void add_controls(State& state) {
 	AWDT(controls.edit_username, LANG_LOGIN_USERNAME);
 	Edit_LimitText(controls.edit_username, max_input_chars);
 	edit_oneline::set_functions(controls.edit_username, { .has_invalid_chars = [](const utf16* str, size_t char_cnt, void*) -> auto {
-		edit_oneline::_has_invalid_chars res{};
+		edit_oneline::InvalidCharactersResult res{};
 		constexpr auto& invalid_username_chars = _t("<>:\"/\\|?*"); //INFO: there's more to it than this, there are some special restrictions that we implemented outside the control when the user presses login https://gist.github.com/doctaphred/d01d05291546186941e1b7ddc02034d3
 		for (u64 i = 0; i < ArraySizeWithoutTerminator(invalid_username_chars); i++) {
 			if (contains_char(str, char_cnt, invalid_username_chars[i])) {
