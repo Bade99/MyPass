@@ -342,14 +342,16 @@ namespace listbox {
 		auto& state = *get_state(wnd);
 		if (&state) {
 			if (state.elements.size()) {
+				auto old_selected_element = state.selected_element;
 				if (state.selected_element != UINT32_MAX)
 					state.selected_element = state.selected_element == 0 ?
 					state.elements.size() - 1 : (state.selected_element - 1) % state.elements.size();
 				else state.selected_element = state.elements.size() - 1;
-				//TODO(fran): only re-render if the selected_element changed 
-				notify_parent(state, LBN_SELCHANGE);
-				render_backbuffer(state);
-				ask_window_for_repaint(state.wnd);
+				if (old_selected_element != state.selected_element) {
+					notify_parent(state, LBN_SELCHANGE);
+					render_backbuffer(state);
+					ask_window_for_repaint(state.wnd);
+				}
 			}
 		}
 	}
@@ -358,13 +360,15 @@ namespace listbox {
 		auto& state = *get_state(wnd);
 		if (&state) {
 			if (state.elements.size()) {
+				auto old_selected_element = state.selected_element;
 				if (state.selected_element != UINT32_MAX)
 					state.selected_element = (state.selected_element + 1) % state.elements.size();
 				else state.selected_element = 0;
-				//TODO(fran): only re-render if the selected_element changed 
-				notify_parent(state, LBN_SELCHANGE);
-				render_backbuffer(state);
-				ask_window_for_repaint(state.wnd);
+				if (old_selected_element != state.selected_element) {
+					notify_parent(state, LBN_SELCHANGE);
+					render_backbuffer(state);
+					ask_window_for_repaint(state.wnd);
+				}
 			}
 		}
 	}
@@ -374,14 +378,16 @@ namespace listbox {
 		if (&state) {
 			if (idx == (size_t)-1) state.selected_element = UINT32_MAX;
 			else if (idx < state.elements.size()) {
+				auto old_selected_element = state.selected_element;
 				state.selected_element = idx;
-				//TODO(fran): only re-render if the selected_element changed 
 				state.clicked_element = idx;
 				state.stored_clicked_element = state.clicked_element;
 				notify_parent(state, LBN_CLK);
 				state.clicked_element = UINT32_MAX;
-				render_backbuffer(state);
-				ask_window_for_repaint(state.wnd);
+				if (old_selected_element != state.selected_element) {
+					render_backbuffer(state);
+					ask_window_for_repaint(state.wnd);
+				}
 			}
 		}
 	}

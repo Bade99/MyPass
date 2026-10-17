@@ -49,19 +49,17 @@ void set_wnd_size(HWND scrollable_area, i32 h) {
 		RECT page_space; GetClientRect(scrollable_area, &page_space);
 		RECT page_relative_to_space = get_window_rect_at(state.controls.content_area, scrollable_area);
 
-		auto page_space_w = RECTW(page_space), page_w = RECTW(page_relative_to_space);
-		auto page_space_h = RECTH(page_space), page_h = RECTH(page_relative_to_space);
-		auto needs_y_correction = page_h > page_space_h && page_relative_to_space.bottom < page_space.bottom; // True when the page can now be fit better within the page_space. The situation we are targeting is: page is scrolled -> window is resized making page_space larger -> page now has more space at the bottom that it can use to undo some of the scrolling
-		auto y_correction = (needs_y_correction ? distance(page_relative_to_space.bottom, page_space.bottom) : 0);
-		auto needs_secondary_y_correction = page_h <= page_space_h && page_relative_to_space.top < page_space.top;
-		y_correction += (needs_secondary_y_correction ? distance(page_relative_to_space.top, page_space.top) : 0);
+		auto page_space_w = RECTW(page_space);
+		auto page_space_h = RECTH(page_space);
+		auto page_height = maximum(page_space_h, h);
+		auto page_y = clamp(page_space_h - page_height, page_relative_to_space.top, 0L);
 		rect_i32 page{
 			.x = 0,
-			.y = page_relative_to_space.top + y_correction, //retain current scroll, only adjust it if necessary
+			.y = page_y,
 			.w = page_space_w, //we dont support horizontal scrolling, so we clamp page w to page_space w
-			.h = maximum(page_space_h, h),
+			.h = page_height,
 		};
-		state.scroll += y_correction; //Update stored scroll value as well
+		state.scroll += page_y - page_relative_to_space.top;
 		MoveWindow(state.controls.content_area, page, false);
 
 		scrollbar::set_stats(state.controls.v_scroll, page.h, page_space_h, abs(minimum(page.y, 0)));
@@ -122,8 +120,6 @@ void smooth_scroll(State& state, int increment) {
 			i32 current_h = RECTH(r);
 			const i32 min_scroll_y = 0; //prevent scrolling to go above of the page boundaries
 			i32 max_scroll_y = -maximum(current_h - parent_h, 0); //prevent scrolling to go below of the page boundaries
-			//TODO: when the page itself is being resized we should again check if we need to clamp the current scroll position since it could have changed leaving us in an improper scroll until the user tries to scroll again, at which point we re-apply the correct clamp
-
 			i32 original_wnd_y = r.top - (i32)state.scroll;
 
 			f32 dy = (f32)state.scroll_tasks[0] / (f32)state.scroll_anim.total_frames;
