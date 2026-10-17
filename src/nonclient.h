@@ -406,8 +406,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			auto bk_rc = state.rc_caption; bk_rc.top += top_border_thickness;
 			FillRect(dc, &bk_rc, state.active ? colors.CaptionBk : colors.CaptionBk_Inactive);
 
-			SelectFont(dc, GetStockFont(DEFAULT_GUI_FONT));
-			TCHAR title[128]; int sz = GetWindowText(state.wnd, title, ARRAYSIZE(title));
+			HFONT caption_font = GetStockFont(DEFAULT_GUI_FONT);
+			SelectFont(dc, caption_font);
+			TCHAR title[128]{}; GetWindowText(state.wnd, title, ARRAYSIZE(title));
 			TEXTMETRIC tm; GetTextMetrics(dc, &tm);
 
 			auto offset_y = IsMaximized(state.wnd) ? maximized_offset_y : 0;
@@ -420,11 +421,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			auto iconnfo = MyGetIconInfo(icon);
 			urender::draw_icon(dc, icon_align_width, icon_align_height + offset_y, icon_width, icon_height, icon, 0, 0, iconnfo.w, iconnfo.h);
 
-			int yPos = (state.rc_caption.bottom + state.rc_caption.top - tm.tmHeight) / 2;
 			HBRUSH txtbr = state.active ? colors.ControlTxt : colors.ControlTxt_Inactive;
-			SetTextColor(dc, ColorFromBrush(txtbr)); SetBkMode(dc, TRANSPARENT);
-
-			TextOut(dc, icon_align_width * 2 + icon_width, yPos + offset_y, title, sz);
+			RECT title_rc = state.rc_caption;
+			title_rc.left = icon_align_width * 2 + icon_width;
+			title_rc.right = state.settings->can_maximize ? calc_btn_min_rc(state).left : calc_btn_max_rc(state).left;
+			title_rc.top += offset_y;
+			title_rc.bottom += offset_y;
+			urender::draw_text(dc, title_rc, to_utf_str(title), caption_font, txtbr, urender::TextAlignment::left, 0);
 
 			HBRUSH btn_border, btn_bk, btn_fore, btn_bk_push, btn_bk_mouseover;
 			if (state.active) {

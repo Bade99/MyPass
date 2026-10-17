@@ -1605,8 +1605,7 @@ void render_selection(HDC dc, HBRUSH brush, CharSel sel, State& state, int yPos,
 	size_t newline_index = line->text_start + line->text_length;
 	bool newline_selected = line_index < state.line_breaks.size() && sel.x_min() <= newline_index && sel.x_max() > newline_index;
 	if (newline_selected) {
-		SIZE space_size{};
-		GetTextExtentPoint32(dc, _t(" "), 1, &space_size);
+		SIZE space_size = urender::measure_text(dc, state.theme.font, _t(" "));
 		f32 end_x = line_caret_x(*line, line->text_length, true);
 		f32 width = (f32)maximum(space_size.cx, 1L);
 		draw_rectangle(line->right_to_left ? end_x - width : end_x, 0,
@@ -1663,23 +1662,12 @@ void render(State& state, HDC dc) {
 		//TODO(fran): allow the user to select the vertical alignment (top, center, bottom)
 		//TODO(fran): BUG: vertical centering doesnt automatically occur when going from 2 lines to 1 by deleting the \n character, it remains with top centering until another letter is written by the user
 		int yPos = state.padding.y;
-		int xPos;
-
-		if (style & ES_CENTER) {
-			SetTextAlign(dc, TA_CENTER);
-			xPos = (rc.right - rc.left) / 2;
-		}
-		else if (style & ES_RIGHT) {
-			SetTextAlign(dc, TA_RIGHT);
-			xPos = rc.right - state.padding.x;
-		}
-		else /*ES_LEFT*/ {//NOTE: ES_LEFT==0, that was their way of defaulting to left
-			SetTextAlign(dc, TA_LEFT);
-			xPos = rc.left + state.padding.x;
-		}
 
 		if (show_placeholder) {
-			TextOut(dc, xPos, yPos, state.placeholder, (int)cstr_len(state.placeholder));
+			urender::TextAlignment alignment = style & ES_CENTER ? urender::TextAlignment::center
+				: style & ES_RIGHT ? urender::TextAlignment::right : urender::TextAlignment::left;
+			urender::draw_text(dc, rc, to_utf_str(state.placeholder), font, txt_br, alignment, state.padding.x,
+				urender::TextVerticalAlignment::top, state.padding.y);
 		}
 		else {
 			struct RenderedLine {

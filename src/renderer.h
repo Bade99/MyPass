@@ -529,6 +529,7 @@ namespace urender {
 	}
 
 	enum class TextAlignment { center, left, right };
+	enum class TextVerticalAlignment { center, top, bottom };
 
 	SIZE measure_text(HDC dc, HFONT font, str_view text) {
 		IDWriteTextLayout* layout = nil;
@@ -547,7 +548,8 @@ namespace urender {
 	}
 
 	//Intended for a single line of text
-	void draw_text(HDC dc, const RECT& r, utf16_str txt, HFONT f, HBRUSH txt_br, TextAlignment alignment, i32 pad_x) {
+	void draw_text(HDC dc, const RECT& r, utf16_str txt, HFONT f, HBRUSH txt_br, TextAlignment alignment, i32 pad_x,
+		TextVerticalAlignment vertical_alignment = TextVerticalAlignment::center, i32 pad_y = 0) {
 		if (!txt.str || !txt.cnt() || r.right <= r.left || r.bottom <= r.top) return;
 		IDWriteTextLayout* layout = nil;
 		if (text_render::create_text_layout(dc, f, { txt.str, txt.cnt() }, &layout)) {
@@ -564,7 +566,9 @@ namespace urender {
 						f32 height = (f32)(r.bottom - r.top);
 						f32 x = alignment == TextAlignment::center ? (width - metrics.widthIncludingTrailingWhitespace) / 2.f
 							: alignment == TextAlignment::right ? width - pad_x - metrics.widthIncludingTrailingWhitespace : (f32)pad_x;
-						f32 y = (height - metrics.height) / 2.f;
+						f32 y = vertical_alignment == TextVerticalAlignment::top ? (f32)pad_y
+							: vertical_alignment == TextVerticalAlignment::bottom ? height - pad_y - metrics.height
+							: (height - metrics.height) / 2.f;
 						target->BeginDraw();
 						target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
 						target->DrawTextLayout({ x, y }, layout, brush, D2D1_DRAW_TEXT_OPTIONS_NONE);
@@ -582,9 +586,9 @@ namespace urender {
 		auto oldbkmode = SetBkMode(dc, TRANSPARENT); defer{ SetBkMode(dc, oldbkmode); };
 
 		TEXTMETRIC tm; GetTextMetrics(dc, &tm);
-		// Calculate vertical position for the string so that it will be vertically centered
-		// We are single line so we want vertical alignment always
-		i32 yPos = (r.bottom + r.top - tm.tmHeight) / 2;
+		i32 yPos = vertical_alignment == TextVerticalAlignment::top ? r.top + pad_y
+			: vertical_alignment == TextVerticalAlignment::bottom ? r.bottom - pad_y - tm.tmHeight
+			: (r.bottom + r.top - tm.tmHeight) / 2;
 		i32 xPos;
 		switch (alignment) {
 		case decltype(alignment)::center:
