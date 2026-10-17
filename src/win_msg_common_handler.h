@@ -80,7 +80,7 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 		/*NOTES
 		- item->CtlID isnt used for menus
 		- item->itemID menu item identifier
-		- item->itemAction required drawing action //TODO(fran): use this
+		- item->itemAction required drawing action
 		- item->hwndItem handle to the menu that contains the item, aka HMENU
 		*/
 

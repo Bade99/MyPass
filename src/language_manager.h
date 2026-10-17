@@ -189,7 +189,7 @@ public:
 	}
 
 	//·Returns the requested string in the current language
-	//·If stringID is invalid returns L"" //TODO(fran): check this is true
+	//·If stringID is invalid returns "INVALID ID " followed by the ID
 	//INFO: uses temporary string that lives till the end of the full expression it appears in
 	str RequestString(UINT stringID)
 	{
@@ -325,7 +325,7 @@ private:
 			SendMessage(hwnd, CB_SETCURSEL, currentSelection, 0);
 			ask_window_for_repaint(hwnd);
 		}
-		return res != CB_ERR && res != CB_ERRSPACE;//TODO(fran): can I check for >=0 with lresult?
+		return res >= 0;
 	}
 
 	BOOL UpdateMenu(HMENU hmenu, UINT_PTR ID, UINT stringID)
@@ -334,7 +334,6 @@ private:
 		menu_setter.cbSize = sizeof(MENUITEMINFO);
 		menu_setter.fMask = MIIM_STRING;
 		str temp_text = this->RequestString(stringID);
-		//menu_setter.dwTypeData = _wcsdup(this->RequestString(stringID).c_str()); //TODO(fran): can we avoid dupping, if not free memory
 		menu_setter.dwTypeData = (cstr*)temp_text.c_str();
 		BOOL res = SetMenuItemInfo(hmenu, (UINT)ID, FALSE, &menu_setter);
 		return res;

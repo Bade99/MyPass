@@ -111,7 +111,6 @@ void set_menu(HWND uncapnc, HMENU menu) {
 		SetMenuInfo(menu, &mi);
 	}
 	else {
-		//TODO(fran): set to NULL should clear the menu, implement menu removal in case we already have something on state.menu
 		state.menu = NULL;
 	}
 	RECT wndrc; GetWindowRect(state.wnd, &wndrc);
@@ -783,14 +782,14 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			for (int i = 0; i < state.menubar_itemcnt; i++) {
 				if (test_pt_rc(mouse, state.menubar_items[i])) {
 					state.menubar_mouseover_idx_from1 = i + 1;
-					RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
+					RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);
 					hit = true;
 					break;
 				}
 			}
 			if (!hit && state.menubar_mouseover_idx_from1) {
 				state.menubar_mouseover_idx_from1 = 0;
-				RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
+				RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);
 			}
 			return 0;
 		}
@@ -798,7 +797,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//check whether the menu has some item drawn as on mousehover, in which case we need to redraw without it
 			if (state.menubar_mouseover_idx_from1) {
 				state.menubar_mouseover_idx_from1 = 0;
-				RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
+				RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);
 			}
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -808,7 +807,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		if (state.menubar_mouseover_idx_from1) {
 			state.menubar_mouseover_idx_from1 = 0;
 			RECT menurc = calc_menu_rc(state);
-			RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
+			RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;

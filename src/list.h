@@ -393,7 +393,6 @@ namespace listbox {
 			if (idx == (size_t)-1) state.selected_element = UINT32_MAX;
 			else if (idx < state.elements.size()) {
 				state.selected_element = idx;
-				//TODO(fran): only re-render if the selected_element changed 
 				state.stored_clicked_element = idx;
 				state.clicked_element = UINT32_MAX;
 			}

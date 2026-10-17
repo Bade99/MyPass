@@ -355,7 +355,7 @@ static RECT clip_fit_childs(HWND parent, HWND child, RECT r) {
 		parent,
 		[](HWND other_child, LPARAM lparam) {
 			ClipFitChildrenTest* test = (ClipFitChildrenTest*)lparam;
-			if (other_child != test->child && GetParent(other_child)==test->parent /*avoid enumerating childs of childs*/) {//TODO(fran): we should also filter non visible wnds I think, if everybody starts using this it could work well, maybe not
+			if (other_child != test->child && GetParent(other_child)==test->parent && (GetWindowLongPtr(other_child, GWL_STYLE) & WS_VISIBLE)) {
 				RECT subtract_rc;
 				GetClientRect(other_child, &subtract_rc);
 				MapWindowPoints(other_child, test->parent, (LPPOINT)&subtract_rc, 2);

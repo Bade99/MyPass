@@ -151,7 +151,6 @@ static void save_to_file_serialized(str content, str folder, str filename = _t("
 	str path = general_folder + folder + filename;
 	CoTaskMemFree(general_folder);
 
-	//SUPERTODO(fran): gotta create the folder first, if the folder isnt there the function fails
 	CreateDirectory(dir.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
 
 	HANDLE file_handle = CreateFile(path.c_str(), GENERIC_WRITE, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);

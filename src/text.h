@@ -2281,7 +2281,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//}
 
 			//We have some normal character
-			//TODO(fran): what happens with surrogate pairs? I dont even know what they are -> READ
 			if (safe_subtract0(state.char_text.length(), state.selection.sel_width()) < state.char_max_sz) {
 				state.history_helper.record_transient_edit(TextEditEntry::Kind::typing);
 				en_change = insert_character(state, c);

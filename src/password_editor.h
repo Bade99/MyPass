@@ -156,7 +156,6 @@ void set_is_editing(State& state, bool is_editing) {
 }
 
 void on_properties_changed(State& state) {
-	//TODO(fran): update tip text on change to modified state (at least this way we dont have to use the msg queue and the proc)
 	TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
 	toolInfo.hwnd = state.controls.btn_dates;
 	toolInfo.uId = (UINT_PTR)state.controls.btn_dates;

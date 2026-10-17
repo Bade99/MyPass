@@ -294,6 +294,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_LBUTTONDOWN:
 	{
 		POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
+		RECT client_rc; GetClientRect(state.wnd, &client_rc);
+		if (!test_pt_rc(mouse, client_rc)) return 0;
 		
 		if (state.mouse_over_bar) {
 			//Click happened inside the bar, so we want to capture the mouse movement in case the user starts moving the mouse trying to scroll
@@ -308,7 +310,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		}
 		else {
 			//Mouse is inside the background
-			//TODO(fran): make sure it's inside the bk, cause when we are tracking we may still get this msg from outside the client area
 			state.background_pressed = true;
 
 			//Notify parent

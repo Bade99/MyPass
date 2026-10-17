@@ -304,7 +304,6 @@ namespace urender {
 				//Bilinear filtering
 				MaskBilinearSample sample = sample_bilinear_mask(&mask, i_x, i_y);
 				v4 f_sample;
-				//TODO(fran): lerp and f_x f_y
 				for (int i = 0; i < 4; i++) {
 					f_sample.comp[i] = (sample.sample[i] ? 1.f : 0.f);
 				}
@@ -630,9 +629,6 @@ namespace urender {
 		default: Assert(0);
 		}
 		TextOut(dc, xPos, yPos, txt.str, (i32)(txt.sz_char() - 1));
-
-		//TODO(fran): TabbedTextOut for completeness
-		//TODO(fran): transparent bk color (if possible without gdi+)
 	}
 
 	void draw_menu_text(HDC dc, const RECT& bounds, str_view text, HFONT font, HBRUSH brush) {
