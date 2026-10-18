@@ -1,5 +1,7 @@
 #pragma once
 
+#include "render_diagnostics.h"
+
 /**
   * Core Principles: simple table, maybe it can scroll, but it just renders all items, there's no sparse/virtualized cells
  */
@@ -64,7 +66,10 @@ namespace table {
 			for (u32 i = 0; i < col_cnt; i++) {
 				col.right += cols_w[i];
 				RECT cell = col; InflateRect(&cell, -1, -1);
-				move_window(c[i], cell);
+				{
+					render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::table_cell_move };
+					move_window(c[i], cell);
+				}
 				col.left = col.right;
 			}
 			row.top = row.bottom;

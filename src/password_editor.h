@@ -1,4 +1,6 @@
 #pragma once
+
+#include "render_diagnostics.h"
 /**
  * Nice looking collection of data for a password, format:
  *	Title (on the right should have a button to allow editing, maybe)
@@ -73,7 +75,10 @@ namespace password_editor {
 					.left = 0, .top = 0,
 					.right = title_r.left + title_w, .bottom = title_r.top + h
 				};
-				move_window(controls.text, title_r);
+				{
+					render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::value_text_move };
+					move_window(controls.text, title_r);
+				}
 
 				auto tools = { controls.btn_show, controls.btn_copy, controls.btn_lock, controls.btn_del };
 				const auto tool_cnt = tools.size();
@@ -89,7 +94,10 @@ namespace password_editor {
 					tool_r.top = title_r.top;
 					tool_r.right = tool_x + tool_w;
 					tool_r.bottom = title_r.bottom;
-					move_window(c, tool_r);
+					{
+						render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::value_tool_move };
+						move_window(c, tool_r);
+					}
 					tool_x = tool_r.right + pad;
 				}
 			} break;
@@ -398,6 +406,7 @@ void create_controls(State& state) {
 }
 
 i32 resize_controls(const State& state, bool resize = true) {
+	render_diagnostics::Scope diagnostic{ resize ? render_diagnostics::Event::card_resize_apply : render_diagnostics::Event::card_resize_plan };
 	auto& controls = state.controls;
 	RECT wnd_r; GetClientRect(state.wnd, &wnd_r);
 	auto w = RECTW(wnd_r), h = RECTH(wnd_r);
@@ -407,7 +416,10 @@ i32 resize_controls(const State& state, bool resize = true) {
 	i32 toolbar_w = (w - title_h * 2) - title_w;
 	i32 pad = title_h / 4;
 
-	if (resize) move_window(controls.btn_card, wnd_r);
+	if (resize) {
+		render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_backdrop_move };
+		move_window(controls.btn_card, wnd_r);
+	}
 
 	if (!state.is_open) {
 		RECT title_r { 
@@ -418,6 +430,7 @@ i32 resize_controls(const State& state, bool resize = true) {
 		};
 		if (resize) {
 			auto pin = rect_i32::create_from(title_r).cut_right(RECTH(title_r));
+			render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_header_move };
 			move_window(controls.edo_title, title_r);
 			MoveWindow(controls.btn_pin, pin);
 		}
@@ -444,7 +457,10 @@ i32 resize_controls(const State& state, bool resize = true) {
 			tool_r.top = title_r.top;
 			tool_r.right = tool_x + tool_w;
 			tool_r.bottom = title_r.bottom;
-			move_window(c, tool_r);
+			if (resize) {
+				render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_toolbar_move };
+				move_window(c, tool_r);
+			}
 			tool_x = tool_r.right + pad;
 		}
 		const auto& tbl = *table::get_state(controls.tbl_values);
@@ -456,8 +472,14 @@ i32 resize_controls(const State& state, bool resize = true) {
 		};
 
 		if (resize) {
-			move_window(controls.edo_title, title_r);
-			move_window(controls.tbl_values, values_r);
+			{
+				render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_header_move };
+				move_window(controls.edo_title, title_r);
+			}
+			{
+				render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_table_move };
+				move_window(controls.tbl_values, values_r);
+			}
 		}
 		return values_r.bottom + pad * 2;
 	}
