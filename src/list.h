@@ -59,6 +59,7 @@ namespace listbox {
 	}
 
 	void render_backbuffer(State& state) {
+		render_diagnostics::Scope diagnostic{ render_diagnostics::Event::list_backbuffer };
 		if (state.backbuffer) {
 			HDC& dc = state.offscreen_dc;
 			auto oldbmp = SelectBitmap(dc, state.backbuffer); defer{ SelectBitmap(dc,oldbmp); };
@@ -431,6 +432,7 @@ namespace listbox {
 		} break;
 		case WM_SIZE:
 		{
+			render_diagnostics::Scope diagnostic{ render_diagnostics::Event::list_resize };
 			RECT rc; GetClientRect(state.wnd, &rc);
 			state.element_dim.cx = RECTW(rc);
 			full_backbuffer_redo(state);

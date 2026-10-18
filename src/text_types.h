@@ -1,6 +1,7 @@
 #pragma once
 
 #include "undo_history.h"
+#include <wrl/client.h>
 
 namespace edit_oneline {
 
@@ -178,6 +179,7 @@ struct TextLineLayout {
 	size_t text_length;
 	SIZE size;
 	bool right_to_left;
+	Microsoft::WRL::ComPtr<IDWriteTextLayout> text_layout;
 	std::vector<f32> leading_caret_positions;
 	std::vector<f32> trailing_caret_positions;
 	std::vector<u8> caret_stops;

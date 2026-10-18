@@ -274,6 +274,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 	} break;
 	case WM_PAINT:
 	{
+		render_diagnostics::Scope diagnostic{ render_diagnostics::Event::button_paint };
 		//IMPORTANT TODO(fran): fix rendering bugs, sometimes part of the borders dont get drawn, I think I found the bug, border br doesnt adapt like bk, we have push, mouseover, etc, the border is just one so it's probably creating inconsistency problems
 
 		PAINTSTRUCT ps;

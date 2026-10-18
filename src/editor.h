@@ -6,6 +6,7 @@
 #include "language_manager.h"
 #include "search.h"
 #include "raw_buffer.h"
+#include "render_diagnostics.h"
 
 namespace editor {
 
@@ -97,6 +98,7 @@ void add_preset_password_editor(State& state, size_t at_idx) {
 }
 
 void resize_controls(State& state) {
+	render_diagnostics::Scope diagnostic{ render_diagnostics::Event::editor_resize };
 	RECT r; GetClientRect(state.wnd, &r);
 	auto w = RECTW(r), h = RECTH(r);
 	i32 spacing = DPI(15); //TODO: add to theme
@@ -174,7 +176,10 @@ void resize_controls(State& state) {
 				any_visible = true;
 				const auto& pstate = *password_editor::get_state(p);
 				auto item_h = password_editor::resize_controls(pstate, false);
-				MoveWindow(p, w_pad, offset_y, w - 2 * w_pad, item_h, true);
+				{
+					render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_move };
+					MoveWindow(p, w_pad, offset_y, w - 2 * w_pad, item_h, true);
+				}
 				offset_y += (item_h + spacing);
 			}
 		}

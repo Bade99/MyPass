@@ -769,11 +769,12 @@ static HWND get_parent_of_class(HWND child, const cstr* parent_class) {
 }
 
 static void SetText_txt_app(HWND wnd, const TCHAR* new_txt, const TCHAR* new_appname, bool txt_first = true) {
+	str title_window;
 	if (!new_txt || !*new_txt) {
-		SetWindowText(wnd, new_appname);
+		title_window = new_appname ? new_appname : _t("");
 	}
 	elif (!new_appname || !*new_appname) {
-		SetWindowText(wnd, new_txt);
+		title_window = new_txt;
 	}
 	else {
 		if (!txt_first) {
@@ -781,11 +782,17 @@ static void SetText_txt_app(HWND wnd, const TCHAR* new_txt, const TCHAR* new_app
 			new_txt = new_appname;
 			new_appname = tmp;
 		}
-		str title_window = new_txt;
+		title_window = new_txt;
 		title_window += L" - ";
 		title_window += new_appname;
-		SetWindowText(wnd, title_window.c_str());
 	}
+	int current_length = GetWindowTextLength(wnd);
+	if (current_length >= 0 && (size_t)current_length == title_window.size()) {
+		str current_title((size_t)current_length + 1, 0);
+		if (GetWindowText(wnd, current_title.data(), current_length + 1) == current_length &&
+			title_window == current_title.c_str()) return;
+	}
+	SetWindowText(wnd, title_window.c_str());
 }
 
 /**
