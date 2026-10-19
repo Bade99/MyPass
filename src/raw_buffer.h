@@ -41,7 +41,12 @@ namespace detail {
 }
 
 // 1) trivially-copyable scalars/flat structs
-//TODO(fran): even for trivial structs different compilers may generate different padding within the struct, review that, we may need to require all serialized structs to have a user set alignment, or change the way we do the serialization to be invariant to different padding
+// NOTE: A trivially copyable struct is not necessarily a stable serialized format.
+// sizeof(T) can include padding, and member offsets can change with compiler, packing,
+// or architecture. For example, editor v1 saves fields individually; reading those
+// bytes into a whole struct would consume padding bytes that were never written.
+// Persist fields in a defined order and read them the same way, or use an explicitly
+// specified wire layout before relying on whole-struct reads and writes.
 template <Trivial T> 
 void append_to_buffer(raw_buffer& out, const T& v) {
 	detail::append_bytes(out, &v, sizeof(T));

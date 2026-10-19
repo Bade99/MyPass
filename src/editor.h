@@ -617,7 +617,6 @@ void get_controls_data_for_saving(State& state, raw_buffer& out) {
 	// editor: title (str, all str are null terminated utf16) | date created (u64) | date modified (u64) | multiflag (u32) | table row count (u64) | each table row
 	//  table row: desc (str) | val (str) | multiflag (u32)
 	auto append_control_text_to_buffer = [](raw_buffer& out, HWND wnd) {
-		//TODO(fran): is there a way we can normalize this behaviour into another append_to_buffer() reusable function in raw_buffer.h?
 		auto old_len_bytes = out.size();
 		auto added_len = GetWindowTextLength(wnd) + 1;
 		auto added_len_bytes = added_len * sizeof(cstr);
@@ -756,24 +755,14 @@ void cleanup_password_editors_v1(State& state) {
 }
 
 bool create_password_editors_v1(State& state, RawBufferReader& data) {
-	/*struct PasswordEditorTrivialV1 {
-		time_t date_created;
-		time_t date_modified;
-		multiflag<password_editor::ItemFlag> flags;
-	};*/
-
-	struct PasswordEditorV1 /*: PasswordEditorTrivialV1*/ {
-		str_view title; //TODO: consider switching to span<utf16> which does allow for mutations of the underlying
+	struct PasswordEditorV1 {
+		str_view title;
 		time64 date_created;
 		time64 date_modified;
 		multiflag<password_editor::ItemFlag> flags;
 	};
 
-	/*struct PasswordEditorRowTrivialV1 {
-		multiflag<password_editor::ValueCellFlag> flags = 0;
-	};*/
-
-	struct PasswordEditorRowV1 /*: PasswordEditorRowTrivialV1*/ {
+	struct PasswordEditorRowV1 {
 		str_view description, value;
 		multiflag<password_editor::ValueCellFlag> flags = 0;
 	};
@@ -784,7 +773,6 @@ bool create_password_editors_v1(State& state, RawBufferReader& data) {
 		PasswordEditorV1 editor;
 		if (!(data.read(editor.title) && data.read(editor.date_created) && data.read(editor.date_modified) && data.read(editor.flags)))
 			return false;
-		//if (!data.read((PasswordEditorTrivialV1&)editor)) return false; //TODO(fran): this will fail due to structure padding, when we save we do it element by element of the struct, but here we read the whole struct at once, which has extra padding, breaking everything, decide whether to both save and load the struct, or to do save and load element by element of the struct
 		Props properties{
 			.title = editor.title.data(),
 			.date_created = editor.date_created, 
