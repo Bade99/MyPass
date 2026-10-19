@@ -525,46 +525,6 @@ LRESULT CALLBACK proc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		resize_controls(state);
 		return res;
 	} break;
-	//case WM_NOTIFY:
-	//{
-	//	//TODO: look into this for custom coloring the tooltips
-	//	return L"FFF";
-	//	//add_mouseover_tooltip(controls.btn_dates, LANG_PWD_ED_DATES);
-	//	NMHDR* msg_info = (NMHDR*)lparam;
-	//	if (msg_info->hwndFrom == state.controls.tooltip) {
-	//		switch (msg_info->code) {
-	//		case NM_CUSTOMDRAW:
-	//		{
-	//			NMTTCUSTOMDRAW* cd = (NMTTCUSTOMDRAW*)lparam;
-	//			//INFO: cd->uDrawFlags = flags for DrawText
-	//			switch (cd->nmcd.dwDrawStage) {
-	//				//TODO(fran): probably case CDDS_PREERASE: for SetBkColor for the background
-	//			case CDDS_PREPAINT:
-	//			{
-	//				return CDRF_NOTIFYITEMDRAW;//TODO(fran): I think im lacking something here, we never get CDDS_ITEMPREPAINT, it's possible the msgs are not sent cause it uses a visual style, in which case it doesnt care about you, we would have to remove it with setwindowtheme, and since there wont be any style we'll have to draw it completely ourselves I guess
-	//			} break;
-	//			case CDDS_ITEMPREPAINT://Setup before painting an item
-	//			{
-	//				//SelectFont(cd->nmcd.hdc, state.theme.font);
-	//				//SetTextColor(cd->nmcd.hdc, ColorFromBrush(state.theme.brushes.foreground.normal));
-	//				//SetBkColor(cd->nmcd.hdc, ColorFromBrush(state.theme.brushes.bk.normal));
-	//				return CDRF_NEWFONT;
-	//			} break;
-	//			default: return CDRF_DODEFAULT;
-	//			}
-	//		} break;
-	//		case TTN_GETDISPINFO:
-	//			Assert(0);
-	//		case TTN_LINKCLICK:
-	//			Assert(0);
-	//		case TTN_POP://Tooltip is about to be hidden
-	//			return 0;
-	//		case TTN_SHOW://Tooltip is about to be shown
-	//			return 0;//here we can change the tooltip's position
-	//		}
-	//	}
-	//	return DefWindowProc(hwnd, msg, wparam, lparam);
-	//} break;
 	default:
 	defproc:
 		return DefWindowProc(wnd, msg, wparam, lparam);

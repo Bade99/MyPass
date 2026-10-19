@@ -67,9 +67,6 @@ auto search(State& state, bool search_in_current_selection) {
 
 			if (res.p != -1) res.p += range.min; //since we offset the string when searching now we gotta reintegrate that offset
 
-			//StrStrI(str, match);//TODO(fran): look at https://www.codeproject.com/Articles/383185/SSE-accelerated-case-insensitive-substring-search which says to be much faster than this
-			//wcsstr(, )//Case sensitive comparison, exact match
-
 			//TODO(fran): we could implement whole_word by ourselves, simply check what's next to and behind the found text
 
 			if (res.p == -1 && !(state.search_flags & Flag::no_wrap)) {//we didnt find anything in our range, lets test the leftover range but keeping our direction

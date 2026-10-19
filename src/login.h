@@ -143,16 +143,10 @@ void save_settings(State& state) {
 }
 
 bool any_char(cstr* s, bool op(cstr)) {
-	bool res = false;
-	if (s && *s) { //TODO(fran): more compact
-		do {
-			if (op(*s)) {
-				res = true;
-				break;
-			}
-		} while (*++s);
-	}
-	return res;
+	for (; s && *s; ++s)
+		if (op(*s))
+			return true;
+	return false;
 }
 
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {

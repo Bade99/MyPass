@@ -1203,10 +1203,11 @@ bool set_text(State& state, cstr* buf) {
 	cstr empty_txt = 0;
 	if (!buf) buf = &empty_txt; //NOTE: this is the standard default behaviour
 	
-	if (auto txt = to_utf_str(buf); txt.cnt() <= (size_t)state.char_max_sz) {
-		//TODO(fran): settext should check for invalid characters (use paste_dirty_text())
+	bool multiline = GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_MULTILINE;
+	str text = sanitize_pasted_text(str_view{ buf }, SIZE_MAX, multiline);
+	if (text.size() <= (size_t)state.char_max_sz) {
 		state.history_helper.record_transient_edit(TextEditEntry::Kind::programmatic);
-		res = insert_character(state, txt, 0, -1);
+		res = insert_character(state, to_utf_str(text), 0, -1);
 
 		if (res) {
 			state.history_helper.break_group();
@@ -1276,11 +1277,10 @@ void set_composition_pos(State& state)//TODO(fran): this must set the other stuf
 	}
 }
 
-//TODO(fran): the fact that true is hidden and false is shown is very unintuitive and prone to error, reverse it
-void set_IME_wnd(HWND wnd, bool hidden) {
+void set_IME_wnd(HWND wnd, bool show) {
 	State& state = *get_state(wnd);
 	if (&state) {
-		state.hide_ime_window = hidden;
+		state.hide_ime_window = !show;
 	}
 }
 
@@ -2296,15 +2296,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			if (c <= (TCHAR)0x1f) break;//IME
 
 		insert_control_char:
-
-			//TODO(fran): maybe this should be the first check for any WM_CHAR?
-
-			//if (contains_char(c, state.invalid_chars)) {
-			//	//display tooltip //TODO(fran): make this into a reusable function
-			//	str tooltip_msg = (RS(10) + L" " + state.invalid_chars);
-			//	show_tip(state.wnd, tooltip_msg.c_str(), EDITONELINE_default_tooltip_duration, ETP::left | ETP::top);
-			//	return 0;
-			//}
 
 			//We have some normal character
 			if (safe_subtract0(state.char_text.length(), state.selection.sel_width()) < state.char_max_sz) {

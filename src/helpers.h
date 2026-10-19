@@ -449,7 +449,6 @@ auto pack_squares(i32 w, i32 h, i32 n, i32 p) {
   */
 
 static u32 refresh_rate_hz(HWND wnd) {
-	//TODO(fran): this may be simpler with GetDeviceCaps
 	u32 res = 60;
 	HMONITOR mon = MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST);
 	if (mon) {

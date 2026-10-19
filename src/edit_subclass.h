@@ -64,7 +64,7 @@ struct EditProcState {
 		}
 	}
 };
-LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UINT_PTR /*uIdSubclass*/, DWORD_PTR dwRefData) {
+LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UINT_PTR subclass_id, DWORD_PTR dwRefData) {
 	EditProcState& state = *(EditProcState*)dwRefData; Assert(&state);
 	if (!state.initialized) {
 		state.initialized = true;
@@ -73,33 +73,6 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 	}
 
 	switch (msg) {
-	//case WM_KEYDOWN:
-	//{
-	//	char vk = (char)wparam;
-	//	bool ctrl_is_down = HIBYTE(GetKeyState(VK_CONTROL));
-	//	switch (vk) {
-	//	case _t('S')://Save
-	//	{
-	//		if (ctrl_is_down) {
-	//			PostMessage(state.parent, WMN_SAVE, (WPARAM)state.wnd, 0);
-	//		}
-	//	} break;
-	//	case _t('F')://Find
-	//	{
-	//		//TODO(fran): what if this where pressed while the search wnd has focus? we need to intercept that window's msgs probably, maybe it automatically sends them to the parent, or we could make it do it
-	//		if (ctrl_is_down) {
-	//			if (state.search) {
-	//				if (!IsWindowVisible(state.search)) {
-	//					ShowWindow(state.search, SW_SHOW);
-	//				}
-	//				SetFocus(state.search);
-
-	//			}
-	//		}
-	//	} break;
-	//	}
-	//	return DefSubclassProc(hwnd, msg, wparam, lparam);
-	//} break;
 	case WM_CHAR:
 	{
 		TCHAR c = (TCHAR)wparam;
@@ -147,11 +120,12 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 
 		return res;
 	}
-	case WM_DESTROY:
+	case WM_NCDESTROY:
 	{
+		RemoveWindowSubclass(hwnd, EditProc, subclass_id);
 		free(&state);
-		//return DefSubclassProc(hwnd, msg, wparam, lparam); //TODO(fran): shouldnt I call this?
-	}break;
+		return DefSubclassProc(hwnd, msg, wparam, lparam);
+	} break;
 	//Messages that could trigger the need for updating the scrollbar
 	case WM_PAINT:
 	case EM_POSFROMCHAR:
