@@ -38,19 +38,6 @@ namespace listbox {
 		}
 	}
 
-	//IMPORTANT: the return ptr must not be freed, it points to the actual elements of the listbox
-	//ptr<void*> get_all_elements(HWND wnd) {//TODO(fran): this shouldnt exist but I need it in order to be lazy in the searchbox
-	//	ptr<void*> res{ 0 };
-	//	auto& state = *get_state(wnd);
-	//	if (&state) {
-	//		if (state.elements.size()) {
-	//			res.mem = &state.elements[0];//TODO(fran): this isnt very nice
-	//			res.cnt = state.elements.size();
-	//		}
-	//	}
-	//	return res;
-	//}
-
 	//NOTE: "sz" should be the already precalculated size to cover all the render elements, and maxing out in its w component by the size of the window rectangle (since we allow vertical but not horizontal scrolling)
 	void resize_backbuffer(State& state, SIZE sz) {
 		RECT rc; GetClientRect(state.wnd, &rc);
@@ -615,19 +602,10 @@ namespace listbox {
 			EndPaint(hwnd, &ps);
 			return 0;
 		} break;
-#if 0
-		case WM_MOUSEWHEEL:
-		{
-			//TODO(fran): offset state.scroll_y;
-			Assert(0);
-			return 0;
-		} break;
-#else
 		case WM_MOUSEWHEEL:
 		{
 			return DefWindowProc(hwnd, msg, wparam, lparam);//propagates the msg to the parent
 		} break;
-#endif
 		case WM_GETTEXT:
 		{
 			return 0;
@@ -704,15 +682,6 @@ namespace listbox {
 			if (idx < state.elements.size()) res = state.elements[idx];
 			return (LRESULT)res;
 		} break;
-		//case WM_CANCELMODE:
-		//{
-		//	TRACKMOUSEEVENT track;
-		//	track.cbSize = sizeof(track);
-		//	track.hwndTrack = state.wnd;
-		//	track.dwFlags = TME_LEAVE | TME_CANCEL;//cancel previous TME_LEAVE request if active //TODO(fran): parametric/automatic way to know what to cancel
-		//	TrackMouseEvent(&track);
-		//	return 0;
-		//} break;
 		case WM_ENABLE:
 		{
 			render_backbuffer(state, wparam != 0);

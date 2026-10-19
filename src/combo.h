@@ -24,14 +24,6 @@ void set_user_extra(HWND wnd, void* user_extra) {
 	}
 }
 
-//void set_function_free_elements(HWND wnd, func_free_elements func) {
-//	auto& state = *get_state(wnd);
-//	if (&state) {
-//		state.free_elements = func;
-//		//TODO(fran): should I redraw?
-//	}
-//}
-
 void set_function_on_selection_accepted(HWND wnd, func_on_selection_accepted func) {
 	auto& state = *get_state(wnd);
 	if (&state) {
@@ -43,7 +35,7 @@ void set_function_desired_size_combobox(HWND wnd, func_desired_size_combobox fun
 	auto& state = *get_state(wnd);
 	if (&state) {
 		state.desired_size_combobox = func;
-		//TODO(fran): should I redraw?
+		if (state.parent) ask_window_for_resize(state.parent);
 	}
 }
 
@@ -123,7 +115,7 @@ HWND __hookmouseclick_store_hwnd(HWND _wnd = (HWND)INT32_MIN) {
 
 LRESULT CALLBACK mouse_click_hook_proc(int code, WPARAM wparam, LPARAM lparam) {
 	//printf("MOUSECLICKHOOK:0x%08x\n", wparam);
-	if (code == HC_ACTION) {//TODO(fran): WH_MOUSE also includes a HC_NOREMOVE code
+	if (code == HC_ACTION) {
 		switch (wparam) {
 		case WM_LBUTTONDOWN:
 		case WM_RBUTTONDOWN:
@@ -134,11 +126,7 @@ LRESULT CALLBACK mouse_click_hook_proc(int code, WPARAM wparam, LPARAM lparam) {
 			auto& state = *get_state(wnd);
 			if (&state) {
 				//check if the mouse is inside our controls
-#if 0
-				POINT mouse = ((MSLLHOOKSTRUCT*)lparam)->pt;//TODO(fran): _per-monitor-aware_ screen coordinates (idk if that changes something)
-#else
 				POINT mouse = ((MOUSEHOOKSTRUCT*)lparam)->pt;//screen coordinates
-#endif
 				RECT lbrc; GetWindowRect(state.controls.listbox, &lbrc);
 				RECT cbrc; GetWindowRect(state.wnd, &cbrc);
 				if (!test_pt_rc(mouse, lbrc)) {
@@ -151,6 +139,15 @@ LRESULT CALLBACK mouse_click_hook_proc(int code, WPARAM wparam, LPARAM lparam) {
 		}
 	}
 	return CallNextHookEx(0, code, wparam, lparam);
+}
+
+LRESULT CALLBACK root_subclass_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UINT_PTR subclass_id, DWORD_PTR) {
+	if ((msg == WM_ACTIVATE && LOWORD(wparam) == WA_INACTIVE) || msg == WM_CANCELMODE || msg == WM_NCDESTROY) {
+		HWND combo = reinterpret_cast<HWND>(subclass_id);
+		if (IsWindow(combo)) SendMessage(combo, CBM_CLKOUTSIDE, 0, 0);
+	}
+	if (msg == WM_NCDESTROY) RemoveWindowSubclass(hwnd, root_subclass_proc, subclass_id);
+	return DefSubclassProc(hwnd, msg, wparam, lparam);
 }
 
 void show_listbox(State& state, bool show) {
@@ -171,17 +168,28 @@ void show_listbox(State& state, bool show) {
 			//TODO(fran): maybe this should be standard implementation in the listbox
 			__hookmouseclick_store_hwnd(state.wnd);
 			state.impl.mouse_click_hook = SetWindowsHookEx(WH_MOUSE, mouse_click_hook_proc, 0, GetCurrentThreadId()); //attach the hook
-			//state.impl.mouse_click_hook = SetWindowsHookEx(WH_MOUSE_LL, mouse_click_hook_proc, 0, GetCurrentThreadId()); //TODO(fran): I wanted to use this one but apparently low level hooks cannot be run on debug threads, the docs recommend using raw input instead //https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-rawmouse
 			Assert(state.impl.mouse_click_hook);
+		}
+		if (!state.impl.root_wnd) {
+			HWND root = GetAncestor(state.wnd, GA_ROOT);
+			if (root && SetWindowSubclass(root, root_subclass_proc, reinterpret_cast<UINT_PTR>(state.wnd), 0)) {
+				state.impl.root_wnd = root;
+			}
+			else Assert(0);
 		}
 
 	}
 	else {
 		//printf("SEARCHBOX:HIDE LISTBOX\n");
+		if (state.impl.root_wnd) {
+			RemoveWindowSubclass(state.impl.root_wnd, root_subclass_proc, reinterpret_cast<UINT_PTR>(state.wnd));
+			state.impl.root_wnd = 0;
+		}
+		if (state.impl.mouse_click_hook) {
+			UnhookWindowsHookEx(state.impl.mouse_click_hook);
+			state.impl.mouse_click_hook = 0;
+		}
 		ShowWindow(state.controls.listbox, SW_HIDE);
-
-		UnhookWindowsHookEx(state.impl.mouse_click_hook); // remove the hook
-		state.impl.mouse_click_hook = 0;
 	}
 	ask_window_for_repaint(state.controls.button);
 }
@@ -287,6 +295,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		}
 		return 0;
 	}break;
+	case WM_DESTROY:
+	{
+		if (state.impl.root_wnd || state.impl.mouse_click_hook || IsWindowVisible(state.controls.listbox)) {
+			show_listbox(state, false);
+		}
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
 	case WM_NCHITTEST:
 	{
 		return handle_wm_nchittest(state.wnd, lparam);
@@ -306,105 +321,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		HWND child = (HWND)lparam;
 		if (child) {//Notifs from our childs
 			WORD notif = HIWORD(wparam);
-			//if (child == state.controls.editbox) {
-				//switch (notif) {
-				//case EN_CHANGE:
-				//{
-				//	//The user has modified the editbox -> retrieve search options based on the content of the editbox
-				//	utf16_str txt; _get_edit_str(state.controls.editbox, txt); defer{ if (txt.sz) free_any_str(txt.str); };
-				//	//TODO(fran): check what happens if the editbox is empty -> malloc(0) is implementation dependant
-
-				//	//Clear previous search options
-				//	if (state.free_elements)
-				//		state.free_elements(listbox::get_all_elements(state.controls.listbox)/*HACK*/, state.user_extra);
-				//	listbox::remove_all_elements(state.controls.listbox);//NOTE: this is inefficient since in the case of set_elements() we'll basically perform two repaints on the listbox
-
-				//	bool show_lb = false;
-
-				//	if (txt.sz_char() > 1 /*not null nor just the null terminator*/) {
-				//		//Get search options
-				//		ptr<void*> search_options{ 0 }; defer{ search_options.free(); };
-				//		if (state.retrieve_search_options)
-				//			search_options = state.retrieve_search_options(txt, state.user_extra);
-
-				//		if (search_options.cnt) {
-				//			//Set new elements (auto removes existing ones), show the listbox
-				//			listbox::set_elements(state.controls.listbox, search_options.mem, search_options.cnt);
-				//			show_lb = true;
-				//		}
-				//		else {
-				//			//No search options, hide the listbox
-				//			show_lb = false;
-				//		}
-				//	}
-				//	else {
-				//		//The editbox is empty, hide the listbox
-				//		show_lb = false;
-				//	}
-
-				//	show_listbox(state, show_lb);
-
-				//} break;
-				//case EN_ENTER:
-				//{
-				//	//TODO(fran): it's not that easy to know what to tell the user, we have to differentiate between "the user chose an element from the listbox" and "the user wrote something", also the user could first move to some element of the listbox but afterwards write something more (well actually the problem is mine, it's easy to differentiate, a click is obviously for listbox, and enter is listbox if it's visible (since the value is linked with the editbox's) and editbox if not visible aka listbox has no elements). My problem comes when there's the same writing for different words and then I need to filter with more info, specifically the info that the listbox's elements have (since I plan to add it there). Well actually this is bullshit, it's very simple, we need two cases, if the listbox is not visible then what's in the editbox counts and it's just that info, _but_ if the listbox is visible then what count is that element's data (since the editbox is, in this case, simply showing part of the info the listbox provided).
-				//	//A different idea would be the google/internet-search-engine searchbar approach, when the user selects an existing listbox item we go directly to it, otherwise we show possible results on a non floating listbox below the searchbar
-
-				//	//SOLUTION: the listbox's selection is cleared each time the user writes smth, that means we have a way of differentiating between enter for listbox and enter for editbox, if a valid selection is present in the listbox then it's a listbox enter, otherwise it's an editbox one
-
-				//	size_t lb_sel = listbox::get_cur_sel(state.controls.listbox);
-				//	size_t lb_cnt = listbox::get_element_cnt(state.controls.listbox);
-				//	if (lb_sel < lb_cnt) {
-				//		//Valid listbox selection, use the listbox item
-				//		if (state.perform_search)
-				//			state.perform_search(listbox::get_element_at(state.controls.listbox, lb_sel), true, state.user_extra);
-				//	}
-				//	else {
-				//		//Invalid listbox selection, use the editbox's text
-				//		utf16_str txt; _get_edit_str(state.controls.editbox, txt); defer{ if (txt.sz) free_any_str(txt.str); };
-				//		if (state.perform_search)
-				//			state.perform_search(&txt, false, state.user_extra);
-				//	}
-
-				//	//Clear search options
-				//	if (state.free_elements)
-				//		state.free_elements(listbox::get_all_elements(state.controls.listbox)/*HACK*/, state.user_extra);
-				//	listbox::remove_all_elements(state.controls.listbox);
-				//	show_listbox(state, false);
-
-
-				//} break;
-				//case EN_ESCAPE:
-				//{
-				//	show_listbox(state, false);
-				//	if (state.free_elements)
-				//		state.free_elements(listbox::get_all_elements(state.controls.listbox)/*HACK*/, state.user_extra);
-				//	listbox::remove_all_elements(state.controls.listbox);
-				//	//TODO(fran): restore the content of the editbox (WM_SETTEXT_NONOTIF)
-				//} break;
-				//case EN_UP:
-				//{
-				//	listbox::sel_up(state.controls.listbox);
-				//} break;
-				//case EN_DOWN:
-				//{
-				//	listbox::sel_down(state.controls.listbox);
-				//} break;
-				//case EN_KILLFOCUS:
-				//{
-				//	//NOTE: since killfocus arrives _before_ LBN_CLK, we need to check who is the one with focus now, if it's the listbox cause the user clicked it then we are okay, otherwise we gotta clear it
-				//	if (state.controls.listbox != GetFocus()) {
-				//		//Clear search options
-				//		if (state.free_elements)
-				//			state.free_elements(listbox::get_all_elements(state.controls.listbox)/*HACK*/, state.user_extra);
-				//		listbox::remove_all_elements(state.controls.listbox);
-				//		show_listbox(state, false);
-				//	}
-				//} break;
-				/*default: Assert(0);
-				}
-			}*/
-			/*else*/
 			if (child == state.controls.button) {
 				if (!state.reject_button) show_listbox(state, true);
 				else state.reject_button = false;
@@ -419,22 +335,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 					show_listbox(state, false);
 
 				} break;
-				case LBN_SELCHANGE://The user is moving up and down the elements of the listbox
-				{
-					/*
-					size_t lb_sel = listbox::get_cur_sel(state.controls.listbox);
-					size_t lb_cnt = listbox::get_element_cnt(state.controls.listbox);
-					if (lb_sel < lb_cnt) {
-						//Valid listbox selection
-						if (state.show_element_on_editbox)
-							state.show_element_on_editbox(state.controls.editbox, listbox::get_element_at(state.controls.listbox, lb_sel), state.user_extra);
-						//TODO(fran): save what the user currently wrote to be able to restore it later
-					}
-					else {
-						//Invalid listbox selection
-					}
-					*/
-				} break;
+				case LBN_SELCHANGE: break;
 				default: Assert(0);
 				}
 			}
@@ -450,24 +351,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case CBM_CLKOUTSIDE://The user clicked outside our listbox -> hide the listbox
 	{
-		//Clear search options
-		//if (state.free_elements)
-		//	state.free_elements(listbox::get_all_elements(state.controls.listbox)/*HACK*/, state.user_extra);
-		//listbox::remove_all_elements(state.controls.listbox);
 		state.reject_button = (bool)wparam;
 		show_listbox(state, false);
 	} break;
-	/*
-	case CB_SETCUEBANNER:
-	{
-		return SendMessage(state.controls.editbox, WM_SETDEFAULTTEXT, wparam, lparam);
-	} break;
-	*/
-	//case CB_GETCUEBANNER://TODO(fran): I dont have a WM_GETDEFAULTTEXT
-	//{
-	//	//NOTE: there is more than one stupid thing about this msg, first the paramaters are REVERSED compared to WM_GETTEXT, and second there's no CB_GETCUEBANNERLENGTH!
-	//	return SendMessage(state.controls.editbox, WM_GETDEFAULTTEXT, lparam, wparam);
-	//} break;
 	case WM_SETFOCUS:
 	{
 		SetFocus(state.controls.button);
@@ -497,7 +383,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_WINDOWPOSCHANGED:
 	case WM_SHOWWINDOW:
 	case WM_MOUSEWHEEL: //No reason for processing mousewheel input, some comboboxes change their index when being scrolled, I hate that behaviour since the user always ends up doing that by accident when trying to scroll the page
-	case WM_DESTROY:
 	{
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;

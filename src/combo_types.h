@@ -52,6 +52,7 @@ namespace combobox {
 
 		struct {
 			HHOOK mouse_click_hook;
+			HWND root_wnd;
 		}impl;
 
 		bool reject_button;//do not open listbox on the next button press if the listbox is already open and the button is clicked

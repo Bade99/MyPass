@@ -1212,7 +1212,7 @@ bool set_text(State& state, cstr* buf) {
 			state.history_helper.break_group();
 			if constexpr (ClearHistory) state.history.clear();
 
-			ask_window_for_repaint(state.wnd);//TODO(fran): probably unnecessary
+			ask_window_for_repaint(state.wnd);
 		}
 	}
 	return res;
@@ -2206,12 +2206,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//TODO(fran): check that the candidates window has some candidates, if it doesnt then we can simply continue as if nothing happened
 			if (scancode == 0x148/*up arrow*/) {
 				state.ignore_ime_candidates = true;
-				//PostMessage(state.wnd, WM_KEYDOWN, VK_UP, lparam); TODO(fran): uncomment this and find out what it was for
 				reset_v_sel_stored_w = false;
 			}
 			if (scancode == 0x150/*down arrow*/) {
 				state.ignore_ime_candidates = true;
-				//PostMessage(state.wnd, WM_KEYDOWN, VK_DOWN, lparam); TODO(fran): uncomment this and find out what it was for
 				reset_v_sel_stored_w = false;
 			}
 

@@ -63,7 +63,6 @@ password_editor::State& add_password_editor(State& state, const Props& propertie
 					on_password_editors_cnt_changed(state);
 					ask_window_for_resize(state.wnd);
 					ask_window_for_repaint(state.wnd);
-					//TODO(fran): small BUG with scrolling: if we delete a section while we are scrolled, then we dont get a proper page resize with repositioning and thus the page remains overscrolled when it could have corrected itself.
 					break;
 				}
 		}
