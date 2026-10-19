@@ -212,6 +212,7 @@
     <ClInclude Include="text_types.h" />
     <ClInclude Include="global.h" />
     <ClInclude Include="helpers.h" />
+    <ClInclude Include="child_layout.h" />
     <ClInclude Include="math.h" />
     <ClInclude Include="platform.h" />
     <ClInclude Include="reflection.h" />
