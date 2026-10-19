@@ -64,7 +64,7 @@ namespace userial {
 		size_t s = find_identifier(content, 0, start);
 		if (str_found(s)) {
 			s += start.size();
-			str substr = content.substr(s);//TODO(fran):we dont really need a substr and neither till the end of content
+			str_view substr = str_view(content).substr(s);
 			bool found = false;
 #define _compare_enum_string_found(member,value) if(!substr.compare(0,str(_t(#member)).size(),_t(#member))){var = member; found=true;} else
 			_foreach_language(_compare_enum_string_found) {/*you can do something on the final else case*/ };
@@ -269,7 +269,6 @@ public:
 			res = true;
 		}
 		else this->language = this->GetBestMatchFromSystemSettings();
-		//TODO(fran): if there was no language information to deserialize then query the system for the current language and see if we support any close matches, otherwise as a last resort default to english
 		this->ChangeLanguage(this->language);//whatever happens we need to set some language
 		return res;
 	}
