@@ -20,7 +20,7 @@ void set_user_extra(HWND wnd, void* user_extra) {
 	if (&state) {
 		state.user_extra = user_extra;
 		listbox::set_user_extra(state.controls.listbox, user_extra);
-		//TODO(fran): should I redraw?
+		ask_window_for_repaint(state.controls.button);
 	}
 }
 
@@ -36,7 +36,6 @@ void set_function_on_selection_accepted(HWND wnd, func_on_selection_accepted fun
 	auto& state = *get_state(wnd);
 	if (&state) {
 		state.on_selection_accepted = func;
-		//TODO(fran): should I redraw?
 	}
 }
 
@@ -52,7 +51,7 @@ void set_function_render_combobox(HWND wnd, func_render_combobox func) {
 	auto& state = *get_state(wnd);
 	if (&state) {
 		state.render_combobox = func;
-		//TODO(fran): should I redraw?
+		ask_window_for_repaint(state.controls.button);
 	}
 }
 
@@ -83,7 +82,7 @@ bool is_listbox_open(HWND wnd) {
 
 	auto& state = *get_state(wnd);
 	if (&state) {
-		res = IsWindowVisible(state.controls.listbox);//TODO(fran): better check
+		res = IsWindowVisible(state.controls.listbox);
 	}
 	return res;
 }
@@ -108,7 +107,8 @@ size_t get_count(HWND wnd) {
 void set_cur_sel(HWND wnd, size_t idx) {
 	auto& state = *get_state(wnd);
 	if (&state) {
-		listbox::set_sel_noNotify(state.controls.listbox, idx);//TODO(fran): the code for this in the listbox needs a pass, we're basically calling the listbox so it calls us telling about the change in a different future msg
+		listbox::set_sel_noNotify(state.controls.listbox, idx);
+		ask_window_for_repaint(state.controls.button);
 	}
 }
 
@@ -183,6 +183,7 @@ void show_listbox(State& state, bool show) {
 		UnhookWindowsHookEx(state.impl.mouse_click_hook); // remove the hook
 		state.impl.mouse_click_hook = 0;
 	}
+	ask_window_for_repaint(state.controls.button);
 }
 
 LRESULT CALLBACK ButtonPaintProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lParam, UINT_PTR /*uIdSubclass*/, DWORD_PTR /*dwRefData*/) {
@@ -230,12 +231,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_CREATE:
 	{
-		CREATESTRUCT* createnfo = (CREATESTRUCT*)lparam;
-		LONG_PTR style = GetWindowLongPtr(state.wnd, GWL_STYLE);
-
-		//TODO(fran): settext is redirected to the editbox
-		if (createnfo->lpszName) PostMessage(state.wnd, WM_SETTEXT, 0, (LPARAM)createnfo->lpszName);
-
 		state.controls.button = CreateWindow(button::wndclass, NULL, WS_CHILD | WS_VISIBLE
 			, 0, 0, 0, 0, state.wnd, 0, NULL, NULL);
 		auto hand_cursor = LoadCursor(nil, IDC_HAND);
@@ -422,7 +417,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 						state.on_selection_accepted(listbox::get_clicked_element(state.controls.listbox), state.user_extra);
 
 					show_listbox(state, false);
-					ask_window_for_repaint(state.wnd);//TODO(fran): I added this to make sure the combobox (button) is re-rendered after a selection, but I feel like this should already be called somewhere else, like when we set_element to the button
 
 				} break;
 				case LBN_SELCHANGE://The user is moving up and down the elements of the listbox
@@ -462,7 +456,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//listbox::remove_all_elements(state.controls.listbox);
 		state.reject_button = (bool)wparam;
 		show_listbox(state, false);
-		ask_window_for_repaint(state.wnd);//TODO(fran): I feel this should already happen somewhere
 	} break;
 	/*
 	case CB_SETCUEBANNER:

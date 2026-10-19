@@ -1125,6 +1125,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				twofish_setkey(key, sizeof(key));
 				SecureZeroMemory(key, sizeof(key));
 
+				// TODO: Let the page paint its own backdrop instead of forcing a subtree redraw after showing the editor.
+				PostMessage(state.wnd, custom_message::redraw_after_show, 0, 0);
 				if (state.mode == Mode::transition_v0) PostMessage(state.wnd, custom_message::show_transition_v0_msgbox, 0, 0); //Delay show the messagebox so that our window has time to be shown first
 				if (used_backup) PostMessage(state.wnd, custom_message::show_used_backup_msgbox, 0, 0);
 			}
@@ -1230,6 +1232,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		auto res = DefWindowProc(hwnd, msg, wparam, lparam);
 		SetFocus(nil);
 		return res;
+	} break;
+	case custom_message::redraw_after_show:
+	{
+		RedrawWindow(state.wnd, nil, nil,
+			RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 	} break;
 	case custom_message::show_transition_v0_msgbox:
 	{

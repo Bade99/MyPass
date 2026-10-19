@@ -11,6 +11,18 @@ namespace login {
 
 auto get_state(HWND wnd) { _control_create_function__get_state }
 
+void secure_zero_free(void* memory, size_t bytes) {
+	if (memory) {
+		SecureZeroMemory(memory, bytes);
+		free(memory);
+	}
+}
+
+void secure_zero_free(text& value) {
+	secure_zero_free(value.str, value.sz_chars * sizeof(*value.str));
+	value = {};
+}
+
 auto get_background_cover_pad() {
 	return (i32)DPI(20);
 }
@@ -162,18 +174,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		save_settings(state);
 		if (&state) {
-			if (state.results->password.str) {
-				SecureZeroMemory(state.results->password.str, state.results->password.sz_chars * sizeof(*state.results->password.str));
-				free(state.results->password.str);
-				state.results->password.str = nullptr;
-				state.results->password.sz_chars = 0;
-			}
-			if (state.results->username.str) {
-				SecureZeroMemory(state.results->username.str, state.results->username.sz_chars * sizeof(*state.results->username.str));
-				free(state.results->username.str);
-				state.results->username.str = nullptr;
-				state.results->username.sz_chars = 0;
-			}
+			secure_zero_free(state.results->password);
+			secure_zero_free(state.results->username);
 			SetWindowText(state.controls.edit_password, _t("")); //TODO(fran): we should make sure the current bytes get zeroed out
 			SetWindowText(state.controls.edit_username, _t(""));
 			set_window_state(state.wnd, nil);
@@ -246,25 +248,23 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				}
 
 				if (check_failed) {
-					SecureZeroMemory(username_buf, username_sz);//TODO(fran): this two should be a mini function or macro (zero_free())
-					SecureZeroMemory(password_buf, password_sz);
-					free(username_buf);
-					free(password_buf);
+					secure_zero_free(username_buf, username_sz);
+					secure_zero_free(password_buf, password_sz);
 					return 0;
 				}
 
 				if (sizeof(*username_buf) == 1) {//we got ascii data, we always want utf16 otherwise the key would stop working when switching from ascii to unicode controls
-					defer{ free(username_buf); free(password_buf); };
-					int username_sz_char = MultiByteToWideChar(CP_ACP, 0, (LPCCH)username_buf, username_sz, 0, 0);//TODO(fran): make sure this guy does NOT force a null terminator to be appended at the end
-					int password_sz_char = MultiByteToWideChar(CP_ACP, 0, (LPCCH)password_buf, password_sz, 0, 0);//TODO(fran): make sure this guy does NOT force a null terminator to be appended at the end
+					defer{ secure_zero_free(username_buf, username_len * sizeof(*username_buf)); secure_zero_free(password_buf, password_len * sizeof(*password_buf)); };
+					int username_sz_char = MultiByteToWideChar(CP_ACP, 0, (LPCCH)username_buf, username_sz, 0, 0);
+					int password_sz_char = MultiByteToWideChar(CP_ACP, 0, (LPCCH)password_buf, password_sz, 0, 0);
 					if (username_sz_char && password_sz_char) {
 						void* username_mem = malloc(username_sz_char * sizeof(WCHAR));
 						void* password_mem = malloc(password_sz_char * sizeof(WCHAR));
 						if (username_mem && password_mem) {
 							MultiByteToWideChar(CP_ACP, 0, (LPCCH)username_buf, username_sz, (LPWSTR)username_mem, username_sz_char);
 							MultiByteToWideChar(CP_ACP, 0, (LPCCH)password_buf, password_sz, (LPWSTR)password_mem, password_sz_char);
-							if (state.results->password.str) free(state.results->password.str);//this shouldnt ever happen
-							if (state.results->username.str) free(state.results->username.str);//this shouldnt ever happen
+							if (state.results->password.str) secure_zero_free(state.results->password);//this shouldnt ever happen
+							if (state.results->username.str) secure_zero_free(state.results->username);//this shouldnt ever happen
 							state.results->password.str = (WCHAR*)password_mem;
 							state.results->password.sz_chars = password_sz_char;
 							state.results->username.str = (WCHAR*)username_mem;
@@ -346,18 +346,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_STATE_RESET:
 	{
-		if (state.results->password.str) {
-			SecureZeroMemory(state.results->password.str, state.results->password.sz_chars * sizeof(*state.results->password.str));
-			free(state.results->password.str);
-			state.results->password.str = nullptr;
-			state.results->password.sz_chars = 0;
-		}
-		if (state.results->username.str) {
-			SecureZeroMemory(state.results->username.str, state.results->username.sz_chars * sizeof(*state.results->username.str));
-			free(state.results->username.str);
-			state.results->username.str = nullptr;
-			state.results->username.sz_chars = 0;
-		}
+		secure_zero_free(state.results->password);
+		secure_zero_free(state.results->username);
 		SetWindowText(state.controls.edit_password, _t(""));
 		SetWindowText(state.controls.edit_username, _t(""));
 	} break;

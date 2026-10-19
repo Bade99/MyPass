@@ -211,7 +211,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		case SB_THUMBTRACK:
 		case SB_THUMBPOSITION: //INFO: can be used to detect the end of a SB_THUMBTRACK sequence
 		{
-			auto new_scroll = HIWORD(wparam);
+			auto new_scroll = (HWND)lparam == state.controls.v_scroll
+				? (i32)SendMessage(state.controls.v_scroll, scrollbar::custom_message::GET_POS, 0, 0)
+				: (i32)HIWORD(wparam);
 			//TODO(fran): move into common logic with smooth_scroll
 			RECT r = get_window_rect_at(state.controls.content_area, state.wnd);
 			RECT parent_r; GetWindowRect(state.wnd, &parent_r);

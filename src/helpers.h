@@ -350,6 +350,7 @@ static RECT clip_fit_childs(HWND parent, HWND child, RECT r) {
 	RECT res;
 	struct ClipFitChildrenTest { HWND parent; HWND child; HRGN rgn; };
 	ClipFitChildrenTest t; t.parent = parent;  t.child = child; t.rgn = CreateRectRgn(r.left, r.top, r.right, r.bottom); defer{ DeleteObject(t.rgn); };
+	if (!t.rgn) return r;
 
 	EnumChildWindows(
 		parent,
@@ -367,12 +368,11 @@ static RECT clip_fit_childs(HWND parent, HWND child, RECT r) {
 		},
 		(LPARAM)&t);
 
-	int rgn_len = GetRegionData(t.rgn, 0, 0);
+	DWORD rgn_len = GetRegionData(t.rgn, 0, 0);
+	if (rgn_len < sizeof(RGNDATAHEADER)) return r;
 	//INFO:RGNDATA always stores it's region polygon in RECTs
 	RGNDATA* rgn_data = (RGNDATA*)malloc(rgn_len); defer{ free(rgn_data); };
-	rgn_data->rdh.dwSize = sizeof(rgn_data->rdh); //TODO(fran): not sure I need to set anything in the header
-	GetRegionData(t.rgn, rgn_len, rgn_data);
-	//TODO(fran): check what happens when the region is empty, is there only one RECT with all zeroes or is it a null pointer and we crash
+	if (!rgn_data || !GetRegionData(t.rgn, rgn_len, rgn_data)) return r;
 	if (rgn_data->rdh.nCount) res = max_area((RECT*)rgn_data->Buffer, rgn_data->rdh.nCount);
 	else res = { 0,0,0,0 };
 

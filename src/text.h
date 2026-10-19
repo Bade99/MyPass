@@ -23,7 +23,6 @@ void set_user_extra(HWND wnd, void* user_extra) {
 	State& state = *get_state(wnd);
 	if (&state) {
 		state.user_extra = user_extra;
-		//TODO(fran): redraw?
 	}
 }
 
@@ -1668,7 +1667,6 @@ void render(State& state, HDC dc) {
 		// Calculate vertical position for the string so that it will be vertically centered
 		// We are single line so we want vertical alignment always
 		//TODO(fran): allow the user to select the vertical alignment (top, center, bottom)
-		//TODO(fran): BUG: vertical centering doesnt automatically occur when going from 2 lines to 1 by deleting the \n character, it remains with top centering until another letter is written by the user
 		int yPos = state.padding.y;
 
 		if (show_placeholder) {

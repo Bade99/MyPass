@@ -188,7 +188,6 @@ void resize_wnd(State& state) {
 	if (state.placement_flags & Placement::left || state.placement_flags & Placement::right) {
 		//small wnd
 		search_h = font_h * 2;
-		//search_w = (int)((float)w * .25f);//TODO(fran): there should be a max size, we just want a little thing in the corner
 		HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd, dc); };
 		SIZE a = urender::measure_text(dc, font, L"a");
 		search_w = a.cx * 33;
@@ -293,8 +292,6 @@ void resize_controls(State& state) {
 	else {//wnd is in large state, here everything goes next to each other on one line
 		int h_sub_pad = h - h_pad * 2;
 		int left_button_w = h_sub_pad;
-
-		//TODO(fran): here I could add a little w padding in between each control
 
 		//"case sensitive" goes first on the left
 		btn_case_sensitive_x = !btn_case_sensitive_off ? w_pad : 0;

@@ -143,22 +143,17 @@ MaskBilinearSample sample_bilinear_mask(MaskImage* mask, i32 x, i32 y) {
 	//NOTE: handmade 108 1:20:00 interesting, once you scale an img to half size or more you get sampling errors cause you're no longer sampling all the pixels involved, that's when you need MIPMAPPING
 
 	u8 idx = 7 - (x % 8);
-
-	x /= 8;
-
-	u8* texel_ptr = ((u8*)mask->mem + y * mask->pitch + x * 1);
-
-	u8 tex[4];
-
-	//TODO(fran): remove duplicate pixel reads by applying the "&" afterwards
-	tex[0] = (*(u8*)texel_ptr) & (1 << idx); //NOTE: For a better blend we pick the colors around the texel, movement is much smoother
-	tex[1] = idx == 0 ? (x < mask->width ? (*(u8*)(texel_ptr + 1)) & (1 << 7) : 0xFF) : (*(u8*)texel_ptr) & (1 << (idx - 1));
-	tex[2] = y < mask->height ? (*(u8*)(texel_ptr + mask->pitch)) & (1 << idx) : 0xFF;
-	tex[3] = idx == 0 ? (x < mask->width ? (*(u8*)(texel_ptr + mask->pitch + 1)) & (1 << 7) : 0xFF) : (y < mask->height ? (*(u8*)(texel_ptr + mask->pitch)) & (1 << (idx - 1)) : 0xFF);
-
+	bool has_right = x < mask->width - 1;
+	bool has_below = y < mask->height - 1;
+	u8* texel_ptr = (u8*)mask->mem + y * mask->pitch + x / 8;
+	u8 current = *texel_ptr;
+	u8 below = has_below ? texel_ptr[mask->pitch] : 0;
+	u8 next_idx = idx == 0 ? 7 : idx - 1;
 	MaskBilinearSample sample;
-	for (int i = 0; i < 4; i++)
-		sample.sample[i] = tex[i];
+	sample.sample[0] = current & (1 << idx); //NOTE: For a better blend we pick the colors around the texel, movement is much smoother
+	sample.sample[1] = has_right ? (idx == 0 ? texel_ptr[1] : current) & (1 << next_idx) : 0xFF;
+	sample.sample[2] = has_below ? below & (1 << idx) : 0xFF;
+	sample.sample[3] = has_right && has_below ? (idx == 0 ? texel_ptr[mask->pitch + 1] : below) & (1 << next_idx) : 0xFF;
 
 	return sample;
 }

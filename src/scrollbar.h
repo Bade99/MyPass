@@ -234,7 +234,8 @@ void add_controls(State& state) {
 
 void update_btn_visibility(State& state) {
 	auto set_visibility = [](HWND wnd, bool new_visibility) {
-		if (IsWindowVisible(wnd) != new_visibility) ShowWindow(wnd, new_visibility ? SW_SHOW : SW_HIDE);
+		bool old_visibility = IsWindowVisible(wnd) != FALSE;
+		if (old_visibility != new_visibility) ShowWindow(wnd, new_visibility ? SW_SHOW : SW_HIDE);
 	};
 	bool new_visibility = state.background_pressed || state.mouse_over_bar || state.tracking_bar || state.mouse_over_control;
 
@@ -382,7 +383,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 			//Notify parent
 			SendMessage(get_parent_to_notify(state), vertical ? WM_VSCROLL : WM_HSCROLL, MAKELONG(SB_THUMBTRACK, state.pos), (LPARAM)state.wnd);
-			//TODO(fran): the scroll position for SB_THUMBTRACK is limited to 16bits, we should either extend the message somehow to be able to pass in more data, use a custom message, or use the technique indicated in https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getscrollinfo by standardising that receivers of this notification must call the scrollbar back with GetScrollInfo to get the real 32bit position
 
 			ask_window_for_repaint(state.wnd);
 		}
@@ -460,6 +460,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			ask_window_for_repaint(state.wnd);
 		}
 	} break;
+	case custom_message::GET_POS:
+		return state.pos;
 	case WM_ERASEBKGND:
 	{
 		auto dc = (HDC)wparam;

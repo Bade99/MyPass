@@ -130,8 +130,7 @@ struct _str {
 
 	type* begin() const { return this->sz ? &(*this)[0] : nullptr; }
 
-	//TODO(fran): does this include the null terminator? if so we gotta fix it, null terminator shouldnt appear
-	type* end() const { return this->sz ? (type*)((u8*)&(*this)[0] + this->sz) : nullptr; /*ptr one past the last element*/ }
+	type* end() const { return this->sz ? this->str + this->cnt() : nullptr; }
 };
 
 typedef _str<utf16> utf16_str;

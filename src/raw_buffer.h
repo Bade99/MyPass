@@ -82,7 +82,7 @@ struct RawBufferReader {
 	}
 
 	bool read_bytes(void* out, std::size_t n) {
-		if (pos + n > bytes.size()) return false;
+		if (n > remaining()) return false;
 		std::memcpy(out, bytes.data() + pos, n);
 		pos += n;
 		return true;
@@ -107,10 +107,10 @@ struct RawBufferReader {
 
 		// Writer inserts zero padding so each string starts at alignof(CharT).
 		const auto padding = detail::get_alignment_padding(pos, alignof(CharT));
+		if (padding > remaining()) return false;
 		#ifdef _DEBUG
-		if (padding > remaining())
-			for (std::size_t i = 0; i < padding; i++)
-				Assert(bytes[pos + i] == 0);
+		for (std::size_t i = 0; i < padding; i++)
+			Assert(bytes[pos + i] == 0);
 		#endif
 		if (!skip(padding)) return false;
 
@@ -142,7 +142,7 @@ struct RawBufferReader {
 	}
 
 	bool skip(std::size_t n) {
-		if (pos + n > bytes.size()) return false;
+		if (n > remaining()) return false;
 		pos += n;
 		return true;
 	}

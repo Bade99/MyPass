@@ -119,6 +119,11 @@ namespace password_editor {
 		_init_wndclass_at_startup;
 	}
 
+void set_row_editing_enabled(const std::array<HWND, table::MAX_COLUMNS>& row, bool enabled) {
+	EnableWindow(row[0], enabled);
+	PostMessage(row[1], WM_ENABLE_REQUEST, enabled, 0);
+}
+
 void on_internal_state_change(State& state) {
 	auto& controls = state.controls;
 	button::set_selected(controls.btn_card, state.is_open);
@@ -141,10 +146,8 @@ void on_internal_state_change(State& state) {
 	//TODO: may be better to ask the table to do this child disabling logic by itself
 	//Also this is too restrictive, we want to send a message to the individual cells to disable themselves, so they can decide what needs disabling and what not, eg a 'copy field' button should always stay enabled
 	auto& tbl = *table::get_state(controls.tbl_values);
-	for (auto& r : tbl.rows) {
-		EnableWindow(r[0], enable_editing);
-		PostMessage(r[1], WM_ENABLE_REQUEST, enable_editing, 0);
-	}
+	for (const auto& row : tbl.rows)
+		set_row_editing_enabled(row, enable_editing);
 	ask_window_for_resize(state.manager_parent);
 	ask_window_for_repaint(state.manager_parent);
 }
@@ -190,6 +193,7 @@ void table_add_row(State& state, DescriptionCell* description, ValueCell* value)
 	if (!description->on_change) description->on_change = state.stateful_functions.on_change;
 	if (!value->on_change) value->on_change = state.stateful_functions.on_change;
 	table::add_row(tbl, description, value);
+	set_row_editing_enabled(tbl.rows.back(), state.is_open && state.is_editing);
 }
 
 void create_controls(State& state) {

@@ -236,13 +236,6 @@ void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 
 		//Set bk brush for drawing text
 		for (int i = 0; i < state.menubar_itemcnt; i++) {
-			bool on_mouseover = (i == menubar_mouseover_idx);
-			//Paint mouseover bk
-			if (on_mouseover) {
-				//TODO(fran): im having to cheat a little bit here by using the rc from the previous painting, it could be outdated
-				FillRect(dc, &state.menubar_items[i], colors.ControlBkMouseOver);
-			}
-
 			TCHAR menu_str[64];
 			menu_str[0] = TEXT(' ');//initial space
 			i32 menu_str_char_cnt = GetMenuString(state.menu, i, menu_str + 1, ARRAYSIZE(menu_str) - 2, MF_BYPOSITION);
@@ -251,8 +244,14 @@ void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 
 			str_view menu_text(menu_str, menu_str_char_cnt + 2);
 			auto txtw = urender::measure_text(dc, fonts.Menu, menu_text).cx;
-			RECT text_bounds = menuitemrc;
-			text_bounds.right = text_bounds.left + txtw;
+			RECT item_rect{
+				.left = menuitemrc.left, .top = menuitemrc.top,
+				.right = menuitemrc.left + txtw, .bottom = menuitemrc.bottom
+			};
+			if (i == menubar_mouseover_idx)
+				FillRect(dc, &item_rect, colors.ControlBkMouseOver);
+
+			RECT text_bounds = item_rect;
 			OffsetRect(&text_bounds, -menurc.left, -menurc.top);
 			POINT old_origin{};
 			SetViewportOrgEx(dc, 0, 0, &old_origin);
@@ -260,11 +259,7 @@ void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 			urender::draw_text(dc, text_bounds, text, fonts.Menu, txtbr, urender::TextAlignment::left, 0);
 			SetViewportOrgEx(dc, old_origin.x, old_origin.y, nil);
 
-			//Store menu item rc
-			state.menubar_items[i] = RECT{ 
-				.left = menuitemrc.left, .top = menuitemrc.top, 
-				.right = menuitemrc.left + txtw, .bottom = menuitemrc.bottom
-			};
+			state.menubar_items[i] = item_rect;
 
 			menuitemrc.left += txtw;
 		}
@@ -373,6 +368,34 @@ void set_is_maximized(State& state, bool new_is_maximized) {
 	}
 }
 
+void update_caption_button_theme(State& state) {
+	HBRUSH btn_border, btn_bk, btn_fore, btn_bk_push, btn_bk_mouseover;
+	if (state.active) {
+		btn_border = colors.CaptionBk;
+		btn_bk = colors.CaptionBk;
+		btn_fore = colors.Img;
+		btn_bk_push = colors.ControlBkPush;
+		btn_bk_mouseover = colors.ControlBkMouseOver;
+	}
+	else {
+		btn_border = colors.CaptionBk_Inactive;
+		btn_bk = colors.CaptionBk_Inactive;
+		btn_fore = colors.Img_Inactive;
+		btn_bk_push = colors.ControlBkPush;
+		btn_bk_mouseover = colors.ControlBkMouseOver;
+	}
+	button::Theme btn{
+		.brushes = {
+			.foreground = {.normal = btn_fore, .mouseover = btn_fore, .clicked = btn_fore},
+			.bk = {.normal = btn_bk, .mouseover = btn_bk_mouseover, .clicked = btn_bk_push},
+			.border = {.normal = btn_border, .mouseover = btn_border, .clicked = btn_border}
+		}
+	};
+	button::set_theme(state.btn_close, btn);
+	button::set_theme(state.btn_min, btn);
+	if (state.btn_max) button::set_theme(state.btn_max, btn);
+}
+
 //TODO(fran): add & at the beginning of menu string names, that's how you trigger them by pressing Alt+key https://stackoverflow.com/questions/38338426/meaning-of-ampersand-in-rc-files
 //TODO(fran): DPI awareness
 //TODO(fran): it'd be nice to have a way to implement good subclassing, eg letting the user assign clip regions where they can draw and we dont, things like that, more communication
@@ -440,32 +463,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			title_rc.bottom += offset_y;
 			urender::draw_text(dc, title_rc, to_utf_str(title), caption_font, txtbr, urender::TextAlignment::left, 0);
 
-			HBRUSH btn_border, btn_bk, btn_fore, btn_bk_push, btn_bk_mouseover;
-			if (state.active) {
-				btn_border = colors.CaptionBk;
-				btn_bk = colors.CaptionBk;
-				btn_fore = colors.Img;
-				btn_bk_push = colors.ControlBkPush;
-				btn_bk_mouseover = colors.ControlBkMouseOver;
-			}
-			else {
-				btn_border = colors.CaptionBk_Inactive;
-				btn_bk = colors.CaptionBk_Inactive;
-				btn_fore = colors.Img_Inactive;
-				btn_bk_push = colors.ControlBkPush;
-				btn_bk_mouseover = colors.ControlBkMouseOver;
-			}
-			button::Theme btn{
-				.brushes = {
-					.foreground = {.normal = btn_fore, .mouseover = btn_fore, .clicked = btn_fore},
-					.bk = {.normal = btn_bk, .mouseover = btn_bk_mouseover, .clicked = btn_bk_push},
-					.border = {.normal = btn_border, .mouseover = btn_border, .clicked = btn_border}
-				}
-			};
-			//TODO: we shouldnt be triggering a redraw while on wm_paint, this can be done elsewhere
-			button::set_theme(state.btn_close, btn);
-			button::set_theme(state.btn_min, btn);
-			if (state.btn_max) button::set_theme(state.btn_max, btn);
 		}
 
 		//TODO(fran): allow moving the menu up next to the title to get more screen real state, visual studio differentiates the menu items from the window title by rendering a darker square around the latter
@@ -500,6 +497,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		RECT btn_close_rc = calc_btn_close_rc(state);
 		state.btn_close = CreateWindow(button::wndclass, nil, WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_close_rc.left, btn_close_rc.top, RECTW(btn_close_rc), RECTH(btn_close_rc), state.wnd, (HMENU)menu::close, 0, 0);
 		SendMessage(state.btn_close, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.close);
+		update_caption_button_theme(state);
 
 		//TODO(fran): let the user set the bitmaps, pass them in theme
 
@@ -675,6 +673,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//So basically this guy is another WM_NCPAINT, just do exactly the same, but also here we have the option to paint slightly different if we are deactivated, so the user can see the change
 		BOOL active = (BOOL)wparam; //Indicates active or inactive state for a title bar or icon that needs to be changed
 		state.active = active;
+		update_caption_button_theme(state);
 		HRGN opt_upd_rgn = (HRGN)lparam; // handle to optional update region for the nonclient area. If set to -1, do nothing
 		if (state.menu) {
 			MENUINFO mi{ sizeof(mi) };

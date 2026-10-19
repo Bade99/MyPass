@@ -116,32 +116,32 @@ public:
 	//·Adds the hwnd to the list of managed hwnds and sets its text corresponding to stringID and the current language
 	//·Many hwnds can use the same stringID
 	//·Next time there is a language change the window will be automatically updated
-	//·Returns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
+	//·Returns FALSE if invalid hwnd or stringID
 	BOOL AddWindowText(HWND hwnd, UINT stringID)
 	{
 		BOOL res = UpdateHwnd(hwnd, stringID);
 		if (res) this->Hwnds[hwnd] = stringID;
-		return res;
+		return res && HasStringResource(stringID);
 	}
 
 	//·Adds the hwnd to the list of managed hwnds and sets its default text corresponding to stringID and the current language
 	//·Many hwnds can use the same stringID
 	//·Next time there is a language change the window will be automatically updated
-	//·Returns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
+	//·Returns FALSE if invalid hwnd or stringID
 	BOOL AddWindowDefaultText(HWND hwnd, u32 stringID) {
 		BOOL res = UpdateHwndDefault(hwnd, stringID);
 		if (res) this->HwndsDefault[hwnd] = stringID;
-		return res;
+		return res && HasStringResource(stringID);
 	}
 
 	//·Adds the hwnd to the list of managed hwnds and sets its tooltip text corresponding to stringID and the current language
 	//·Many hwnds can use the same stringID
 	//·Next time there is a language change the window will be automatically updated
-	//·Returns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
+	//·Returns FALSE if invalid hwnd or stringID
 	BOOL AddWindowTooltipText(HWND hwnd, u32 stringID) {
 		BOOL res = UpdateHwndTooltip(hwnd, stringID);
 		if (res) this->HwndsTooltip[hwnd] = stringID;
-		return res;
+		return res && HasStringResource(stringID);
 	}
 
 	//·Updates all managed objects to the new language, all the ones added after this call will also use the new language
@@ -207,7 +207,7 @@ public:
 	{
 		BOOL res = UpdateCombo(hwnd, ID, stringID);
 		if (res) this->Comboboxes[std::make_pair(hwnd, ID)] = stringID;
-		return res;
+		return res && HasStringResource(stringID);
 	}
 
 	//Set the hinstance from where the string resources will be retrieved
@@ -225,7 +225,7 @@ public:
 	//One hwnd can only be linked to one messageID
 	BOOL AddDynamicText(HWND hwnd, UINT messageID)
 	{
-		if (!hwnd) return FALSE;
+		if (!IsWindow(hwnd)) return FALSE;
 		this->DynamicHwnds[hwnd] = messageID;
 		this->UpdateDynamicHwnd(hwnd, messageID);
 		return TRUE;
@@ -235,8 +235,7 @@ public:
 	//to indicate which window to call for its menus to be redrawn
 	BOOL AddMenuDrawingHwnd(HWND MenuDrawer)
 	{
-		//TODO(fran): check HWND is valid
-		if (MenuDrawer) {
+		if (IsWindow(MenuDrawer)) {
 			this->MenuDrawers.push_back(MenuDrawer);
 			return TRUE;
 		}
@@ -247,7 +246,7 @@ public:
 	{
 		BOOL res = UpdateMenu(hmenu, ID, stringID);
 		if (res) this->Menus[std::make_pair(hmenu, ID)] = stringID;
-		return res;
+		return res && HasStringResource(stringID);
 	}
 
 	Language GetCurrentLanguage()
@@ -278,6 +277,10 @@ private:
 	~LanguageManager() {}
 
 	HINSTANCE hInstance = NULL;
+	bool HasStringResource(UINT stringID) const {
+		const cstr* text;
+		return LoadString(this->hInstance, stringID, (cstr*)&text, 0) != 0;
+	}
 
 	std::map<HWND, UINT> Hwnds;
 	std::map<HWND, UINT> HwndsDefault;
