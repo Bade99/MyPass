@@ -7,6 +7,7 @@
 #include "search.h"
 #include "raw_buffer.h"
 #include "render_diagnostics.h"
+#include "child_layout.h"
 
 namespace editor {
 
@@ -124,12 +125,12 @@ void resize_controls(State& state) {
 			v2_i32 btn_confirm_dim{}; Button_GetIdealSize(controls.btn_confirm_transfer, &btn_confirm_dim);
 			rect_i32 btn_confirm_transfer = static_transition.cut_right(clamp(0, btn_confirm_dim.x, static_transition.w / 2));
 
-			MoveWindow(controls.btn_static_bk_transition, btn_static_bk_transition);
-			MoveWindow(controls.btn_static_transition, btn_static_transition);
-			MoveWindow(controls.static_transition, static_transition);
-			MoveWindow(controls.btn_confirm_transfer, btn_confirm_transfer); //TODO(fran): small bug, btn doesnt automatically resize when changing languages, this is probably a general issue, look at my language learning app to see how I solved it
-			MoveWindow(controls.edit_passwords, edit_showpasswords);
-			MoveWindow(controls.icon_transition, icon_transition);
+			child_layout::move_if_needed(controls.btn_static_bk_transition, btn_static_bk_transition);
+			child_layout::move_if_needed(controls.btn_static_transition, btn_static_transition);
+			child_layout::move_if_needed(controls.static_transition, static_transition);
+			child_layout::move_if_needed(controls.btn_confirm_transfer, btn_confirm_transfer); //TODO(fran): small bug, btn doesnt automatically resize when changing languages, this is probably a general issue, look at my language learning app to see how I solved it
+			child_layout::move_if_needed(controls.edit_passwords, edit_showpasswords);
+			child_layout::move_if_needed(controls.icon_transition, icon_transition);
 		}
 
 		auto& controls = state.controls;
@@ -143,7 +144,7 @@ void resize_controls(State& state) {
 			.w = minimum((sort_on_next_line ? w - w_pad : w / 2) - w_pad, search_max_w),
 			.h = (i32)DPI(30)
 		};
-		MoveWindow(controls.search, search);
+		child_layout::move_if_needed(controls.search, search);
 
 		i32 sort_w = search.w * .9f;
 		rect_i32 sort{
@@ -152,12 +153,12 @@ void resize_controls(State& state) {
 			.w = sort_w,
 			.h = search.h
 		};
-		MoveWindow(controls.combo_sort, sort);
+		child_layout::move_if_needed(controls.combo_sort, sort);
 
 		offset_y = sort.bottom() + spacing;
 
 		rect_i32 page_space{ .x = offset_x, .y = offset_y, .w = w, .h = h - offset_y };
-		MoveWindow(controls.page_space, page_space, false);
+		child_layout::move_if_needed(controls.page_space, page_space, false);
 	}
 
 	auto& controls = state.controls;
@@ -167,10 +168,11 @@ void resize_controls(State& state) {
 
 	if (controls.password_editors.size()) {
 		auto btn_add_start_y = offset_y + spacing - btn_add_dim / 2;
-		MoveWindow(controls.btn_add_start, btn_add_x, btn_add_start_y, btn_add_dim, btn_add_dim, true);
+		child_layout::move_if_needed(controls.btn_add_start, rect_i32{ btn_add_x, btn_add_start_y, btn_add_dim, btn_add_dim });
 		auto old_offset = offset_y;
 		offset_y = btn_add_start_y + btn_add_dim + spacing;
 		bool any_visible = false;
+		//TODO(fran): defer descendant layout for offscreen cards during width changes, then refresh it before a card enters the viewport; preserve scrolling and keyboard focus.
 		for (const auto& p : controls.password_editors) {
 			if (IsWindowVisible(p)) {
 				any_visible = true;
@@ -178,7 +180,7 @@ void resize_controls(State& state) {
 				auto item_h = password_editor::resize_controls(pstate, false);
 				{
 					render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_move };
-					MoveWindow(p, w_pad, offset_y, w - 2 * w_pad, item_h, true);
+					child_layout::move_if_needed(p, rect_i32{ w_pad, offset_y, w - 2 * w_pad, item_h });
 				}
 				offset_y += (item_h + spacing);
 			}
@@ -188,7 +190,7 @@ void resize_controls(State& state) {
 			goto empty_editor;
 		}
 
-		MoveWindow(controls.btn_add_end, btn_add_x, offset_y, btn_add_dim, btn_add_dim, true);
+		child_layout::move_if_needed(controls.btn_add_end, rect_i32{ btn_add_x, offset_y, btn_add_dim, btn_add_dim });
 		offset_y += btn_add_dim;
 	}
 	else {
@@ -197,10 +199,10 @@ void resize_controls(State& state) {
 			.left = (w - btn_add_dim) / 2, .top = offset_y + spacing - btn_add_dim / 2, 
 			.right = btn_add_start.left + btn_add_dim, .bottom = btn_add_start.top + btn_add_dim 
 		};
-		MoveWindow(controls.btn_add_start, btn_add_x, offset_y + spacing, btn_add_dim, btn_add_dim, true);
+		child_layout::move_if_needed(controls.btn_add_start, rect_i32{ btn_add_x, offset_y + spacing, btn_add_dim, btn_add_dim });
 		offset_y += (spacing + btn_add_dim);
 
-		MoveWindow(controls.btn_add_end, DPI(-100), 0, btn_add_dim, btn_add_dim, true); //HACK: hide end button without having to worry about restoring visibility states
+		child_layout::move_if_needed(controls.btn_add_end, rect_i32{ (i32)DPI(-100), 0, btn_add_dim, btn_add_dim }); //HACK: hide end button without having to worry about restoring visibility states
 	}
 	offset_y += spacing;
 	page::set_wnd_size(controls.page_space, offset_y); //TODO(fran): it may be better to resize the page before all of its children, so that we dont cause issues where the children cant re-render because they arent within the visible area of the parent (this may be a non issue though, and by tracking scrolling events and making visible and rendering the proper children this may fix itself)

@@ -28,13 +28,17 @@ constexpr bool directwrite_gdi() { return mode() == Mode::directwrite_gdi; }
 	op(card_resize_plan,) \
 	op(card_resize_apply,) \
 	op(card_move,) \
+	op(layout_unchanged,) \
+	op(layout_move_only,) \
+	op(layout_resize,) \
+	op(layout_batch_failure,) \
+	op(card_size_message,) \
+	op(table_size_message,) \
+	op(value_size_message,) \
 	op(card_backdrop_move,) \
-	op(card_header_move,) \
-	op(card_toolbar_move,) \
-	op(card_table_move,) \
-	op(table_cell_move,) \
-	op(value_text_move,) \
-	op(value_tool_move,) \
+	op(card_children_batch,) \
+	op(table_children_batch,) \
+	op(value_children_batch,) \
 	op(text_size,) \
 	op(text_paint,) \
 	op(static_text,) \
