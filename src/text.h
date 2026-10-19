@@ -269,6 +269,7 @@ void set_fallback_line_boundaries(const utf16* text, TextLineLayout& line) {
 
 //TODO(fran): DirectWrite exposes shaping clusters but not complete UAX #29 extended grapheme or word segmentation; consider intersecting ICU boundaries with these caret stops if full Unicode editor behavior becomes necessary.
 void analyze_line_layout(State& state, HDC dc, TextLineLayout& line) {
+	line.text_layout.Reset();
 	line.leading_caret_positions.assign(line.text_length + 1, 0);
 	line.trailing_caret_positions.assign(line.text_length + 1, 0);
 	line.caret_stops.assign(line.text_length + 1, false);
@@ -288,7 +289,7 @@ void analyze_line_layout(State& state, HDC dc, TextLineLayout& line) {
 	str rendered_text;
 	IDWriteTextLayout* text_layout = nil;
 	if (create_line_text_layout(state, dc, line, &text_layout, rendered_text)) {
-		defer{ release_com(text_layout); };
+		line.text_layout.Attach(text_layout);
 		DWRITE_TEXT_METRICS text_metrics{};
 		if (text_layout->GetMetrics(&text_metrics) == S_OK)
 			line.size.cx = (LONG)ceilf(text_metrics.widthIncludingTrailingWhitespace);
@@ -516,18 +517,27 @@ void scroll_to_caret(State& state) {
 	RECT rc; GetClientRect(state.wnd, &rc);
 	auto w = RECTW(rc), h = RECTH(rc);
 	if (!w || !h) return; //TODO(fran): this is probably more accurate by checking for element visibility or smth like that
+	int horizontal_padding = GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_CENTER ? 3 : state.padding.x;
+	int old_scroll_x = state.scroll.x;
 	//TODO(fran): im sure this can be done branchless
-	if (int scroll = (state.caret.pos.x + state.caret.dim.cx) - (w - state.padding.x + state.scroll.x); scroll > 0) {
+	if (int scroll = (state.caret.pos.x + state.caret.dim.cx) - (w - horizontal_padding + state.scroll.x); scroll > 0) {
 		//scroll right
 		state.scroll.x += scroll;
-		//ScrollWindowEx(state.wnd, scroll, 0, 0, 0, 0, 0, SW_ERASE|SW_INVALIDATE);
-		ask_window_for_repaint(state.wnd); //TODO(fran): currently we simply invalidate the whole window and redraw everything, this may or may not be optimal
 	}
-	else if (int scroll = (state.caret.pos.x) - (state.scroll.x + state.padding.x); scroll < 0) {
+	else if (int scroll = (state.caret.pos.x) - (state.scroll.x + horizontal_padding); scroll < 0) {
 		//scroll left
 		state.scroll.x += scroll;
-		ask_window_for_repaint(state.wnd);
 	}
+	int left = state.caret.pos.x;
+	int right = state.caret.pos.x + state.caret.dim.cx;
+	for (const auto& line : state.line_layouts) {
+		int line_left = line_render_x(state, line);
+		left = minimum(left, line_left);
+		right = maximum(right, line_left + line.size.cx);
+	}
+	state.scroll.x = clamp(minimum(0, left - horizontal_padding), state.scroll.x,
+		maximum(0, right - (w - horizontal_padding)));
+	if (state.scroll.x != old_scroll_x) ask_window_for_repaint(state.wnd);
 
 	if (int scroll = (state.caret.pos.y + state.caret.dim.cy) - (h - state.padding.y + state.scroll.y); scroll > 0) {
 		//scroll down
@@ -548,9 +558,10 @@ void scroll_to_caret(State& state) {
 
 void reposition_caret(State& state, bool nocheck = false) {
 	POINT oldcaretp = state.caret.pos;
+	v2_i32 old_scroll = state.scroll;
 	state.caret.pos = calc_caret_p(state);
-	if (oldcaretp != state.caret.pos || nocheck) {
-		scroll_to_caret(state);
+	scroll_to_caret(state);
+	if (oldcaretp != state.caret.pos || old_scroll.x != state.scroll.x || old_scroll.y != state.scroll.y || nocheck) {
 
 		//I havent found a way to apply a translation to the caret so that SetCaretPos automatically places it on the correct character even when the characters are scrolled, therefore we gotta apply the transformation manually
 		POINT p = state.caret.pos;
@@ -1480,12 +1491,8 @@ TextCaretHit point_to_char(State& state, POINT mouse/*client coords*/) {
 	f32 x = (f32)(mouse.x + state.scroll.x - line_render_x(state, *line));
 	TextCaretHit local_hit = closest_caret_stop(*line, x);
 
-	HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd,dc); };
-	HFONT oldfont = SelectFont(dc, state.theme.font); defer{ SelectFont(dc, oldfont); };
-	str rendered_text;
-	IDWriteTextLayout* text_layout = nil;
-	if (create_line_text_layout(state, dc, *line, &text_layout, rendered_text)) {
-		defer{ release_com(text_layout); };
+	IDWriteTextLayout* text_layout = line->text_layout.Get();
+	if (text_layout) {
 		BOOL trailing = FALSE, inside = FALSE;
 		DWRITE_HIT_TEST_METRICS hit{};
 		if (text_layout->HitTestPoint(x, 0, &trailing, &inside, &hit) == S_OK) {
@@ -1615,6 +1622,7 @@ void render_selection(HDC dc, HBRUSH brush, CharSel sel, State& state, int yPos,
 }
 
 void render(State& state, HDC dc) {
+	render_diagnostics::Scope diagnostic{ render_diagnostics::Event::text_paint };
 	auto& brushes = state.theme.brushes;
 
 	RECT rc; GetClientRect(state.wnd, &rc);
@@ -1670,63 +1678,84 @@ void render(State& state, HDC dc) {
 				urender::TextVerticalAlignment::top, state.padding.y);
 		}
 		else {
-			struct RenderedLine {
-				IDWriteTextLayout* text_layout;
-				str owned_text;
-				const TextLineLayout* cached_layout;
-				int y;
-			};
-			std::vector<RenderedLine> rendered_lines;
-			rendered_lines.reserve(state.line_layouts.size());
+			bool has_directwrite_text = false;
 			for (size_t line_index = 0; line_index < state.line_layouts.size(); line_index++) {
 				const TextLineLayout& line = state.line_layouts[line_index];
-				rendered_lines.push_back({ .text_layout = nil, .cached_layout = &line, .y = yPos });
-				auto& rendered = rendered_lines.back();
-				create_line_text_layout(state, dc, line, &rendered.text_layout, rendered.owned_text);
+				if (line.text_layout) has_directwrite_text = true;
 
 				const size_t start = line.text_start, end = start + line.text_length + 1;
 				CharSel selection{ clamp(start,state.selection.x_min(),end), clamp(start,state.selection.x_max(),end) };
 				if (selection.has_selection())
-					render_selection(dc, selection_br, selection, state, yPos, line_index, rendered_lines.back().text_layout);
+					render_selection(dc, selection_br, selection, state, yPos, line_index, line.text_layout.Get());
 				yPos += tm.tmHeight;
 			}
-			auto render_line_with_gdi = [&](const RenderedLine& line) {
+			auto render_line_with_gdi = [&](const TextLineLayout& line, int line_y) {
+				render_diagnostics::Scope gdi_diagnostic{ render_diagnostics::Event::gdi_text };
 				str masked_text;
-				const utf16* text = state.char_text.c_str() + line.cached_layout->text_start;
+				const utf16* text = state.char_text.c_str() + line.text_start;
 				if (style & ES_PASSWORD) {
-					if (line.owned_text.size() == line.cached_layout->text_length) text = line.owned_text.c_str();
-					else {
-						masked_text.assign(line.cached_layout->text_length, password_char);
-						text = masked_text.c_str();
-					}
+					masked_text.assign(line.text_length, password_char);
+					text = masked_text.c_str();
 				}
-				SetTextAlign(dc, TA_LEFT | (line.cached_layout->right_to_left ? TA_RTLREADING : 0));
-				TextOut(dc, line_render_x(state, *line.cached_layout) - state.scroll.x, line.y - state.scroll.y,
-					text, (int)line.cached_layout->text_length);
+				SetTextAlign(dc, TA_LEFT | (line.right_to_left ? TA_RTLREADING : 0));
+				TextOut(dc, line_render_x(state, line) - state.scroll.x, line_y - state.scroll.y,
+					text, (int)line.text_length);
 			};
 
 			ID2D1DCRenderTarget* target = nil;
 			ID2D1SolidColorBrush* text_brush = nil;
 			bool directwrite_rendered = false;
-			if (text_render::create_dc_render_target(dc, rc, &target)) {
-				COLORREF color = ColorFromBrush(txt_br);
-				if (text_render::create_text_brush(target, color, &text_brush)) {
-					target->BeginDraw();
-					target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
-					for (const auto& line : rendered_lines) {
-						if (!line.text_layout) continue;
-						D2D1_POINT_2F origin{
-							(f32)(line_render_x(state, *line.cached_layout) - state.scroll.x),
-							(f32)(line.y - state.scroll.y),
-						};
-						target->DrawTextLayout(origin, line.text_layout, text_brush, D2D1_DRAW_TEXT_OPTIONS_NONE);
+			if (has_directwrite_text && !directwrite_rendered && render_diagnostics::directwrite_gdi()) {
+				text_render::BitmapDrawSession bitmap_session;
+				if (bitmap_session.begin(dc, rc, ColorFromBrush(txt_br))) {
+					bool layouts_drawn = true;
+					int line_y = state.padding.y;
+					for (const auto& line : state.line_layouts) {
+						if (line.text_layout && !bitmap_session.draw(line.text_layout.Get(),
+							(f32)(line_render_x(state, line) - state.scroll.x),
+							(f32)(line_y - state.scroll.y))) {
+							layouts_drawn = false;
+							break;
+						}
+						line_y += tm.tmHeight;
 					}
-					directwrite_rendered = target->EndDraw() == S_OK;
+					if (layouts_drawn) directwrite_rendered = bitmap_session.finish();
 				}
 			}
-			for (const auto& line : rendered_lines)
-				if (!directwrite_rendered || !line.text_layout) render_line_with_gdi(line);
-			for (auto& line : rendered_lines) release_com(line.text_layout);
+			if (has_directwrite_text && !directwrite_rendered &&
+				text_render::create_dc_render_target(dc, rc, &target)) {
+				COLORREF color = ColorFromBrush(txt_br);
+				if (text_render::create_text_brush(target, color, &text_brush)) {
+					{
+						render_diagnostics::Scope draw_diagnostic{ render_diagnostics::Event::dc_begin_draw };
+						target->BeginDraw();
+					}
+					target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
+					int line_y = state.padding.y;
+					for (const auto& line : state.line_layouts) {
+						if (line.text_layout) {
+							D2D1_POINT_2F origin{
+								(f32)(line_render_x(state, line) - state.scroll.x),
+								(f32)(line_y - state.scroll.y),
+							};
+							target->DrawTextLayout(origin, line.text_layout.Get(), text_brush, D2D1_DRAW_TEXT_OPTIONS_NONE);
+						}
+						line_y += tm.tmHeight;
+					}
+					HRESULT result;
+					{
+						render_diagnostics::Scope draw_diagnostic{ render_diagnostics::Event::dc_end_draw };
+						result = target->EndDraw();
+					}
+					directwrite_rendered = result == S_OK;
+					if (!directwrite_rendered) render_diagnostics::record_count(render_diagnostics::Event::dc_end_failure);
+				}
+			}
+			int line_y = state.padding.y;
+			for (const auto& line : state.line_layouts) {
+				if (line.text_length && (!directwrite_rendered || !line.text_layout)) render_line_with_gdi(line, line_y);
+				line_y += tm.tmHeight;
+			}
 			release_com(text_brush);
 			release_com(target);
 		}
@@ -1783,6 +1812,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	case WM_SIZE: {
+		render_diagnostics::Scope diagnostic{ render_diagnostics::Event::text_size };
 		update_char_pad(state);
 		reposition_caret(state, true);
 

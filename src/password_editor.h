@@ -1,4 +1,7 @@
 #pragma once
+
+#include "render_diagnostics.h"
+#include "child_layout.h"
 /**
  * Nice looking collection of data for a password, format:
  *	Title (on the right should have a button to allow editing, maybe)
@@ -61,6 +64,7 @@ namespace password_editor {
 			if (!&state) return DefWindowProc(wnd, msg, wparam, lparam);
 			switch (msg) {
 			case WM_SIZE: {
+				render_diagnostics::record_count(render_diagnostics::Event::value_size_message);
 				//TODO(fran): make into reusable function for placing objects horizontally on a toolbar
 				auto& controls = state.controls;
 				RECT wnd_r; GetClientRect(state.wnd, &wnd_r);
@@ -73,7 +77,8 @@ namespace password_editor {
 					.left = 0, .top = 0,
 					.right = title_r.left + title_w, .bottom = title_r.top + h
 				};
-				move_window(controls.text, title_r);
+				std::array<child_layout::MoveRequest, 5> child_moves;
+				child_moves[0] = { controls.text, title_r };
 
 				auto tools = { controls.btn_show, controls.btn_copy, controls.btn_lock, controls.btn_del };
 				const auto tool_cnt = tools.size();
@@ -83,15 +88,18 @@ namespace password_editor {
 				auto max_tool_w = tool_h;
 				auto tool_w = (i32)minimum(toolbar_usable_w / tool_cnt, max_tool_w);
 				auto tool_x = w - total_tool_pad - tool_cnt * tool_w;
+				size_t tool_index = 1;
 				for (const auto& c : tools) {
 					RECT tool_r;
 					tool_r.left = tool_x;
 					tool_r.top = title_r.top;
 					tool_r.right = tool_x + tool_w;
 					tool_r.bottom = title_r.bottom;
-					move_window(c, tool_r);
+					child_moves[tool_index++] = { c, tool_r };
 					tool_x = tool_r.right + pad;
 				}
+				render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::value_children_batch };
+				child_layout::move_batch(child_moves);
 			} break;
 			case WM_ENABLE_REQUEST: {
 				BOOL should_enable = wparam;
@@ -145,6 +153,7 @@ void set_is_open(State& state, bool is_open) {
 	if (state.is_open != is_open) {
 		state.is_open = is_open;
 		on_internal_state_change(state);
+		if (is_open) ask_window_for_repaint(state.controls.tbl_values);
 	}
 }
 
@@ -397,6 +406,7 @@ void create_controls(State& state) {
 }
 
 i32 resize_controls(const State& state, bool resize = true) {
+	render_diagnostics::Scope diagnostic{ resize ? render_diagnostics::Event::card_resize_apply : render_diagnostics::Event::card_resize_plan };
 	auto& controls = state.controls;
 	RECT wnd_r; GetClientRect(state.wnd, &wnd_r);
 	auto w = RECTW(wnd_r), h = RECTH(wnd_r);
@@ -406,7 +416,10 @@ i32 resize_controls(const State& state, bool resize = true) {
 	i32 toolbar_w = (w - title_h * 2) - title_w;
 	i32 pad = title_h / 4;
 
-	if (resize) move_window(controls.btn_card, wnd_r);
+	if (resize) {
+		render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_backdrop_move };
+		child_layout::move_if_needed(controls.btn_card, wnd_r);
+	}
 
 	if (!state.is_open) {
 		RECT title_r { 
@@ -417,8 +430,12 @@ i32 resize_controls(const State& state, bool resize = true) {
 		};
 		if (resize) {
 			auto pin = rect_i32::create_from(title_r).cut_right(RECTH(title_r));
-			move_window(controls.edo_title, title_r);
-			MoveWindow(controls.btn_pin, pin);
+			RECT pin_r = pin.to_RECT();
+			std::array<child_layout::MoveRequest, 2> child_moves{ {
+				{ controls.edo_title, title_r }, { controls.btn_pin, pin_r }
+			} };
+			render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_children_batch };
+			child_layout::move_batch(child_moves);
 		}
 		return RECTH(title_r);
 	}
@@ -430,8 +447,10 @@ i32 resize_controls(const State& state, bool resize = true) {
 			.right = title_r.left + title_w, 
 			.bottom = title_r.top + title_h };
 
-		const auto tools = _password_editor_tool_list();
+		const std::array tools = _password_editor_tool_list();
 		const auto tool_cnt = tools.size();
+		std::array<child_layout::MoveRequest, tools.size() + 2> child_moves;
+		size_t child_count = 0;
 		auto total_tool_pad = (tool_cnt - 1) * pad;
 		auto toolbar_usable_w = toolbar_w - total_tool_pad;
 		auto max_tool_w = DPI(80);
@@ -443,7 +462,7 @@ i32 resize_controls(const State& state, bool resize = true) {
 			tool_r.top = title_r.top;
 			tool_r.right = tool_x + tool_w;
 			tool_r.bottom = title_r.bottom;
-			move_window(c, tool_r);
+			if (resize) child_moves[child_count++] = { c, tool_r };
 			tool_x = tool_r.right + pad;
 		}
 		const auto& tbl = *table::get_state(controls.tbl_values);
@@ -455,8 +474,10 @@ i32 resize_controls(const State& state, bool resize = true) {
 		};
 
 		if (resize) {
-			move_window(controls.edo_title, title_r);
-			move_window(controls.tbl_values, values_r);
+			child_moves[child_count++] = { controls.edo_title, title_r };
+			child_moves[child_count++] = { controls.tbl_values, values_r };
+			render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_children_batch };
+			child_layout::move_batch(std::span(child_moves).first(child_count));
 		}
 		return values_r.bottom + pad * 2;
 	}
@@ -495,6 +516,7 @@ LRESULT CALLBACK proc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_SIZE:
 	{
+		render_diagnostics::record_count(render_diagnostics::Event::card_size_message);
 		LRESULT res = DefWindowProc(wnd, msg, wparam, lparam);
 		resize_controls(state);
 		return res;

@@ -8,6 +8,7 @@
 #include "resource.h" //TODO(fran): everything that we take from the resources must be parameterized
 #include "serialization.h"
 #include "reflection.h"
+#include "render_diagnostics.h"
 
 // ------------------------ USAGE NOTES ------------------------ //
 // - If you need menus to resize, for example when you change languages
@@ -350,6 +351,7 @@ bool handle_nclbuttondown(State& state, POINT mouse, i32 hittest) {
 }
 
 void resize_controls(State& state) {
+	render_diagnostics::Scope diagnostic{ render_diagnostics::Event::window_resize };
 	RECT rc = calc_client_rc(state); MoveWindow(state.client, rc.left, rc.top, RECTW(rc), RECTH(rc), TRUE);
 
 	RECT btn_min_rc = state.settings->can_maximize ? calc_btn_min_rc(state) : calc_btn_max_rc(state);
@@ -379,6 +381,12 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	State& state = *get_state(hwnd);
 
 	switch (msg) {
+	case WM_ENTERSIZEMOVE:
+		render_diagnostics::begin_resize_session();
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	case WM_EXITSIZEMOVE:
+		render_diagnostics::end_resize_session();
+		return DefWindowProc(hwnd, msg, wparam, lparam);
 	case WM_WINDOWPOSCHANGED: //TODO(fran): we can use this guy to replace WM_SIZE and WM_MOVE by not calling defwindowproc
 	{
 		calc_caption(state);
@@ -397,6 +405,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_PAINT:
 	{
+		render_diagnostics::Scope diagnostic{ render_diagnostics::Event::caption_paint };
 		PAINTSTRUCT ps;
 		HDC dc = BeginPaint(state.wnd, &ps); defer{ EndPaint(state.wnd, &ps); };
 
@@ -869,9 +878,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_NCLBUTTONUP:
 	case WM_SYSCOMMAND://Menu and nc buttons related //TODO(fran): maybe I should use this for sending max,min,close
 	case WM_CAPTURECHANGED://just a notif
-	case WM_ENTERSIZEMOVE://window entered moving/sizing loop
 	case WM_SIZING://sent while user is resizing, you can monitor and change size/pos of "drag" rectangle
-	case WM_EXITSIZEMOVE:
 	case WM_MOVING:
 	case WM_NCRBUTTONDOWN:
 	case WM_ENTERMENULOOP://notif

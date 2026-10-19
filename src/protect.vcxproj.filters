@@ -93,6 +93,9 @@
     <ClInclude Include="helpers.h">
       <Filter>Header Files\Utils</Filter>
     </ClInclude>
+    <ClInclude Include="child_layout.h">
+      <Filter>Header Files\Utils</Filter>
+    </ClInclude>
     <ClInclude Include="math.h">
       <Filter>Header Files\Utils</Filter>
     </ClInclude>
@@ -107,6 +110,9 @@
     </ClInclude>
     <ClInclude Include="reflection.h">
       <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="render_diagnostics.h">
+      <Filter>Header Files\Utils</Filter>
     </ClInclude>
     <ClInclude Include="button_types.h">
       <Filter>Header Files\Controls\Button</Filter>

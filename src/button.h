@@ -274,6 +274,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 	} break;
 	case WM_PAINT:
 	{
+		render_diagnostics::Scope diagnostic{ render_diagnostics::Event::button_paint };
 		PAINTSTRUCT ps;
 		HDC dc = BeginPaint(state.wnd, &ps); defer{ EndPaint(state.wnd, &ps); };
 

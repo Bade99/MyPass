@@ -504,6 +504,7 @@ namespace urender {
 
 	template<typename T>
 	void draw_background(HDC dc, const RECT& r, HBRUSH bk, HBRUSH border, const T& dimensions) {
+		render_diagnostics::Scope diagnostic{ render_diagnostics::Event::background };
 		auto w = RECTW(r), h = RECTH(r);
 		auto min_dim = minimum(w, h);
 		auto borderSize = dimensions.border_thickness;
@@ -571,33 +572,50 @@ namespace urender {
 	void draw_text(HDC dc, const RECT& r, utf16_str txt, HFONT f, HBRUSH txt_br, TextAlignment alignment, i32 pad_x,
 		TextVerticalAlignment vertical_alignment = TextVerticalAlignment::center, i32 pad_y = 0) {
 		if (!txt.str || !txt.cnt() || r.right <= r.left || r.bottom <= r.top) return;
+		render_diagnostics::Scope diagnostic{ render_diagnostics::Event::static_text };
 		IDWriteTextLayout* layout = nil;
 		if (text_render::create_text_layout(dc, f, { txt.str, txt.cnt() }, &layout)) {
 			defer{ text_render::release_com(layout); };
 			DWRITE_TEXT_METRICS metrics{};
 			if (layout->GetMetrics(&metrics) == S_OK) {
+				f32 width = (f32)(r.right - r.left);
+				f32 height = (f32)(r.bottom - r.top);
+				f32 x = alignment == TextAlignment::center ? (width - metrics.widthIncludingTrailingWhitespace) / 2.f
+					: alignment == TextAlignment::right ? width - pad_x - metrics.widthIncludingTrailingWhitespace : (f32)pad_x;
+				f32 y = vertical_alignment == TextVerticalAlignment::top ? (f32)pad_y
+					: vertical_alignment == TextVerticalAlignment::bottom ? height - pad_y - metrics.height
+					: (height - metrics.height) / 2.f;
+				D2D1_POINT_2F origin{ (f32)r.left + x, (f32)r.top + y };
+				if (render_diagnostics::directwrite_gdi()) {
+					text_render::BitmapDrawSession bitmap_session;
+					if (bitmap_session.begin(dc, r, ColorFromBrush(txt_br)) &&
+						bitmap_session.draw(layout, origin.x, origin.y) && bitmap_session.finish()) return;
+				}
 				ID2D1DCRenderTarget* target = nil;
 				if (text_render::create_dc_render_target(dc, r, &target)) {
 					defer{ text_render::release_com(target); };
 					ID2D1SolidColorBrush* brush = nil;
 					if (text_render::create_text_brush(target, ColorFromBrush(txt_br), &brush)) {
 						defer{ text_render::release_com(brush); };
-						f32 width = (f32)(r.right - r.left);
-						f32 height = (f32)(r.bottom - r.top);
-						f32 x = alignment == TextAlignment::center ? (width - metrics.widthIncludingTrailingWhitespace) / 2.f
-							: alignment == TextAlignment::right ? width - pad_x - metrics.widthIncludingTrailingWhitespace : (f32)pad_x;
-						f32 y = vertical_alignment == TextVerticalAlignment::top ? (f32)pad_y
-							: vertical_alignment == TextVerticalAlignment::bottom ? height - pad_y - metrics.height
-							: (height - metrics.height) / 2.f;
-						target->BeginDraw();
+						{
+							render_diagnostics::Scope draw_diagnostic{ render_diagnostics::Event::dc_begin_draw };
+							target->BeginDraw();
+						}
 						target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
 						target->DrawTextLayout({ x, y }, layout, brush, D2D1_DRAW_TEXT_OPTIONS_NONE);
-						if (target->EndDraw() == S_OK) return;
+						HRESULT result;
+						{
+							render_diagnostics::Scope draw_diagnostic{ render_diagnostics::Event::dc_end_draw };
+							result = target->EndDraw();
+						}
+						if (result == S_OK) return;
+						render_diagnostics::record_count(render_diagnostics::Event::dc_end_failure);
 					}
 				}
 			}
 		}
 
+		render_diagnostics::Scope gdi_diagnostic{ render_diagnostics::Event::gdi_text };
 		HFONT oldfont = f ? SelectFont(dc, f) : nil;
 		defer{ if (oldfont) SelectFont(dc, oldfont); };
 		UINT oldalign = GetTextAlign(dc); defer{ SetTextAlign(dc,oldalign); };

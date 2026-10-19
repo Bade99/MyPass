@@ -1,5 +1,8 @@
 #pragma once
 
+#include "render_diagnostics.h"
+#include "child_layout.h"
+
 /**
   * Core Principles: simple table, maybe it can scroll, but it just renders all items, there's no sparse/virtualized cells
  */
@@ -56,6 +59,8 @@ namespace table {
 		auto col_cnt = state.column_cnt;
 
 		auto cols_w = calc_cell_widths(state.theme.cells.columns_w, col_cnt, w);
+		std::vector<child_layout::MoveRequest> cell_moves;
+		cell_moves.reserve(state.rows.size() * col_cnt);
 
 		RECT row{ 0 };
 		for (const auto& c : state.rows) {
@@ -64,11 +69,13 @@ namespace table {
 			for (u32 i = 0; i < col_cnt; i++) {
 				col.right += cols_w[i];
 				RECT cell = col; InflateRect(&cell, -1, -1);
-				move_window(c[i], cell);
+				cell_moves.push_back({ c[i], cell });
 				col.left = col.right;
 			}
 			row.top = row.bottom;
 		}
+		render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::table_children_batch };
+		child_layout::move_batch(cell_moves);
 	}
 
 	auto get_state(HWND wnd) { _control_create_function__get_state }
@@ -100,6 +107,7 @@ namespace table {
 		} break;
 		case WM_SIZE:
 		{
+			render_diagnostics::record_count(render_diagnostics::Event::table_size_message);
 			LRESULT res = DefWindowProc(wnd, msg, wparam, lparam);
 			resize_controls(state);
 			return res;
