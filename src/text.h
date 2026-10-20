@@ -508,7 +508,7 @@ void scroll_to_caret(State& state) {
 
 	RECT rc; GetClientRect(state.wnd, &rc);
 	auto w = RECTW(rc), h = RECTH(rc);
-	if (!w || !h) return; //TODO(fran): this is probably more accurate by checking for element visibility or smth like that
+	if (w <= 0 || h <= 0) return;
 	int horizontal_padding = GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_CENTER ? 3 : state.padding.x;
 	int old_scroll_x = state.scroll.x;
 	//TODO(fran): im sure this can be done branchless
@@ -541,7 +541,7 @@ void scroll_to_caret(State& state) {
 		state.scroll.y += scroll;
 		ask_window_for_repaint(state.wnd);
 	}
-	else if ((GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_EXPANSIBLE) && h >= desired_height(state)) {
+	else if (state.scroll.y != 0 && (GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_EXPANSIBLE) && h >= desired_height(state)) {
 		//HACK?: scroll up if you can fit all lines
 		state.scroll.y = 0; //TODO(fran): im sure this special case will introduce bugs
 		ask_window_for_repaint(state.wnd);
@@ -994,8 +994,9 @@ bool end_IME_composition(State& state) {
 		if (!composition.provisional_text.empty()) {
 			size_t x_min = composition.position_x_min + composition.committed_text.length();
 			str empty_text;
-			if (!insert_character<false>(state, to_utf_str(empty_text), x_min, x_min + composition.provisional_text.length()))
+			if (!insert_character<false>(state, to_utf_str(empty_text), x_min, x_min + composition.provisional_text.length())) {
 				Assert(0);
+			}
 			composition.provisional_text.clear();
 		}
 
@@ -1021,8 +1022,9 @@ bool end_IME_composition(State& state) {
 	else if (composition.document_replaced) {
 		size_t inserted_length = composition.committed_text.length() + composition.provisional_text.length();
 		if (!insert_character<false>(state, to_utf_str(composition.removed_text),
-			composition.position_x_min, composition.position_x_min + inserted_length))
+			composition.position_x_min, composition.position_x_min + inserted_length)) {
 			Assert(0);
+		}
 		set_selection(state, composition.selection_before.anchor, composition.selection_before.cursor,
 			composition.selection_before_trailing);
 	}

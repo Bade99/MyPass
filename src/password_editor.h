@@ -87,7 +87,7 @@ namespace password_editor {
 				child_moves[0] = { controls.text, title_r };
 
 				auto tools = { controls.btn_show, controls.btn_copy, controls.btn_lock, controls.btn_del };
-				const auto tool_cnt = tools.size();
+				const i32 tool_cnt = (i32)tools.size();
 				auto total_tool_pad = (tool_cnt - 1) * pad;
 				auto toolbar_usable_w = toolbar_w - total_tool_pad;
 				auto tool_h = RECTH(title_r);

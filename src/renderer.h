@@ -23,7 +23,9 @@
 
 HRESULT WriteBitmap(HBITMAP bitmap, const cstr* pathname) {
 	//TODO(fran): solve limitations https://stackoverflow.com/questions/24720451/save-hbitmap-to-bmp-file-using-only-win32
-	CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	HRESULT initialization_result = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	if (FAILED(initialization_result)) return initialization_result;
+	defer{ CoUninitialize(); };
 	HRESULT hr = S_OK;
 
 	// (1) Retrieve properties from the source HBITMAP.
@@ -103,32 +105,10 @@ HRESULT WriteBitmap(HBITMAP bitmap, const cstr* pathname) {
 		factory->Release();
 
 	return hr;
-	CoUninitialize();
 }
 #else
 HRESULT WriteBitmap(HBITMAP bitmap, const cstr* pathname = _t("")) {};
 #endif
-
-int FillRectAlpha(HDC dc, const RECT& r, HBRUSH br, u8 alpha) {
-	COLORREF color = ColorFromBrush(br);
-	color |= (alpha << 24);
-
-	BITMAPINFO nfo;
-	nfo.bmiHeader.biSize = sizeof(nfo.bmiHeader);
-	nfo.bmiHeader.biWidth = 1;
-	nfo.bmiHeader.biHeight = -1;
-	nfo.bmiHeader.biPlanes = 1;
-	nfo.bmiHeader.biBitCount = 32;
-	nfo.bmiHeader.biCompression = BI_RGB;
-	nfo.bmiHeader.biSizeImage = 0;
-	nfo.bmiHeader.biXPelsPerMeter = 0;
-	nfo.bmiHeader.biYPelsPerMeter = 0;
-	nfo.bmiHeader.biClrUsed = 0;
-	nfo.bmiHeader.biClrImportant = 0;
-
-	int res = StretchDIBits(dc, r.left, r.top, RECTW(r), RECTH(r), 0, 0, 1, 1, &color, &nfo, DIB_RGB_COLORS, SRCCOPY);
-	return res;
-}
 
 struct MaskImage {
 	i32 width;
@@ -486,7 +466,6 @@ namespace urender {
 		graphics.DrawPath(&pen, &path);
 	}
 
-	//TODO: review why I have this function using gdiplus while the function on top using stretchdibits, does the other one not work?
 	void FillRectAlpha(HDC dc, const RECT& rc, u8 r, u8 g, u8 b, u8 a) {
 #ifdef USE_GDIPLUS
 		using namespace Gdiplus;

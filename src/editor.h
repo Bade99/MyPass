@@ -127,7 +127,7 @@ void resize_controls(State& state) {
 			child_layout::move_if_needed(controls.btn_static_bk_transition, btn_static_bk_transition);
 			child_layout::move_if_needed(controls.btn_static_transition, btn_static_transition);
 			child_layout::move_if_needed(controls.static_transition, static_transition);
-			child_layout::move_if_needed(controls.btn_confirm_transfer, btn_confirm_transfer); //TODO(fran): small bug, btn doesnt automatically resize when changing languages, this is probably a general issue, look at my language learning app to see how I solved it
+			child_layout::move_if_needed(controls.btn_confirm_transfer, btn_confirm_transfer);
 			child_layout::move_if_needed(controls.edit_passwords, edit_showpasswords);
 			child_layout::move_if_needed(controls.icon_transition, icon_transition);
 		}
@@ -321,7 +321,7 @@ void add_controls(State& state) {
 				SortAlphabetic element;
 				element.wnd = p;
 				element.title.resize_and_overwrite(len,
-					[=](utf16* buf, size_t buf_size) { return GetWindowText(title, buf, buf_size); });
+					[=](utf16* buf, size_t) { return GetWindowText(title, buf, len); });
 				if (pin) to_sort_pinned.push_back(std::move(element));
 				else to_sort.push_back(std::move(element));
 			}
@@ -735,7 +735,7 @@ bool save_passwords(State& state, bool complete_version_transition = false) {
 
 	auto data = generate_save_data_v1(state);
 	
-	res = save_to_file_user(state.current_user, data.data(), data.size());
+	res = data.size() <= U32MAX && save_to_file_user(state.current_user, data.data(), (u32)data.size());
 	set_passwords_need_save(state, !res);
 	if (!res) CustomMessageBox(state.wnd, RCS(LANG_ERROR_SAVEFILE_PASSWORDS), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement);
 	return res;
@@ -1026,6 +1026,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			_foreach_language(_generate_enum_cases_language)
 			{
 				LanguageManager::Instance().ChangeLanguage((Language)LOWORD(wparam));
+				resize_controls(state);
 				HMENU old_menu = GetMenu(state.nc_parent);
 				add_menus(state);
 				DestroyMenu(old_menu);

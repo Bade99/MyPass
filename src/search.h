@@ -164,7 +164,6 @@ void search_and_scroll(State& state, bool search_in_current_selection) {
 
 auto get_state(HWND wnd) { _control_create_function__get_state }
 
-//TODO(fran): when the parent gets resized it should tell us to resize
 void resize_wnd(State& state) {
 	Assert(state.placement_flags);
 

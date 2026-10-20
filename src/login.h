@@ -282,6 +282,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		_foreach_language(_generate_enum_cases)
 		{
 			LanguageManager::Instance().ChangeLanguage((Language)LOWORD(wparam));
+			resize_controls(state);
+			ask_window_for_repaint(state.wnd);
 			return 0;
 		}
 		}

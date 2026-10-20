@@ -227,7 +227,7 @@ __sha256_process_bytes(const void* buffer, size_t len, struct Sha256Context* ctx
 		size_t left_over = ctx->buflen;
 		size_t add = 128 - left_over > len ? len : 128 - left_over;
 		memcpy(&ctx->buffer[left_over], buffer, add);
-		ctx->buflen += add;
+		ctx->buflen += static_cast<u32>(add);
 		if (ctx->buflen > 64)
 		{
 			__sha256_process_block(ctx->buffer, ctx->buflen & ~63, ctx);
@@ -277,6 +277,6 @@ __sha256_process_bytes(const void* buffer, size_t len, struct Sha256Context* ctx
 			left_over -= 64;
 			memcpy(ctx->buffer, &ctx->buffer[64], left_over);
 		}
-		ctx->buflen = left_over;
+		ctx->buflen = static_cast<u32>(left_over);
 	}
 }

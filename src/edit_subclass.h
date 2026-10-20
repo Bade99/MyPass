@@ -119,10 +119,6 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 	case WM_SIZE:
 	{
 		LRESULT res = DefSubclassProc(hwnd, msg, wparam, lparam);
-		SIZE* control_size = (SIZE*)wparam;
-
-		//MoveWindow(hwnd, TabOffset.leftOffset, TabOffset.topOffset, control_size->cx - TabOffset.rightOffset - TabOffset.leftOffset, control_size->cy - TabOffset.bottomOffset - TabOffset.topOffset, TRUE);
-		//x & y remain fixed and only width & height change
 
 		if (state.vscrollbar)SendMessage(state.vscrollbar, scrollbar::custom_message::AUTORESIZE, 0, 0);
 		if (state.search)SendMessage(state.search, SRH_AUTORESIZE, 0, 0);
@@ -144,25 +140,9 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 	//TODO(fran): add more
 	{
 		LRESULT res = DefSubclassProc(hwnd, msg, wparam, lparam);
-		//if (state.vscrollbar)SendMessage(state.vscrollbar, U_SB_AUTORESIZE, 0, 0);
-		//if (state.search)SendMessage(state.search, SRH_AUTORESIZE, 0, 0);
 		state.update_scrollbar();
 		return res;
 	} break;
-#if 0
-	case EM_SETSCROLLPOS:
-	case EM_LINESCROLL:
-	case EM_SCROLL:
-	case EM_SCROLLCARET:
-	case WM_VSCROLL:
-	case WM_HSCROLL:
-	{//Attempt to fix scrolling issue in rich edit control, not good enough
-		LRESULT res = DefSubclassProc(hwnd, msg, wparam, lparam);
-		if (state.vscrollbar)SendMessage(state.vscrollbar, U_SB_AUTORESIZE, 0, 0);
-		if (state.search)SendMessage(state.search, SRH_AUTORESIZE, 0, 0);
-		return res;
-	}
-#endif
 	case EM_SHOWSEARCHWND:
 	{
 		BOOL show = (BOOL)wparam;

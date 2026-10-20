@@ -170,6 +170,9 @@ public:
 		for (auto const& hwnd_id_sid : this->Comboboxes)
 			this->UpdateCombo(hwnd_id_sid.first.first, hwnd_id_sid.first.second, hwnd_id_sid.second);
 
+		//TODO(fran): Notify each managed control's layout owner once after updating translated text,
+		//so size-dependent controls relayout and repaint without callers handling language changes.
+		//AddDynamicText currently requires manual registration and allows only one message per HWND.
 		for (auto const& hwnd_msg : this->DynamicHwnds) {
 			this->UpdateDynamicHwnd(hwnd_msg.first, hwnd_msg.second);
 		}
@@ -362,7 +365,7 @@ private:
 		//TODO(fran): fallback to GetUserDefaultUILanguage if OS lower than Windows Vista
 
 		if (ret) {
-			for(u32 i = 0; i + 3 < prefsz && preferences[i]; i++) {
+			for(size_t i = 0; i + 3 < prefsz && preferences[i]; i++) {
 				Language lang = from_language_name(preferences[i], preferences[i + 1], preferences[i + 2]);
 				if (lang) {
 					res = lang;

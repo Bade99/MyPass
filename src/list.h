@@ -93,10 +93,14 @@ namespace listbox {
 
 			//NOTE: do _not_ paint the border here, since it should fit the real size of the wnd
 
-			//Render the elements
-			//TODO(fran): we should have a list of changed elems so we know which ones need redrawing, otherwise this wont scale at all
 			if (state.render_element) {
+				RECT elem_rc = rectWH(0, (i32)elem_idx * state.element_dim.cy, state.element_dim.cx, state.element_dim.cy);
+				int saved_dc = SaveDC(dc);
+				if (saved_dc) IntersectClipRect(dc, elem_rc.left, elem_rc.top, elem_rc.right, elem_rc.bottom);
+				HBRUSH bk_br = !IsWindowEnabled(state.wnd) && state.brushes.bk_disabled ? state.brushes.bk_disabled : state.brushes.bk;
+				FillRect(dc, &elem_rc, bk_br);
 				render_element_at(state, dc, elem_idx);
+				if (saved_dc) RestoreDC(dc, saved_dc);
 			}
 		}
 	}
@@ -121,7 +125,6 @@ namespace listbox {
 	}
 
 	void full_backbuffer_redo(State& state) {
-		//SIZE sz = calc_element_placements(state);
 		size_t elem_cnt = state.elements.size();
 		SIZE sz{ state.element_dim.cx, (i32)elem_cnt * state.element_dim.cy };
 		resize_backbuffer(state, sz);
@@ -498,7 +501,6 @@ namespace listbox {
 
 				if (old_element != no_element && old_element < state.elements.size()) render_backbuffer_element(state, old_element);
 				if (state.mouse_hover_element != no_element && state.mouse_hover_element < state.elements.size()) render_backbuffer_element(state, state.mouse_hover_element);
-				//render_backbuffer(state);
 				ask_window_for_repaint(state.wnd);
 
 			//We now need to know when the mouse exits our window to clear the mouse_hover_element
@@ -519,7 +521,6 @@ namespace listbox {
 				size_t old_element = state.mouse_hover_element;
 				state.mouse_hover_element = no_element;
 				if (old_element != no_element && old_element < state.elements.size()) render_backbuffer_element(state, old_element);
-				//render_backbuffer(state);
 				ask_window_for_repaint(state.wnd);
 			}
 			return 0;
@@ -546,7 +547,6 @@ namespace listbox {
 				state.clicked_element = clicked_element;
 
 				if (state.clicked_element != no_element && state.clicked_element < state.elements.size()) render_backbuffer_element(state, state.clicked_element);
-				//render_backbuffer(state);
 				ask_window_for_repaint(state.wnd);
 			}
 			if (clicked_element != no_element) SetCapture(state.wnd);
