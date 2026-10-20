@@ -128,10 +128,8 @@ void load_styles() {
 		t.brushes.border.normal = colors.Img;
 		t.brushes.border.disabled = colors.Img_Disabled;
 		t.brushes.placeholder.normal = colors.ControlTxt_Disabled;
-		//base_editoneline.brushes.selection.normal = colors.Selection;
-		//base_editoneline.brushes.selection.disabled = colors.Selection_Disabled;
 		t.brushes.selection.normal = colors.Img;
-		t.brushes.selection.disabled = colors.Img_Disabled; //TODO(fran): use disabled when the text edit has a selection but is not focused
+		t.brushes.selection.disabled = colors.Img_Disabled;
 		return t;
 	}();
 

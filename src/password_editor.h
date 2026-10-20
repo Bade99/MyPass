@@ -38,22 +38,28 @@ namespace password_editor {
 
 			bool default_hidden;
 
+			void set_hidden(bool hidden) {
+				auto& controls = this->controls;
+				LONG_PTR style = GetWindowLongPtr(controls.text, GWL_STYLE);
+				if (hidden) style |= ES_PASSWORD;
+				else style &= ~ES_PASSWORD;
+				SetWindowLongPtr(controls.text, GWL_STYLE, style);
+				ask_window_for_repaint(controls.text);
+				button::set_selected(controls.btn_show, !hidden);
+				SendMessage(controls.btn_show, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)(hidden ? bmps.eye_open : bmps.eye_closed));
+			}
+
 			void set_default_hidden(bool new_default_hidden) {
 				auto& state = *this;
 				state.default_hidden = new_default_hidden;
 
 				auto& controls = state.controls;
 
-				LONG_PTR style = GetWindowLongPtr(controls.text, GWL_STYLE);
-				if (state.default_hidden) style |= ES_PASSWORD;
-				else style &= ~ES_PASSWORD;
-				SetWindowLongPtr(controls.text, GWL_STYLE, style);
-				ask_window_for_repaint(controls.text);
+				state.set_hidden(state.default_hidden);
 
 				button::set_selected(controls.btn_lock, state.default_hidden);
 
 				ShowWindow(controls.btn_show, state.default_hidden ? SW_SHOW : SW_HIDE);
-				SendMessage(controls.btn_show, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)(state.default_hidden ? bmps.eye_open : bmps.eye_closed));
 			}
 		};
 
@@ -81,7 +87,7 @@ namespace password_editor {
 				child_moves[0] = { controls.text, title_r };
 
 				auto tools = { controls.btn_show, controls.btn_copy, controls.btn_lock, controls.btn_del };
-				const auto tool_cnt = tools.size();
+				const i32 tool_cnt = (i32)tools.size();
 				auto total_tool_pad = (tool_cnt - 1) * pad;
 				auto toolbar_usable_w = toolbar_w - total_tool_pad;
 				auto tool_h = RECTH(title_r);
@@ -119,6 +125,11 @@ namespace password_editor {
 		_init_wndclass_at_startup;
 	}
 
+void set_row_editing_enabled(const std::array<HWND, table::MAX_COLUMNS>& row, bool enabled) {
+	EnableWindow(row[0], enabled);
+	PostMessage(row[1], WM_ENABLE_REQUEST, enabled, 0);
+}
+
 void on_internal_state_change(State& state) {
 	auto& controls = state.controls;
 	button::set_selected(controls.btn_card, state.is_open);
@@ -141,10 +152,8 @@ void on_internal_state_change(State& state) {
 	//TODO: may be better to ask the table to do this child disabling logic by itself
 	//Also this is too restrictive, we want to send a message to the individual cells to disable themselves, so they can decide what needs disabling and what not, eg a 'copy field' button should always stay enabled
 	auto& tbl = *table::get_state(controls.tbl_values);
-	for (auto& r : tbl.rows) {
-		EnableWindow(r[0], enable_editing);
-		PostMessage(r[1], WM_ENABLE_REQUEST, enable_editing, 0);
-	}
+	for (const auto& row : tbl.rows)
+		set_row_editing_enabled(row, enable_editing);
 	ask_window_for_resize(state.manager_parent);
 	ask_window_for_repaint(state.manager_parent);
 }
@@ -165,7 +174,6 @@ void set_is_editing(State& state, bool is_editing) {
 }
 
 void on_properties_changed(State& state) {
-	//TODO(fran): update tip text on change to modified state (at least this way we dont have to use the msg queue and the proc)
 	TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
 	toolInfo.hwnd = state.controls.btn_dates;
 	toolInfo.uId = (UINT_PTR)state.controls.btn_dates;
@@ -191,6 +199,7 @@ void table_add_row(State& state, DescriptionCell* description, ValueCell* value)
 	if (!description->on_change) description->on_change = state.stateful_functions.on_change;
 	if (!value->on_change) value->on_change = state.stateful_functions.on_change;
 	table::add_row(tbl, description, value);
+	set_row_editing_enabled(tbl.rows.back(), state.is_open && state.is_editing);
 }
 
 void create_controls(State& state) {
@@ -321,12 +330,8 @@ void create_controls(State& state) {
 					button::set_functions(controls.btn_show, {
 						.on_click = [](void* data, HWND wnd) {
 							value_cell::State& state = *(value_cell::State*)data;
-							auto& controls = state.controls;
-							LONG_PTR style = GetWindowLongPtr(controls.text, GWL_STYLE) ^ ES_PASSWORD;
-							SetWindowLongPtr(controls.text, GWL_STYLE, style);
-							ask_window_for_repaint(controls.text);
-							SendMessage(controls.btn_show, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)(style & ES_PASSWORD ? bmps.eye_open : bmps.eye_closed));
-							//TODO: move to listener like set_default_hidden, and modify btn colors based on state
+							bool hidden = GetWindowLongPtr(state.controls.text, GWL_STYLE) & ES_PASSWORD;
+							state.set_hidden(!hidden);
 						}
 					});
 
@@ -522,46 +527,6 @@ LRESULT CALLBACK proc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		resize_controls(state);
 		return res;
 	} break;
-	//case WM_NOTIFY:
-	//{
-	//	//TODO: look into this for custom coloring the tooltips
-	//	return L"FFF";
-	//	//add_mouseover_tooltip(controls.btn_dates, LANG_PWD_ED_DATES);
-	//	NMHDR* msg_info = (NMHDR*)lparam;
-	//	if (msg_info->hwndFrom == state.controls.tooltip) {
-	//		switch (msg_info->code) {
-	//		case NM_CUSTOMDRAW:
-	//		{
-	//			NMTTCUSTOMDRAW* cd = (NMTTCUSTOMDRAW*)lparam;
-	//			//INFO: cd->uDrawFlags = flags for DrawText
-	//			switch (cd->nmcd.dwDrawStage) {
-	//				//TODO(fran): probably case CDDS_PREERASE: for SetBkColor for the background
-	//			case CDDS_PREPAINT:
-	//			{
-	//				return CDRF_NOTIFYITEMDRAW;//TODO(fran): I think im lacking something here, we never get CDDS_ITEMPREPAINT, it's possible the msgs are not sent cause it uses a visual style, in which case it doesnt care about you, we would have to remove it with setwindowtheme, and since there wont be any style we'll have to draw it completely ourselves I guess
-	//			} break;
-	//			case CDDS_ITEMPREPAINT://Setup before painting an item
-	//			{
-	//				//SelectFont(cd->nmcd.hdc, state.theme.font);
-	//				//SetTextColor(cd->nmcd.hdc, ColorFromBrush(state.theme.brushes.foreground.normal));
-	//				//SetBkColor(cd->nmcd.hdc, ColorFromBrush(state.theme.brushes.bk.normal));
-	//				return CDRF_NEWFONT;
-	//			} break;
-	//			default: return CDRF_DODEFAULT;
-	//			}
-	//		} break;
-	//		case TTN_GETDISPINFO:
-	//			Assert(0);
-	//		case TTN_LINKCLICK:
-	//			Assert(0);
-	//		case TTN_POP://Tooltip is about to be hidden
-	//			return 0;
-	//		case TTN_SHOW://Tooltip is about to be shown
-	//			return 0;//here we can change the tooltip's position
-	//		}
-	//	}
-	//	return DefWindowProc(hwnd, msg, wparam, lparam);
-	//} break;
 	default:
 	defproc:
 		return DefWindowProc(wnd, msg, wparam, lparam);

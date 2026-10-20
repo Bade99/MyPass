@@ -65,7 +65,6 @@ str GetFontFaceName() {
 	//Stock fonts: https://docs.microsoft.com/en-us/windows/win32/gdi/using-a-stock-font-to-draw-text
 
 	//TODO(fran): can we take the best codepage from each font and create our own? (look at font linking & font fallback)
-	//TODO(fran): case insensitive comparison
 	//TODO(fran): speed up: use a custom allocator that starts by performing a single wchar_t[2500][22] allocation instead of using individually allocated strings
 
 	//We looked at 2195 fonts, this is what's left
@@ -78,10 +77,16 @@ str GetFontFaceName() {
 	i64 cnt = StartCounter(); defer{ printf("ELAPSED FIND FONT: %f ms\n",EndCounter(cnt)); };
 
 	HDC dc = GetDC(GetDesktopWindow()); defer{ ReleaseDC(GetDesktopWindow(),dc); };
-	std::set<str> fontnames;
+	struct FontNameLess {
+		bool operator()(const str& left, const str& right) const {
+			return _wcsicmp(left.c_str(), right.c_str()) < 0;
+		}
+	};
+	using FontNames = std::set<str, FontNameLess>;
+	FontNames fontnames;
 	EnumFontFamiliesEx(dc, NULL
 		, [](const LOGFONT* lpelfe, const TEXTMETRIC* /*lpntme*/, DWORD /*FontType*/, LPARAM lParam) -> int {
-			((std::set<str>*)lParam)->insert(lpelfe->lfFaceName);
+			((FontNames*)lParam)->insert(lpelfe->lfFaceName);
 			return TRUE;
 		}
 	, (LPARAM)&fontnames, NULL);
@@ -89,8 +94,8 @@ str GetFontFaceName() {
 	const TCHAR* requested_fontname[] = { TEXT("Segoe UI"), TEXT("Arial Unicode MS"), TEXT("Microsoft YaHei"), TEXT("Microsoft YaHei UI"), TEXT("Microsoft JhengHei"), TEXT("Microsoft JhengHei UI") };
 
 	for (const auto requested_font : requested_fontname)
-		if (fontnames.find(requested_font) != fontnames.end())
-			return requested_font;
+		if (auto font = fontnames.find(requested_font); font != fontnames.end())
+			return *font;
 
 	return TEXT("");
 }

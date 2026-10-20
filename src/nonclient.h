@@ -112,7 +112,6 @@ void set_menu(HWND uncapnc, HMENU menu) {
 		SetMenuInfo(menu, &mi);
 	}
 	else {
-		//TODO(fran): set to NULL should clear the menu, implement menu removal in case we already have something on state.menu
 		state.menu = NULL;
 	}
 	RECT wndrc; GetWindowRect(state.wnd, &wndrc);
@@ -158,30 +157,6 @@ void show_rclickmenu(State& state, POINT mouse) {
 
 	//NOTE: using tpm_returncmd would be a quick and simple cheat to get past msg collision problems and the like
 	TrackPopupMenuEx(subm, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, state.wnd, 0);
-}
-
-void manual_maximize(State& state) {//Maximize only works correctly for WM_OVERLAPPEDWINDOW, we gotta do it by hand
-	WINDOWPLACEMENT old_placement; GetWindowPlacement(state.wnd, &old_placement);
-	HMONITOR mon = MonitorFromWindow(state.wnd, MONITOR_DEFAULTTOPRIMARY);
-	MONITORINFO monnfo{ sizeof(monnfo) };
-	BOOL res = GetMonitorInfo(mon, &monnfo);
-	Assert(res);
-	RECT work_rc = monnfo.rcWork;//NOTE: im in a 1 monitor setup and it's exactly the same as the other rc so idk when it's different. Strangely enough it still doesnt go over the taskbar area, so I guess there's a check inside the resizing code done by windows somewhere
-
-	//TODO(fran):we're gonna have to store our current size to be able to manually restore if the user tries to move us or presses maximize again. SetWindowPlacement?
-	//TODO(fran): gotta decide what we want to do with the resizing borders, the top and bottom ones are still user reachable, both visual studio and chrome dont allow resizing but chrome developers where a little lazy and didnt update the margins of the window, therefore on the bottom the mouse still changes to the resizing one even though they dont allow the resize
-	work_rc.left -= state.nc.cxLeftWidth;
-	work_rc.right += state.nc.cxRightWidth;
-	work_rc.top -= state.nc.cyTopHeight;
-	work_rc.bottom += state.nc.cyBottomHeight;
-	MoveWindow(state.wnd, work_rc.left, work_rc.top, RECTW(work_rc), RECTH(work_rc), TRUE);
-	WINDOWPLACEMENT placement{ sizeof(placement) };
-	placement.showCmd = SW_MAXIMIZE;
-	placement.flags = WPF_ASYNCWINDOWPLACEMENT;
-	placement.ptMaxPosition.x = work_rc.left;
-	placement.ptMaxPosition.y = work_rc.top;
-	placement.rcNormalPosition = old_placement.rcNormalPosition;//TODO(fran): for non WS_EX_TOOLWINDOW windows all this should be in workspace coords
-	SetWindowPlacement(state.wnd, &placement);//TODO(fran): I just wanted to set the placement, not ask this guy to update my window too (maybe I can do some extra resizing to adjust the situation)
 }
 
 void resize_menu_backbuffer(State& state) {
@@ -237,13 +212,6 @@ void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 
 		//Set bk brush for drawing text
 		for (int i = 0; i < state.menubar_itemcnt; i++) {
-			bool on_mouseover = (i == menubar_mouseover_idx);
-			//Paint mouseover bk
-			if (on_mouseover) {
-				//TODO(fran): im having to cheat a little bit here by using the rc from the previous painting, it could be outdated
-				FillRect(dc, &state.menubar_items[i], colors.ControlBkMouseOver);
-			}
-
 			TCHAR menu_str[64];
 			menu_str[0] = TEXT(' ');//initial space
 			i32 menu_str_char_cnt = GetMenuString(state.menu, i, menu_str + 1, ARRAYSIZE(menu_str) - 2, MF_BYPOSITION);
@@ -252,8 +220,14 @@ void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 
 			str_view menu_text(menu_str, menu_str_char_cnt + 2);
 			auto txtw = urender::measure_text(dc, fonts.Menu, menu_text).cx;
-			RECT text_bounds = menuitemrc;
-			text_bounds.right = text_bounds.left + txtw;
+			RECT item_rect{
+				.left = menuitemrc.left, .top = menuitemrc.top,
+				.right = menuitemrc.left + txtw, .bottom = menuitemrc.bottom
+			};
+			if (i == menubar_mouseover_idx)
+				FillRect(dc, &item_rect, colors.ControlBkMouseOver);
+
+			RECT text_bounds = item_rect;
 			OffsetRect(&text_bounds, -menurc.left, -menurc.top);
 			POINT old_origin{};
 			SetViewportOrgEx(dc, 0, 0, &old_origin);
@@ -261,11 +235,7 @@ void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 			urender::draw_text(dc, text_bounds, text, fonts.Menu, txtbr, urender::TextAlignment::left, 0);
 			SetViewportOrgEx(dc, old_origin.x, old_origin.y, nil);
 
-			//Store menu item rc
-			state.menubar_items[i] = RECT{ 
-				.left = menuitemrc.left, .top = menuitemrc.top, 
-				.right = menuitemrc.left + txtw, .bottom = menuitemrc.bottom
-			};
+			state.menubar_items[i] = item_rect;
 
 			menuitemrc.left += txtw;
 		}
@@ -374,6 +344,34 @@ void set_is_maximized(State& state, bool new_is_maximized) {
 	}
 }
 
+void update_caption_button_theme(State& state) {
+	HBRUSH btn_border, btn_bk, btn_fore, btn_bk_push, btn_bk_mouseover;
+	if (state.active) {
+		btn_border = colors.CaptionBk;
+		btn_bk = colors.CaptionBk;
+		btn_fore = colors.Img;
+		btn_bk_push = colors.ControlBkPush;
+		btn_bk_mouseover = colors.ControlBkMouseOver;
+	}
+	else {
+		btn_border = colors.CaptionBk_Inactive;
+		btn_bk = colors.CaptionBk_Inactive;
+		btn_fore = colors.Img_Inactive;
+		btn_bk_push = colors.ControlBkPush;
+		btn_bk_mouseover = colors.ControlBkMouseOver;
+	}
+	button::Theme btn{
+		.brushes = {
+			.foreground = {.normal = btn_fore, .mouseover = btn_fore, .clicked = btn_fore},
+			.bk = {.normal = btn_bk, .mouseover = btn_bk_mouseover, .clicked = btn_bk_push},
+			.border = {.normal = btn_border, .mouseover = btn_border, .clicked = btn_border}
+		}
+	};
+	button::set_theme(state.btn_close, btn);
+	button::set_theme(state.btn_min, btn);
+	if (state.btn_max) button::set_theme(state.btn_max, btn);
+}
+
 //TODO(fran): add & at the beginning of menu string names, that's how you trigger them by pressing Alt+key https://stackoverflow.com/questions/38338426/meaning-of-ampersand-in-rc-files
 //TODO(fran): DPI awareness
 //TODO(fran): it'd be nice to have a way to implement good subclassing, eg letting the user assign clip regions where they can draw and we dont, things like that, more communication
@@ -441,32 +439,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			title_rc.bottom += offset_y;
 			urender::draw_text(dc, title_rc, to_utf_str(title), caption_font, txtbr, urender::TextAlignment::left, 0);
 
-			HBRUSH btn_border, btn_bk, btn_fore, btn_bk_push, btn_bk_mouseover;
-			if (state.active) {
-				btn_border = colors.CaptionBk;
-				btn_bk = colors.CaptionBk;
-				btn_fore = colors.Img;
-				btn_bk_push = colors.ControlBkPush;
-				btn_bk_mouseover = colors.ControlBkMouseOver;
-			}
-			else {
-				btn_border = colors.CaptionBk_Inactive;
-				btn_bk = colors.CaptionBk_Inactive;
-				btn_fore = colors.Img_Inactive;
-				btn_bk_push = colors.ControlBkPush;
-				btn_bk_mouseover = colors.ControlBkMouseOver;
-			}
-			button::Theme btn{
-				.brushes = {
-					.foreground = {.normal = btn_fore, .mouseover = btn_fore, .clicked = btn_fore},
-					.bk = {.normal = btn_bk, .mouseover = btn_bk_mouseover, .clicked = btn_bk_push},
-					.border = {.normal = btn_border, .mouseover = btn_border, .clicked = btn_border}
-				}
-			};
-			//TODO: we shouldnt be triggering a redraw while on wm_paint, this can be done elsewhere
-			button::set_theme(state.btn_close, btn);
-			button::set_theme(state.btn_min, btn);
-			if (state.btn_max) button::set_theme(state.btn_max, btn);
 		}
 
 		//TODO(fran): allow moving the menu up next to the title to get more screen real state, visual studio differentiates the menu items from the window title by rendering a darker square around the latter
@@ -501,6 +473,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		RECT btn_close_rc = calc_btn_close_rc(state);
 		state.btn_close = CreateWindow(button::wndclass, nil, WS_CHILD | WS_VISIBLE | BS_BITMAP, btn_close_rc.left, btn_close_rc.top, RECTW(btn_close_rc), RECTH(btn_close_rc), state.wnd, (HMENU)menu::close, 0, 0);
 		SendMessage(state.btn_close, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.close);
+		update_caption_button_theme(state);
 
 		//TODO(fran): let the user set the bitmaps, pass them in theme
 
@@ -523,7 +496,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			POINT cl_mouse = mouse; ScreenToClient(state.wnd, &cl_mouse);
 
 			if (test_pt_rc(cl_mouse, state.rc_icon)) {
-				PostMessage(state.wnd, WM_COMMAND, (WPARAM)MAKELONG(menu::close, 0), (LPARAM)state.btn_close);//TODO(fran): should I use WM_CLOSE?
+				PostMessage(state.wnd, WM_CLOSE, 0, 0);
 				return 0;
 			}
 
@@ -531,15 +504,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				WINDOWPLACEMENT p{ sizeof(p) }; GetWindowPlacement(state.wnd, &p);
 
 				if (p.showCmd == SW_SHOWMAXIMIZED) ShowWindow(state.wnd, SW_RESTORE);
-				else {
-	#if 1
-					//LONG_PTR  dwStyle = GetWindowLongPtr(state.wnd, GWL_STYLE);
-					//SetWindowLongPtr(state.wnd, GWL_STYLE, dwStyle | WS_OVERLAPPEDWINDOW);//TODO(fran): now im REALLY confused, I had to specifically take out WS_OVERLAPPEDWINDOW so it wouldnt paint over me and now it doesnt seem to, test more thoroughly //still though sizing isnt perfect, the top is still cut off
-					ShowWindow(state.wnd, SW_MAXIMIZE);
-	#else
-					manual_maximize(state);
-	#endif
-				}
+				else ShowWindow(state.wnd, SW_MAXIMIZE);
 			}
 		}
 		return 0;
@@ -561,9 +526,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			if (test_pt_rc(mouse, rc_top)) res = HTTOP;
 			elif (test_pt_rc(mouse, rc_topleft)) res = HTTOPLEFT;
 			elif (test_pt_rc(mouse, rc_topright)) res = HTTOPRIGHT;
-			/*else if (test_pt_rc(mouse, close_btn)) res = HTCLOSE; //TODO(fran): request this buttons for their rc
-			else if (test_pt_rc(mouse, max_btn)) res = HTMAXBUTTON;
-			else if (test_pt_rc(mouse, min_btn)) res = HTMINBUTTON;*/
 			elif (test_pt_rc(mouse, rc_menu)) res = HTSYSMENU;//HTMENU also works, but it seems a little slower on clicking for some reason //IMPORTANT: this is crucial for the default menu to detect clicks, otherwise no mouse input goes to it
 			elif (test_pt_rc(mouse, state.rc_caption)) res = HTCAPTION;
 		}
@@ -622,9 +584,12 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_SIZE:
 	{
 		bool is_maximized = wparam == SIZE_MAXIMIZED;
+		bool maximize_state_changed = state.is_maximized != is_maximized;
 		set_is_maximized(state, is_maximized);
 
 		resize_controls(state);
+		if (maximize_state_changed && state.client)
+			RedrawWindow(state.client, nil, nil, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
 
 		resize_menu_backbuffer(state);
 		return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -676,6 +641,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//So basically this guy is another WM_NCPAINT, just do exactly the same, but also here we have the option to paint slightly different if we are deactivated, so the user can see the change
 		BOOL active = (BOOL)wparam; //Indicates active or inactive state for a title bar or icon that needs to be changed
 		state.active = active;
+		update_caption_button_theme(state);
 		HRGN opt_upd_rgn = (HRGN)lparam; // handle to optional update region for the nonclient area. If set to -1, do nothing
 		if (state.menu) {
 			MENUINFO mi{ sizeof(mi) };
@@ -723,9 +689,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		} break;
 		case menu::close:
 		{
-			bool client_handled = SendMessage(state.client, WM_CLOSE, 0, 0);
-			if (!client_handled) DestroyWindow(state.wnd);
-			return 0;
+			return SendMessage(state.wnd, WM_CLOSE, 0, 0);
 		} break;
 		default: return SendMessage(state.client, msg, wparam, lparam);
 		}
@@ -744,34 +708,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//Sent when size or position are about to change
 		//Can override default maximized size and position, and the tracking size which sets the limit for the minimum & max size your window can be resized to, NOTE: the sizes/positions are relative to the primary monitor, windows automatically adjusts this values for secondary ones
 	{
-#if 0
-		RECT testrc{ 0,0,100,100 };//TODO(fran): since clearly this msg needed to be sent before WM_CREATE or WM_NCCREATE we dont have our state allocated yet, thanks to that and the fact this msg is called all the time afterwards we cant allocate here unless we add a boolean "initialized" or smth the like. For now we are gonna duplicate this code again, for the third time, ugly but we gotta do it
-		RECT ncrc = testrc;
-		AdjustWindowRect(&ncrc, WS_OVERLAPPEDWINDOW, FALSE);
-		MY_MARGINS margins;
-		margins.cxLeftWidth = distance(testrc.left, ncrc.left);
-		margins.cxRightWidth = distance(testrc.right, ncrc.right);
-		margins.cyBottomHeight = distance(testrc.bottom, ncrc.bottom);
-		margins.cyTopHeight = 0;
-
-		//INFO: for OVERLAPPEDWINDOWs any value of minmax->ptMaxPosition.y above or equal to 1 means let me handle it, if 0 or negative windows hardcodes whatever it wants and takes into account the taskbar
-		// for NON OVERLAPPEDWINDOWs you can set whatever you want but windows doesnt help, in this case you'll need to take into account the taskbar by hand
-
-		//INFO: even though the sizing box for the top part of the window is embedded inside the caption area windows adds and offset of, for example, -8 on the top part too (minmax->ptMaxPosition.y) and actually everybody draws differently when maximized, eg by default the buttons are shorter, the title and menu seem to get a little closer, others like chrome draw the buttons a little bit below but dont bother with the tabs, they dont change the size of the caption area, maybe they make the tab shorter but still it goes up to the last pixel. In summary, we got a couple options
-
-		//INFO: the plot thickens, as with all the very typical windows hackery you dont get all the info you need and thanks to that even programs like chrome do this wrong, if we put the taskbar on top chrome will still show the resizing mouse even though it doesnt allow for resizing, but the worst thing is that it shows ABOVE the taskbar, you can see the extra pixels cover part of the taskbar, visual studio on the other hand handles all this perfectly
-
-		//INFO: the fact that you cant use the resize borders when maximized is cause the window is actually over sized, that's strange for two reasons, first what happens on multiple monitors? shouldnt the extra size show up in the others?, second is that the size offset is applied to every border, now one of those four is gonna clash with the taskbar, is the taskbar just hiding the fact that the window is below by forcing itself on top?
-
-		printf("WM_GETMINMAXINFO\n");
-		MINMAXINFO* minmax = (MINMAXINFO*)lparam;
-		minmax->ptMaxPosition.y = 0;
-		minmax->ptMaxSize.y -= 16;
-		printf("left %d top %d right %d bottom %d width %d height %d\n", minmax->ptMaxPosition.x, minmax->ptMaxPosition.y, minmax->ptMaxSize.x, minmax->ptMaxSize.y, distance(minmax->ptMaxPosition.x, minmax->ptMaxSize.x), distance(minmax->ptMaxPosition.y, minmax->ptMaxSize.y));
-		return 0;
-#else
 		return DefWindowProc(hwnd, msg, wparam, lparam);
-#endif
 	} break;
 	case WM_ERASEBKGND:
 	{
@@ -792,14 +729,14 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			for (int i = 0; i < state.menubar_itemcnt; i++) {
 				if (test_pt_rc(mouse, state.menubar_items[i])) {
 					state.menubar_mouseover_idx_from1 = i + 1;
-					RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
+					RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);
 					hit = true;
 					break;
 				}
 			}
 			if (!hit && state.menubar_mouseover_idx_from1) {
 				state.menubar_mouseover_idx_from1 = 0;
-				RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
+				RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);
 			}
 			return 0;
 		}
@@ -807,7 +744,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//check whether the menu has some item drawn as on mousehover, in which case we need to redraw without it
 			if (state.menubar_mouseover_idx_from1) {
 				state.menubar_mouseover_idx_from1 = 0;
-				RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
+				RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);
 			}
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -817,7 +754,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		if (state.menubar_mouseover_idx_from1) {
 			state.menubar_mouseover_idx_from1 = 0;
 			RECT menurc = calc_menu_rc(state);
-			RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);//TODO(fran): we only need to redraw the menu rc
+			RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE);
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;

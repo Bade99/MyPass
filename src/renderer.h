@@ -23,7 +23,9 @@
 
 HRESULT WriteBitmap(HBITMAP bitmap, const cstr* pathname) {
 	//TODO(fran): solve limitations https://stackoverflow.com/questions/24720451/save-hbitmap-to-bmp-file-using-only-win32
-	CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	HRESULT initialization_result = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	if (FAILED(initialization_result)) return initialization_result;
+	defer{ CoUninitialize(); };
 	HRESULT hr = S_OK;
 
 	// (1) Retrieve properties from the source HBITMAP.
@@ -103,32 +105,10 @@ HRESULT WriteBitmap(HBITMAP bitmap, const cstr* pathname) {
 		factory->Release();
 
 	return hr;
-	CoUninitialize();
 }
 #else
 HRESULT WriteBitmap(HBITMAP bitmap, const cstr* pathname = _t("")) {};
 #endif
-
-int FillRectAlpha(HDC dc, const RECT& r, HBRUSH br, u8 alpha) {
-	COLORREF color = ColorFromBrush(br);
-	color |= (alpha << 24);
-
-	BITMAPINFO nfo;
-	nfo.bmiHeader.biSize = sizeof(nfo.bmiHeader);
-	nfo.bmiHeader.biWidth = 1;
-	nfo.bmiHeader.biHeight = -1;
-	nfo.bmiHeader.biPlanes = 1;
-	nfo.bmiHeader.biBitCount = 32;
-	nfo.bmiHeader.biCompression = BI_RGB;
-	nfo.bmiHeader.biSizeImage = 0;
-	nfo.bmiHeader.biXPelsPerMeter = 0;
-	nfo.bmiHeader.biYPelsPerMeter = 0;
-	nfo.bmiHeader.biClrUsed = 0;
-	nfo.bmiHeader.biClrImportant = 0;
-
-	int res = StretchDIBits(dc, r.left, r.top, RECTW(r), RECTH(r), 0, 0, 1, 1, &color, &nfo, DIB_RGB_COLORS, SRCCOPY);
-	return res;
-}
 
 struct MaskImage {
 	i32 width;
@@ -143,22 +123,17 @@ MaskBilinearSample sample_bilinear_mask(MaskImage* mask, i32 x, i32 y) {
 	//NOTE: handmade 108 1:20:00 interesting, once you scale an img to half size or more you get sampling errors cause you're no longer sampling all the pixels involved, that's when you need MIPMAPPING
 
 	u8 idx = 7 - (x % 8);
-
-	x /= 8;
-
-	u8* texel_ptr = ((u8*)mask->mem + y * mask->pitch + x * 1);
-
-	u8 tex[4];
-
-	//TODO(fran): remove duplicate pixel reads by applying the "&" afterwards
-	tex[0] = (*(u8*)texel_ptr) & (1 << idx); //NOTE: For a better blend we pick the colors around the texel, movement is much smoother
-	tex[1] = idx == 0 ? (x < mask->width ? (*(u8*)(texel_ptr + 1)) & (1 << 7) : 0xFF) : (*(u8*)texel_ptr) & (1 << (idx - 1));
-	tex[2] = y < mask->height ? (*(u8*)(texel_ptr + mask->pitch)) & (1 << idx) : 0xFF;
-	tex[3] = idx == 0 ? (x < mask->width ? (*(u8*)(texel_ptr + mask->pitch + 1)) & (1 << 7) : 0xFF) : (y < mask->height ? (*(u8*)(texel_ptr + mask->pitch)) & (1 << (idx - 1)) : 0xFF);
-
+	bool has_right = x < mask->width - 1;
+	bool has_below = y < mask->height - 1;
+	u8* texel_ptr = (u8*)mask->mem + y * mask->pitch + x / 8;
+	u8 current = *texel_ptr;
+	u8 below = has_below ? texel_ptr[mask->pitch] : 0;
+	u8 next_idx = idx == 0 ? 7 : idx - 1;
 	MaskBilinearSample sample;
-	for (int i = 0; i < 4; i++)
-		sample.sample[i] = tex[i];
+	sample.sample[0] = current & (1 << idx); //NOTE: For a better blend we pick the colors around the texel, movement is much smoother
+	sample.sample[1] = has_right ? (idx == 0 ? texel_ptr[1] : current) & (1 << next_idx) : 0xFF;
+	sample.sample[2] = has_below ? below & (1 << idx) : 0xFF;
+	sample.sample[3] = has_right && has_below ? (idx == 0 ? texel_ptr[mask->pitch + 1] : below) & (1 << next_idx) : 0xFF;
 
 	return sample;
 }
@@ -304,7 +279,6 @@ namespace urender {
 				//Bilinear filtering
 				MaskBilinearSample sample = sample_bilinear_mask(&mask, i_x, i_y);
 				v4 f_sample;
-				//TODO(fran): lerp and f_x f_y
 				for (int i = 0; i < 4; i++) {
 					f_sample.comp[i] = (sample.sample[i] ? 1.f : 0.f);
 				}
@@ -326,7 +300,6 @@ namespace urender {
 
 		//Create bitmap
 		HBITMAP new_mask = CreateBitmap(scaled_mask.width, scaled_mask.height, 1, scaled_mask.bits_per_pixel, scaled_mask.mem);
-		//TODO(fran): do I need to set the palette?
 		return new_mask;
 	}
 
@@ -404,7 +377,7 @@ namespace urender {
 		graphics.DrawImage(&bmp,
 			Gdiplus::Rect(destination_x, destination_y, destination_width, destination_height),
 			source_x, source_y, source_width, source_height,
-			Gdiplus::Unit::UnitPixel);//TODO(fran): get the current unit from the device
+			Gdiplus::Unit::UnitPixel);
 	}
 
 	//NOTE: specific procedure for drawing images on windows' menus, other drawing functions may fail on specific situations
@@ -493,7 +466,6 @@ namespace urender {
 		graphics.DrawPath(&pen, &path);
 	}
 
-	//TODO: review why I have this function using gdiplus while the function on top using stretchdibits, does the other one not work?
 	void FillRectAlpha(HDC dc, const RECT& rc, u8 r, u8 g, u8 b, u8 a) {
 #ifdef USE_GDIPLUS
 		using namespace Gdiplus;
@@ -648,9 +620,6 @@ namespace urender {
 		default: Assert(0);
 		}
 		TextOut(dc, xPos, yPos, txt.str, (i32)(txt.sz_char() - 1));
-
-		//TODO(fran): TabbedTextOut for completeness
-		//TODO(fran): transparent bk color (if possible without gdi+)
 	}
 
 	void draw_menu_text(HDC dc, const RECT& bounds, str_view text, HFONT font, HBRUSH brush) {

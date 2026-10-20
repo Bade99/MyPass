@@ -53,8 +53,7 @@ static StringTraversalResult goto_end_of_group(utf16_str s, size_t start_p, int 
 
 //finds different points where to stop when traversing a string, used for Ctrl+Left/Right Arrows keycombo
 static size_t find_stopper(utf16_str s, size_t start_p, int direction/*should be +1 or -1*/) {
-	Assert(direction);
-	//TODO(fran): handle overflow
+	Assert(direction == -1 || direction == 1);
 
 	//TODO(fran): this doesnt work exactly like we'd like for Ctrl+ Right arrow, we fail to skip to the next word instead stopping at the last character of the current one, and when we do (by placing the cursor past the last character of the word) we go past to the end of that next word instead of stopping at the beginning of it. Extra: Actually I do like that it stops at the end of words (this is not the normal behaviour but I like it more), what is wrong is the second case, whereby starting from a whitespace & going right it skips to the end of the next word instead of stopping at the beginning
 
@@ -86,7 +85,7 @@ static size_t find_stopper(utf16_str s, size_t start_p, int direction/*should be
 		if (iswpunct(s[start_p])) {//we're on a punctuation mark
 			//TODO(fran):it seems like everybody does smth different with punctuation, look at visual studio & sublime for examples, so just find what I feel works best
 
-			if (size_t i = start_p; direction < 0 && !iswpunct(s[--i])) {//if going left and we're on the first character of the punctuation group
+			if (size_t i = start_p; direction < 0 && i > 0 && !iswpunct(s[--i])) {//if going left and we're on the first character of the punctuation group
 
 				//go to first character in previous word or punctuation group
 				auto [x, _] = goto_start_of_group(s, i, direction);

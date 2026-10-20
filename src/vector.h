@@ -66,7 +66,7 @@ v2& v2::operator-=(const v2& rhs) {
 	return *this;
 }
 
-v2& v2::operator+=(const v2& rhs) { //TODO(fran): is it necessary to use const& instead of a simple copy?
+v2& v2::operator+=(const v2& rhs) {
 	*this = *this + rhs;
 	return *this;
 }
@@ -133,7 +133,7 @@ v2_i32& v2_i32::operator-=(const v2_i32& rhs) {
 	return *this;
 }
 
-v2_i32& v2_i32::operator+=(const v2_i32& rhs) { //TODO(fran): is it necessary to use const& instead of a simple copy?
+v2_i32& v2_i32::operator+=(const v2_i32& rhs) {
 	*this = *this + rhs;
 	return *this;
 }
@@ -224,7 +224,7 @@ v3& v3::operator-=(const v3& rhs) {
 	return *this;
 }
 
-v3& v3::operator+=(const v3& rhs) { //TODO(fran): is it necessary to use const& instead of a simple copy?
+v3& v3::operator+=(const v3& rhs) {
 	*this = *this + rhs;
 	return *this;
 }

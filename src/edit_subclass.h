@@ -24,6 +24,7 @@ struct EditProcState {
 
 	HWND vscrollbar;// , hscrollbar;
 	HWND search;	//addon search window
+	int wheel_delta_remainder;
 
 	//NOTE: EditProc controls require the creation of a EditProcState struct with calloc, and for it to be passed as the 4th param in SetWindowSubclass, the object will now be managed by the procedure and does not need the user to handle its memory
 	//NOTE: no left-right scrolling, it is handled with line wrap
@@ -64,7 +65,7 @@ struct EditProcState {
 		}
 	}
 };
-LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UINT_PTR /*uIdSubclass*/, DWORD_PTR dwRefData) {
+LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UINT_PTR subclass_id, DWORD_PTR dwRefData) {
 	EditProcState& state = *(EditProcState*)dwRefData; Assert(&state);
 	if (!state.initialized) {
 		state.initialized = true;
@@ -73,33 +74,6 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 	}
 
 	switch (msg) {
-	//case WM_KEYDOWN:
-	//{
-	//	char vk = (char)wparam;
-	//	bool ctrl_is_down = HIBYTE(GetKeyState(VK_CONTROL));
-	//	switch (vk) {
-	//	case _t('S')://Save
-	//	{
-	//		if (ctrl_is_down) {
-	//			PostMessage(state.parent, WMN_SAVE, (WPARAM)state.wnd, 0);
-	//		}
-	//	} break;
-	//	case _t('F')://Find
-	//	{
-	//		//TODO(fran): what if this where pressed while the search wnd has focus? we need to intercept that window's msgs probably, maybe it automatically sends them to the parent, or we could make it do it
-	//		if (ctrl_is_down) {
-	//			if (state.search) {
-	//				if (!IsWindowVisible(state.search)) {
-	//					ShowWindow(state.search, SW_SHOW);
-	//				}
-	//				SetFocus(state.search);
-
-	//			}
-	//		}
-	//	} break;
-	//	}
-	//	return DefSubclassProc(hwnd, msg, wparam, lparam);
-	//} break;
 	case WM_CHAR:
 	{
 		TCHAR c = (TCHAR)wparam;
@@ -110,14 +84,24 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 	} break;
 	case WM_MOUSEWHEEL:
 	{
-		//TODO(fran): look at more reasonable algorithms, also this one should probably get a little exponential
-		short zDelta = (short)(((float)GET_WHEEL_DELTA_WPARAM(wparam) / (float)WHEEL_DELTA) * 3.f);
-		auto line_msg = SB_LINEUP;
-		if (zDelta < 0) {
-			zDelta *= -1;
-			line_msg = SB_LINEDOWN;
+		UINT scroll_lines = 3;
+		SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
+		if (!scroll_lines) {
+			state.wheel_delta_remainder = 0;
+			return 0;
 		}
-		for (int i = 0; i < zDelta; i++) SendMessage(state.wnd, WM_VSCROLL, MAKELONG(line_msg, 0), 0); //TODO(fran): use ScrollWindowEx ?
+		int wheel_delta = state.wheel_delta_remainder + GET_WHEEL_DELTA_WPARAM(wparam);
+		int notches = wheel_delta / WHEEL_DELTA;
+		state.wheel_delta_remainder = wheel_delta % WHEEL_DELTA;
+		if (!notches) return 0;
+
+		int visible_lines = maximum(1, state.get_max_visible_lines(hwnd));
+		if (scroll_lines == WHEEL_PAGESCROLL || scroll_lines > (UINT)visible_lines) {
+			UINT scroll_command = notches > 0 ? SB_PAGEUP : SB_PAGEDOWN;
+			for (int i = 0; i < abs(notches); i++) SendMessage(hwnd, EM_SCROLL, scroll_command, 0);
+		}
+		else SendMessage(hwnd, EM_LINESCROLL, 0, -notches * (int)scroll_lines);
+		state.update_scrollbar();
 		return 0;
 	} break;
 	case EM_GET_MAX_VISIBLE_LINES: {
@@ -135,10 +119,6 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 	case WM_SIZE:
 	{
 		LRESULT res = DefSubclassProc(hwnd, msg, wparam, lparam);
-		SIZE* control_size = (SIZE*)wparam;
-
-		//MoveWindow(hwnd, TabOffset.leftOffset, TabOffset.topOffset, control_size->cx - TabOffset.rightOffset - TabOffset.leftOffset, control_size->cy - TabOffset.bottomOffset - TabOffset.topOffset, TRUE);
-		//x & y remain fixed and only width & height change
 
 		if (state.vscrollbar)SendMessage(state.vscrollbar, scrollbar::custom_message::AUTORESIZE, 0, 0);
 		if (state.search)SendMessage(state.search, SRH_AUTORESIZE, 0, 0);
@@ -147,11 +127,12 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 
 		return res;
 	}
-	case WM_DESTROY:
+	case WM_NCDESTROY:
 	{
+		RemoveWindowSubclass(hwnd, EditProc, subclass_id);
 		free(&state);
-		//return DefSubclassProc(hwnd, msg, wparam, lparam); //TODO(fran): shouldnt I call this?
-	}break;
+		return DefSubclassProc(hwnd, msg, wparam, lparam);
+	} break;
 	//Messages that could trigger the need for updating the scrollbar
 	case WM_PAINT:
 	case EM_POSFROMCHAR:
@@ -159,25 +140,9 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 	//TODO(fran): add more
 	{
 		LRESULT res = DefSubclassProc(hwnd, msg, wparam, lparam);
-		//if (state.vscrollbar)SendMessage(state.vscrollbar, U_SB_AUTORESIZE, 0, 0);
-		//if (state.search)SendMessage(state.search, SRH_AUTORESIZE, 0, 0);
 		state.update_scrollbar();
 		return res;
 	} break;
-#if 0
-	case EM_SETSCROLLPOS:
-	case EM_LINESCROLL:
-	case EM_SCROLL:
-	case EM_SCROLLCARET:
-	case WM_VSCROLL:
-	case WM_HSCROLL:
-	{//Attempt to fix scrolling issue in rich edit control, not good enough
-		LRESULT res = DefSubclassProc(hwnd, msg, wparam, lparam);
-		if (state.vscrollbar)SendMessage(state.vscrollbar, U_SB_AUTORESIZE, 0, 0);
-		if (state.search)SendMessage(state.search, SRH_AUTORESIZE, 0, 0);
-		return res;
-	}
-#endif
 	case EM_SHOWSEARCHWND:
 	{
 		BOOL show = (BOOL)wparam;

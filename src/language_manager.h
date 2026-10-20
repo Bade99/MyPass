@@ -64,7 +64,7 @@ namespace userial {
 		size_t s = find_identifier(content, 0, start);
 		if (str_found(s)) {
 			s += start.size();
-			str substr = content.substr(s);//TODO(fran):we dont really need a substr and neither till the end of content
+			str_view substr = str_view(content).substr(s);
 			bool found = false;
 #define _compare_enum_string_found(member,value) if(!substr.compare(0,str(_t(#member)).size(),_t(#member))){var = member; found=true;} else
 			_foreach_language(_compare_enum_string_found) {/*you can do something on the final else case*/ };
@@ -116,32 +116,32 @@ public:
 	//·Adds the hwnd to the list of managed hwnds and sets its text corresponding to stringID and the current language
 	//·Many hwnds can use the same stringID
 	//·Next time there is a language change the window will be automatically updated
-	//·Returns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
+	//·Returns FALSE if invalid hwnd or stringID
 	BOOL AddWindowText(HWND hwnd, UINT stringID)
 	{
 		BOOL res = UpdateHwnd(hwnd, stringID);
 		if (res) this->Hwnds[hwnd] = stringID;
-		return res;
+		return res && HasStringResource(stringID);
 	}
 
 	//·Adds the hwnd to the list of managed hwnds and sets its default text corresponding to stringID and the current language
 	//·Many hwnds can use the same stringID
 	//·Next time there is a language change the window will be automatically updated
-	//·Returns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
+	//·Returns FALSE if invalid hwnd or stringID
 	BOOL AddWindowDefaultText(HWND hwnd, u32 stringID) {
 		BOOL res = UpdateHwndDefault(hwnd, stringID);
 		if (res) this->HwndsDefault[hwnd] = stringID;
-		return res;
+		return res && HasStringResource(stringID);
 	}
 
 	//·Adds the hwnd to the list of managed hwnds and sets its tooltip text corresponding to stringID and the current language
 	//·Many hwnds can use the same stringID
 	//·Next time there is a language change the window will be automatically updated
-	//·Returns FALSE if invalid hwnd or stringID //TODO(fran): do the stringID check
+	//·Returns FALSE if invalid hwnd or stringID
 	BOOL AddWindowTooltipText(HWND hwnd, u32 stringID) {
 		BOOL res = UpdateHwndTooltip(hwnd, stringID);
 		if (res) this->HwndsTooltip[hwnd] = stringID;
-		return res;
+		return res && HasStringResource(stringID);
 	}
 
 	//·Updates all managed objects to the new language, all the ones added after this call will also use the new language
@@ -149,16 +149,13 @@ public:
 	//·On failure returns (LANGID)-2 if the language is invalid, (LANGID)-3 if failed to change the language
 	LANGID ChangeLanguage(Language newLang)
 	{
-		//if (newLang == this->CurrentLanguage) return -1;//TODO: negative values wrap around to huge values, I assume not all lcid values are valid, find out if these arent
 		BOOL res = this->IsValidLanguage(newLang);
 		if (!res) return (LANGID)-2;
 
 		this->language = newLang;
-		//LCID previousLang = SetThreadLocale(this->GetLCID(newLang));
 		//INFO: thanks https://www.curlybrace.com/words/2008/06/10/setthreadlocale-and-setthreaduilanguage-for-localization-on-windows-xp-and-vista/
 		// SetThreadLocale has no effect on Vista and above
 		LANGID newLANGID = this->GetLANGID(newLang);
-		//INFO: On non-Vista platforms, SetThreadLocale can be used. Instead of a language identifier, it accepts a locale identifier
 		LANGID lang_res = SetThreadUILanguage(newLANGID); //If successful returns the same value that you sent it
 
 		for (auto const& hwnd_sid : this->Hwnds)
@@ -173,6 +170,9 @@ public:
 		for (auto const& hwnd_id_sid : this->Comboboxes)
 			this->UpdateCombo(hwnd_id_sid.first.first, hwnd_id_sid.first.second, hwnd_id_sid.second);
 
+		//TODO(fran): Notify each managed control's layout owner once after updating translated text,
+		//so size-dependent controls relayout and repaint without callers handling language changes.
+		//AddDynamicText currently requires manual registration and allows only one message per HWND.
 		for (auto const& hwnd_msg : this->DynamicHwnds) {
 			this->UpdateDynamicHwnd(hwnd_msg.first, hwnd_msg.second);
 		}
@@ -189,7 +189,7 @@ public:
 	}
 
 	//·Returns the requested string in the current language
-	//·If stringID is invalid returns L"" //TODO(fran): check this is true
+	//·If stringID is invalid returns "INVALID ID " followed by the ID
 	//INFO: uses temporary string that lives till the end of the full expression it appears in
 	str RequestString(UINT stringID)
 	{
@@ -207,7 +207,7 @@ public:
 	{
 		BOOL res = UpdateCombo(hwnd, ID, stringID);
 		if (res) this->Comboboxes[std::make_pair(hwnd, ID)] = stringID;
-		return res;
+		return res && HasStringResource(stringID);
 	}
 
 	//Set the hinstance from where the string resources will be retrieved
@@ -225,7 +225,7 @@ public:
 	//One hwnd can only be linked to one messageID
 	BOOL AddDynamicText(HWND hwnd, UINT messageID)
 	{
-		if (!hwnd) return FALSE;
+		if (!IsWindow(hwnd)) return FALSE;
 		this->DynamicHwnds[hwnd] = messageID;
 		this->UpdateDynamicHwnd(hwnd, messageID);
 		return TRUE;
@@ -235,8 +235,7 @@ public:
 	//to indicate which window to call for its menus to be redrawn
 	BOOL AddMenuDrawingHwnd(HWND MenuDrawer)
 	{
-		//TODO(fran): check HWND is valid
-		if (MenuDrawer) {
+		if (IsWindow(MenuDrawer)) {
 			this->MenuDrawers.push_back(MenuDrawer);
 			return TRUE;
 		}
@@ -247,7 +246,7 @@ public:
 	{
 		BOOL res = UpdateMenu(hmenu, ID, stringID);
 		if (res) this->Menus[std::make_pair(hmenu, ID)] = stringID;
-		return res;
+		return res && HasStringResource(stringID);
 	}
 
 	Language GetCurrentLanguage()
@@ -269,7 +268,6 @@ public:
 			res = true;
 		}
 		else this->language = this->GetBestMatchFromSystemSettings();
-		//TODO(fran): if there was no language information to deserialize then query the system for the current language and see if we support any close matches, otherwise as a last resort default to english
 		this->ChangeLanguage(this->language);//whatever happens we need to set some language
 		return res;
 	}
@@ -279,6 +277,10 @@ private:
 	~LanguageManager() {}
 
 	HINSTANCE hInstance = NULL;
+	bool HasStringResource(UINT stringID) const {
+		const cstr* text;
+		return LoadString(this->hInstance, stringID, (cstr*)&text, 0) != 0;
+	}
 
 	std::map<HWND, UINT> Hwnds;
 	std::map<HWND, UINT> HwndsDefault;
@@ -325,7 +327,7 @@ private:
 			SendMessage(hwnd, CB_SETCURSEL, currentSelection, 0);
 			ask_window_for_repaint(hwnd);
 		}
-		return res != CB_ERR && res != CB_ERRSPACE;//TODO(fran): can I check for >=0 with lresult?
+		return res >= 0;
 	}
 
 	BOOL UpdateMenu(HMENU hmenu, UINT_PTR ID, UINT stringID)
@@ -334,23 +336,9 @@ private:
 		menu_setter.cbSize = sizeof(MENUITEMINFO);
 		menu_setter.fMask = MIIM_STRING;
 		str temp_text = this->RequestString(stringID);
-		//menu_setter.dwTypeData = _wcsdup(this->RequestString(stringID).c_str()); //TODO(fran): can we avoid dupping, if not free memory
 		menu_setter.dwTypeData = (cstr*)temp_text.c_str();
 		BOOL res = SetMenuItemInfo(hmenu, (UINT)ID, FALSE, &menu_setter);
 		return res;
-	}
-
-	LCID GetLCID(Language lang)
-	{
-		switch (lang) {
-		case Language::English:
-			return MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_NEUTRAL), SORT_DEFAULT); //TODO(fran):this is deprecated and not great for macros, unless we set each enum to this values
-		case Language::Español:
-			return MAKELCID(MAKELANGID(LANG_SPANISH, SUBLANG_NEUTRAL), SORT_DEFAULT);
-		default:
-			Assert(0);
-			return NULL;
-		}
 	}
 
 	LANGID GetLANGID(Language lang)
@@ -358,7 +346,7 @@ private:
 		//INFO: https://docs.microsoft.com/en-us/windows/win32/intl/language-identifier-constants-and-strings
 		switch (lang) {
 		case Language::English:
-			return MAKELANGID(LANG_ENGLISH, SUBLANG_NEUTRAL);//TODO(fran): same as GetLCID
+			return MAKELANGID(LANG_ENGLISH, SUBLANG_NEUTRAL);
 		case Language::Español:
 			return MAKELANGID(LANG_SPANISH, SUBLANG_NEUTRAL);
 		default:
@@ -377,7 +365,7 @@ private:
 		//TODO(fran): fallback to GetUserDefaultUILanguage if OS lower than Windows Vista
 
 		if (ret) {
-			for(u32 i = 0; i + 3 < prefsz && preferences[i]; i++) {
+			for(size_t i = 0; i + 3 < prefsz && preferences[i]; i++) {
 				Language lang = from_language_name(preferences[i], preferences[i + 1], preferences[i + 2]);
 				if (lang) {
 					res = lang;

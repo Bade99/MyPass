@@ -77,6 +77,7 @@ namespace custom_message {
 	enum CustomMessage {
 		show_transition_v0_msgbox = WM_USER + 1,
 		show_used_backup_msgbox,
+		redraw_after_show,
 	};
 };
 

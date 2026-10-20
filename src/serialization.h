@@ -128,16 +128,13 @@ static str load_file_serialized(str folder = _t("\\unCap"), str filename = _t("\
 
 	if (hFile != INVALID_HANDLE_VALUE) {
 		LARGE_INTEGER sz;
-		if (GetFileSizeEx(hFile, &sz)) {
-			u32 sz32 = (u32)sz.QuadPart;
-			auto buf = (cstr*)malloc(sz32);
-			if (buf) {
-				DWORD bytes_read;
-				if (ReadFile(hFile, buf, sz32, &bytes_read, 0) && sz32 == bytes_read) {
-					res = buf;//TODO(fran): write straight to str, we are doing two copy unnecessarily
-				}
-				free(buf);
-			}
+		if (GetFileSizeEx(hFile, &sz) && sz.QuadPart >= 0 && sz.QuadPart <= MAXDWORD &&
+			sz.QuadPart % sizeof(cstr) == 0) {
+			DWORD file_size = (DWORD)sz.QuadPart;
+			res.resize(file_size / sizeof(cstr));
+			DWORD bytes_read = 0;
+			if (!ReadFile(hFile, res.data(), file_size, &bytes_read, 0) || bytes_read != file_size)
+				res.clear();
 		}
 		CloseHandle(hFile);
 	}
@@ -151,7 +148,6 @@ static void save_to_file_serialized(str content, str folder, str filename = _t("
 	str path = general_folder + folder + filename;
 	CoTaskMemFree(general_folder);
 
-	//SUPERTODO(fran): gotta create the folder first, if the folder isnt there the function fails
 	CreateDirectory(dir.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
 
 	HANDLE file_handle = CreateFile(path.c_str(), GENERIC_WRITE, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);

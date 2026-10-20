@@ -49,20 +49,20 @@ void set_wnd_size(HWND scrollable_area, i32 h) {
 		RECT page_space; GetClientRect(scrollable_area, &page_space);
 		RECT page_relative_to_space = get_window_rect_at(state.controls.content_area, scrollable_area);
 
-		auto page_space_w = RECTW(page_space), page_w = RECTW(page_relative_to_space);
-		auto page_space_h = RECTH(page_space), page_h = RECTH(page_relative_to_space);
-		auto needs_y_correction = page_h > page_space_h && page_relative_to_space.bottom < page_space.bottom; // True when the page can now be fit better within the page_space. The situation we are targeting is: page is scrolled -> window is resized making page_space larger -> page now has more space at the bottom that it can use to undo some of the scrolling
-		auto y_correction = (needs_y_correction ? distance(page_relative_to_space.bottom, page_space.bottom) : 0);
-		auto needs_secondary_y_correction = page_h <= page_space_h && page_relative_to_space.top < page_space.top;
-		y_correction += (needs_secondary_y_correction ? distance(page_relative_to_space.top, page_space.top) : 0);
+		auto page_space_w = RECTW(page_space);
+		auto page_space_h = RECTH(page_space);
+		auto page_height = maximum(page_space_h, h);
+		auto page_y = clamp(page_space_h - page_height, page_relative_to_space.top, 0L);
 		rect_i32 page{
 			.x = 0,
-			.y = page_relative_to_space.top + y_correction, //retain current scroll, only adjust it if necessary
+			.y = page_y,
 			.w = page_space_w, //we dont support horizontal scrolling, so we clamp page w to page_space w
-			.h = maximum(page_space_h, h),
+			.h = page_height,
 		};
-		state.scroll += y_correction; //Update stored scroll value as well
+		state.scroll += page_y - page_relative_to_space.top;
 		MoveWindow(state.controls.content_area, page, false);
+		if (page_y != page_relative_to_space.top)
+			RedrawWindow(state.controls.content_area, nil, nil, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
 
 		scrollbar::set_stats(state.controls.v_scroll, page.h, page_space_h, abs(minimum(page.y, 0)));
 		SendMessage(state.controls.v_scroll, scrollbar::custom_message::AUTORESIZE, 0, 0);
@@ -122,8 +122,6 @@ void smooth_scroll(State& state, int increment) {
 			i32 current_h = RECTH(r);
 			const i32 min_scroll_y = 0; //prevent scrolling to go above of the page boundaries
 			i32 max_scroll_y = -maximum(current_h - parent_h, 0); //prevent scrolling to go below of the page boundaries
-			//TODO: when the page itself is being resized we should again check if we need to clamp the current scroll position since it could have changed leaving us in an improper scroll until the user tries to scroll again, at which point we re-apply the correct clamp
-
 			i32 original_wnd_y = r.top - (i32)state.scroll;
 
 			f32 dy = (f32)state.scroll_tasks[0] / (f32)state.scroll_anim.total_frames;
@@ -195,13 +193,23 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		if (state.does_scrolling) {
 			AssertAll(state.controls.all);
-			auto zDelta = (f32)GET_WHEEL_DELTA_WPARAM(wparam) / (f32)WHEEL_DELTA;
-			int dy = avg_str_dim(fonts.General, 1).cy;
+			UINT scroll_lines = 3;
+			SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
+			if (!scroll_lines) {
+				state.wheel_scroll_remainder = 0;
+				return 0;
+			}
 
-			//TODO(fran): SystemParametersInfo(SPI_GETWHEELSCROLLLINES) to scroll based on windows mouse scroll sensitivity the user set?
-
-			int step = zDelta * 3 * dy;
-			smooth_scroll(state, step);
+			int view_height = RECTH(get_client_rect(state.wnd));
+			if (view_height <= 0) return 0;
+			int line_height = maximum(1, avg_str_dim(fonts.General, 1).cy);
+			int scroll_distance = scroll_lines == WHEEL_PAGESCROLL || scroll_lines > (UINT)(view_height / line_height)
+				? view_height : (int)scroll_lines * line_height;
+			f32 requested_scroll = state.wheel_scroll_remainder +
+				(f32)GET_WHEEL_DELTA_WPARAM(wparam) * (f32)scroll_distance / (f32)WHEEL_DELTA;
+			int step = (int)requested_scroll;
+			state.wheel_scroll_remainder = requested_scroll - step;
+			if (step) smooth_scroll(state, step);
 			return 0;
 		}
 		else return DefWindowProc(hwnd, msg, wparam, lparam);//propagates msg to the parent
@@ -215,7 +223,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		case SB_THUMBTRACK:
 		case SB_THUMBPOSITION: //INFO: can be used to detect the end of a SB_THUMBTRACK sequence
 		{
-			auto new_scroll = HIWORD(wparam);
+			auto new_scroll = (HWND)lparam == state.controls.v_scroll
+				? (i32)SendMessage(state.controls.v_scroll, scrollbar::custom_message::GET_POS, 0, 0)
+				: (i32)HIWORD(wparam);
 			//TODO(fran): move into common logic with smooth_scroll
 			RECT r = get_window_rect_at(state.controls.content_area, state.wnd);
 			RECT parent_r; GetWindowRect(state.wnd, &parent_r);

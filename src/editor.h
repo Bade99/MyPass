@@ -63,7 +63,6 @@ password_editor::State& add_password_editor(State& state, const Props& propertie
 					on_password_editors_cnt_changed(state);
 					ask_window_for_resize(state.wnd);
 					ask_window_for_repaint(state.wnd);
-					//TODO(fran): small BUG with scrolling: if we delete a section while we are scrolled, then we dont get a proper page resize with repositioning and thus the page remains overscrolled when it could have corrected itself.
 					break;
 				}
 		}
@@ -128,7 +127,7 @@ void resize_controls(State& state) {
 			child_layout::move_if_needed(controls.btn_static_bk_transition, btn_static_bk_transition);
 			child_layout::move_if_needed(controls.btn_static_transition, btn_static_transition);
 			child_layout::move_if_needed(controls.static_transition, static_transition);
-			child_layout::move_if_needed(controls.btn_confirm_transfer, btn_confirm_transfer); //TODO(fran): small bug, btn doesnt automatically resize when changing languages, this is probably a general issue, look at my language learning app to see how I solved it
+			child_layout::move_if_needed(controls.btn_confirm_transfer, btn_confirm_transfer);
 			child_layout::move_if_needed(controls.edit_passwords, edit_showpasswords);
 			child_layout::move_if_needed(controls.icon_transition, icon_transition);
 		}
@@ -322,7 +321,7 @@ void add_controls(State& state) {
 				SortAlphabetic element;
 				element.wnd = p;
 				element.title.resize_and_overwrite(len,
-					[=](utf16* buf, size_t buf_size) { return GetWindowText(title, buf, buf_size); });
+					[=](utf16* buf, size_t) { return GetWindowText(title, buf, len); });
 				if (pin) to_sort_pinned.push_back(std::move(element));
 				else to_sort.push_back(std::move(element));
 			}
@@ -618,7 +617,6 @@ void get_controls_data_for_saving(State& state, raw_buffer& out) {
 	// editor: title (str, all str are null terminated utf16) | date created (u64) | date modified (u64) | multiflag (u32) | table row count (u64) | each table row
 	//  table row: desc (str) | val (str) | multiflag (u32)
 	auto append_control_text_to_buffer = [](raw_buffer& out, HWND wnd) {
-		//TODO(fran): is there a way we can normalize this behaviour into another append_to_buffer() reusable function in raw_buffer.h?
 		auto old_len_bytes = out.size();
 		auto added_len = GetWindowTextLength(wnd) + 1;
 		auto added_len_bytes = added_len * sizeof(cstr);
@@ -642,7 +640,6 @@ void get_controls_data_for_saving(State& state, raw_buffer& out) {
 		auto title = ed.controls.edo_title;
 		
 		append_control_text_to_buffer(out, title);
-		//TODO: im just using \r\n for compatibility with the text format, remove the stupid \r later if I end up actually using a text based encoding format with line jumps
 		
 		multiflag<password_editor::ItemFlag> pwed_flags = 0;
 		//TODO(fran): should we maintain ed.properties.flags up to date and use it directly instead?
@@ -738,7 +735,7 @@ bool save_passwords(State& state, bool complete_version_transition = false) {
 
 	auto data = generate_save_data_v1(state);
 	
-	res = save_to_file_user(state.current_user, data.data(), data.size());
+	res = data.size() <= U32MAX && save_to_file_user(state.current_user, data.data(), (u32)data.size());
 	set_passwords_need_save(state, !res);
 	if (!res) CustomMessageBox(state.wnd, RCS(LANG_ERROR_SAVEFILE_PASSWORDS), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND, msgbox_placement);
 	return res;
@@ -757,24 +754,14 @@ void cleanup_password_editors_v1(State& state) {
 }
 
 bool create_password_editors_v1(State& state, RawBufferReader& data) {
-	/*struct PasswordEditorTrivialV1 {
-		time_t date_created;
-		time_t date_modified;
-		multiflag<password_editor::ItemFlag> flags;
-	};*/
-
-	struct PasswordEditorV1 /*: PasswordEditorTrivialV1*/ {
-		str_view title; //TODO: consider switching to span<utf16> which does allow for mutations of the underlying
+	struct PasswordEditorV1 {
+		str_view title;
 		time64 date_created;
 		time64 date_modified;
 		multiflag<password_editor::ItemFlag> flags;
 	};
 
-	/*struct PasswordEditorRowTrivialV1 {
-		multiflag<password_editor::ValueCellFlag> flags = 0;
-	};*/
-
-	struct PasswordEditorRowV1 /*: PasswordEditorRowTrivialV1*/ {
+	struct PasswordEditorRowV1 {
 		str_view description, value;
 		multiflag<password_editor::ValueCellFlag> flags = 0;
 	};
@@ -785,7 +772,6 @@ bool create_password_editors_v1(State& state, RawBufferReader& data) {
 		PasswordEditorV1 editor;
 		if (!(data.read(editor.title) && data.read(editor.date_created) && data.read(editor.date_modified) && data.read(editor.flags)))
 			return false;
-		//if (!data.read((PasswordEditorTrivialV1&)editor)) return false; //TODO(fran): this will fail due to structure padding, when we save we do it element by element of the struct, but here we read the whole struct at once, which has extra padding, breaking everything, decide whether to both save and load the struct, or to do save and load element by element of the struct
 		Props properties{
 			.title = editor.title.data(),
 			.date_created = editor.date_created, 
@@ -841,7 +827,6 @@ void add_controls_transition_v0(State& state) {
 			});
 		AWT(controls.btn_confirm_transfer, LANG_TRANSITION_BTN_CONFIRM);
 
-		//TODO(fran): EM_SETENDOFLINE allows you to change between EC_ENDOFLINE_CRLF EC_ENDOFLINE_CR EC_ENDOFLINE_LF
 		controls.edit_passwords = create_window(state.wnd, L"Edit", nil, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | ES_NOHIDESEL /*to show selection even when you dont have the focus*/);
 
 		constexpr auto EDIT_PASSWORDS_MAX_TEXT_LENGTH = 32767 * 2; //32767 is the default
@@ -1041,6 +1026,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			_foreach_language(_generate_enum_cases_language)
 			{
 				LanguageManager::Instance().ChangeLanguage((Language)LOWORD(wparam));
+				resize_controls(state);
 				HMENU old_menu = GetMenu(state.nc_parent);
 				add_menus(state);
 				DestroyMenu(old_menu);
@@ -1125,6 +1111,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				twofish_setkey(key, sizeof(key));
 				SecureZeroMemory(key, sizeof(key));
 
+				// TODO: Let the page paint its own backdrop instead of forcing a subtree redraw after showing the editor.
+				PostMessage(state.wnd, custom_message::redraw_after_show, 0, 0);
 				if (state.mode == Mode::transition_v0) PostMessage(state.wnd, custom_message::show_transition_v0_msgbox, 0, 0); //Delay show the messagebox so that our window has time to be shown first
 				if (used_backup) PostMessage(state.wnd, custom_message::show_used_backup_msgbox, 0, 0);
 			}
@@ -1230,6 +1218,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		auto res = DefWindowProc(hwnd, msg, wparam, lparam);
 		SetFocus(nil);
 		return res;
+	} break;
+	case custom_message::redraw_after_show:
+	{
+		RedrawWindow(state.wnd, nil, nil,
+			RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 	} break;
 	case custom_message::show_transition_v0_msgbox:
 	{

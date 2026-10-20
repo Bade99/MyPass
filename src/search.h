@@ -10,7 +10,6 @@ namespace search {
   * Returns zero-based index of the first char of the match or -1 if not found
   */
 auto search(State& state, bool search_in_current_selection) { 
-	//TODO(fran): extra param, search from sel_start or sel_end, when the user presses the enter key or the find button they want to start from sel_end, while they are writing they want to start from sel_start
 	//INFO: from_sel_start: taking by reference point a search downwards if true the search happens from the start of the current selection, otherwise from the end, the same desired behaviour will happen for searching up where from_sel_start true will mean to search from the end, yes confusing, just take into account how it works for searching downwards and it will automatically work perfectly for searching up
 	
 	struct SearchResult { int p, sz_char; } res, fail_res{.p = -1};
@@ -67,9 +66,6 @@ auto search(State& state, bool search_in_current_selection) {
 
 			if (res.p != -1) res.p += range.min; //since we offset the string when searching now we gotta reintegrate that offset
 
-			//StrStrI(str, match);//TODO(fran): look at https://www.codeproject.com/Articles/383185/SSE-accelerated-case-insensitive-substring-search which says to be much faster than this
-			//wcsstr(, )//Case sensitive comparison, exact match
-
 			//TODO(fran): we could implement whole_word by ourselves, simply check what's next to and behind the found text
 
 			if (res.p == -1 && !(state.search_flags & Flag::no_wrap)) {//we didnt find anything in our range, lets test the leftover range but keeping our direction
@@ -120,10 +116,10 @@ void make_selection(State& state, int p /*zero-based*/, int char_count) {
 	}
 }
 void scroll_to_selection(State& state) {//Scrolls the text to the current selection
-	//TODO(fran): this scrolls to the specific line, therefore the selection can end up on the first or last visible lines, we would prefer the selection gets a little more centered to the middle of the control
 	switch (state.parent_type) {
 	case ParentType::richedit:
 	{
+		//TODO(fran): center the selected line instead of leaving it at the first or last visible line
 		SendMessage(state.parent, EM_SCROLLCARET, 0, 0);
 	} break;
 	case ParentType::edit:
@@ -133,8 +129,10 @@ void scroll_to_selection(State& state) {//Scrolls the text to the current select
 		//The current selection should be on a visible line, now we move that line a little closer to the center if it is too close to the top or bottom
 		int first_visible_line = (int)SendMessage(state.parent, EM_GETFIRSTVISIBLELINE, 0, 0);
 		//EM_GETLASTVISIBLELINE
-		RECT r; SendMessage(state.parent, EM_GETRECT, 0, (LPARAM)&r);//TODO(fran): make sure this is actually useful when the rect is modified instead of just using getclientrect
-		DWORD c = (DWORD)SendMessage(state.parent, EM_CHARFROMPOS, 0, MAKELONG(0,RECTH(r)-1));
+		RECT r; SendMessage(state.parent, EM_GETRECT, 0, (LPARAM)&r);
+		if (r.right <= r.left || r.bottom <= r.top) break;
+		DWORD c = (DWORD)SendMessage(state.parent, EM_CHARFROMPOS, 0, MAKELONG(r.left, r.bottom - 1));
+		if (c == 0xffffffff) break;
 		int last_visible_line = HIWORD(c);
 		int max_visible_lines = distance(first_visible_line,last_visible_line);
 		int current_line = (int)SendMessage(state.parent, EM_LINEFROMCHAR, -1 /*get the line of the current selection*/, 0);
@@ -166,7 +164,6 @@ void search_and_scroll(State& state, bool search_in_current_selection) {
 
 auto get_state(HWND wnd) { _control_create_function__get_state }
 
-//TODO(fran): when the parent gets resized it should tell us to resize
 void resize_wnd(State& state) {
 	Assert(state.placement_flags);
 
@@ -188,7 +185,6 @@ void resize_wnd(State& state) {
 	if (state.placement_flags & Placement::left || state.placement_flags & Placement::right) {
 		//small wnd
 		search_h = font_h * 2;
-		//search_w = (int)((float)w * .25f);//TODO(fran): there should be a max size, we just want a little thing in the corner
 		HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd, dc); };
 		SIZE a = urender::measure_text(dc, font, L"a");
 		search_w = a.cx * 33;
@@ -293,8 +289,6 @@ void resize_controls(State& state) {
 	else {//wnd is in large state, here everything goes next to each other on one line
 		int h_sub_pad = h - h_pad * 2;
 		int left_button_w = h_sub_pad;
-
-		//TODO(fran): here I could add a little w padding in between each control
 
 		//"case sensitive" goes first on the left
 		btn_case_sensitive_x = !btn_case_sensitive_off ? w_pad : 0;
@@ -504,10 +498,10 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 				case EN_CHANGE:
 				{
 					int char_len = (int)SendMessage(state.controls.edit_match, WM_GETTEXTLENGTH, 0, 0);//doesnt include null terminator
-					if (!char_len) {
+					if (!char_len && state.parent_type != ParentType::custom) {
 						DWORD sel_start;
-						SendMessage(state.parent, EM_GETSEL, (WPARAM)&sel_start, 0); //TODO(fran): this should be type dependent, but really everybody should have this same one
-						SendMessage(state.parent, EM_SETSEL, sel_start, sel_start); //TODO(fran): this should be type dependent, but really everybody should have this same one
+						SendMessage(state.parent, EM_GETSEL, (WPARAM)&sel_start, 0);
+						SendMessage(state.parent, EM_SETSEL, sel_start, sel_start);
 					}
 					search_and_scroll(state,true);
 				} break;

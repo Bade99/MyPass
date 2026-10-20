@@ -30,6 +30,7 @@ namespace scrollbar {
 			// Sets whether the scrollbar auto shows and hides itself when needed
 			// wParam=bool
 			SET_AUTOHIDE,
+			GET_POS,
 		};
 	};
 

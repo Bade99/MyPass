@@ -9,8 +9,6 @@
 //TODO(fran): paint/handle my own IME window https://docs.microsoft.com/en-us/windows/win32/intl/ime-window-class
 //TODO(fran): since WM_SETTEXT doesnt notify by default we should change WM_SETTEXT_NO_NOTIFY to WM_SETTEXT_NOTIFY and reverse the current roles
 //TODO(fran): IDEA for multiline with wrap around text, keep a list of wrap around points, be it a new line, word break or word that doesnt fit on its line, then we can go straight from user clicking the wnd to the corresponding line by looking how many lines does the mouse go and input that into the wrap around list to get to that line's first char idx
-//TODO(fran): on WM_STYLECHANGING check for password changes, that'd need a full recalculation
-//TODO(fran): on a WM_STYLECHANGING we should check if the alignment has changed and recalc/redraw every char, NOTE: I dont think windows' controls bother with this since it's not too common of a use case
 //TODO(fran): at some point I got to trigger a secondary IME candidates window which for some reason decided to show up, this BUG is probably related to the multiple candidates window, maybe we need to manually block the secondary ones, it could be that if you write too much text this extra candidate windows appear
 //TODO(fran): it seems like the IME window is global or smth like that, if I dont ask for candidate windows on WM_IME_SETCONTEXT then it also wont show them for other controls, wtf
 //TODO(fran): change EM_SETINVALIDCHARS to be a function call provided by the user, 2 opts: bool that says tell me if there's anything invalid OR remove anything invalid, 2nd opt return array with indexes of invalid chars
@@ -23,7 +21,6 @@ void set_user_extra(HWND wnd, void* user_extra) {
 	State& state = *get_state(wnd);
 	if (&state) {
 		state.user_extra = user_extra;
-		//TODO(fran): redraw?
 	}
 }
 
@@ -429,22 +426,9 @@ SIZE calc_text_dim(State& state) {
 //(This will be either 0 for the first line, or one character past the \n of the previous line for all other lines)
 auto char_idx_to_line_char_idx(const State& state, size_t char_idx) {
 	struct CharIndexToLineCharacterIndexResult { u64 line_char_idx; u64 line_idx; } res;
-	res.line_char_idx = state.char_text.rfind('\n', safe_subtract0(char_idx, 1)) + 1; //TODO(fran): I do this instead of iterating over state.line_breaks cause I think it scales better to larger strings and may even be generally faster or close to it, though there maybe be a fast way to search through state.line_breaks, otherwise having that cache is pointless & I should remove it
-
-	res.line_idx = 0;
-	if (res.line_char_idx) {
-		auto line_break = std::lower_bound(state.line_breaks.begin(), state.line_breaks.end(), res.line_char_idx - 1);
-		if (line_break != state.line_breaks.end() && *line_break == res.line_char_idx - 1) {
-			u64 line_idx = line_break - state.line_breaks.begin();
-			if (char_idx == *line_break) res.line_idx = line_idx;
-			else res.line_idx = line_idx + 1;
-		}
-	}
-	//TODO(fran): now I need to know the line idx, I guess the cache wasnt so pointless after all, although this search pattern may even be faster if I now add a hash table to store a mapping line_char_idx -> line_idx (remember to remove the -1 before using it on the hash table though)
-		//NOTE: I will usually need both line_idx and line_char_idx, since I use the first one to move in Y and the other to move in X
-		//TODO(fran)?: if we dont want to do the hash table thing we could estimate the index: line_idx_estimation = (char_idx / total_chars) * total_lines; and iterate forward or backwards from there
-
-	//TODO(fran): im having this issue with the fact that line_idx = 0 is not always a valid index into state.line_breaks, and we have a dual mapping for 0, it will return 0 when there are no line breaks, but also 0 when we are on the first line break. The code needs to be re-tought, maybe we should return a line count, that is always at least 1. This would fix the dual mapping problem though it would still not fix the access into state.line_breaks
+	auto next_line_break = std::lower_bound(state.line_breaks.begin(), state.line_breaks.end(), minimum(char_idx, state.char_text.size()));
+	res.line_idx = next_line_break - state.line_breaks.begin();
+	res.line_char_idx = next_line_break == state.line_breaks.begin() ? 0 : *(next_line_break - 1) + 1;
 	return res;
 }
 
@@ -511,12 +495,20 @@ void show_tip(HWND wnd, const cstr* msg, int duration_ms, u32 ETP_flags) {
 	SetTimer(state.wnd, EDITONELINE_tooltip_timer_id, duration_ms, nil);
 }
 
+void hide_tip(State& state) {
+	KillTimer(state.wnd, EDITONELINE_tooltip_timer_id);
+	TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
+	toolInfo.hwnd = state.wnd;
+	toolInfo.uId = (UINT_PTR)state.wnd;
+	SendMessage(state.controls.tooltip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&toolInfo);
+}
+
 void scroll_to_caret(State& state) {
 	//TODO(fran): test right and center text alignments, @BUG: center alignment is wrong, probably due to my stupid use of padding.x, it should simply indicate the render area, instead Im using it to align the text when that should require a new variable
 
 	RECT rc; GetClientRect(state.wnd, &rc);
 	auto w = RECTW(rc), h = RECTH(rc);
-	if (!w || !h) return; //TODO(fran): this is probably more accurate by checking for element visibility or smth like that
+	if (w <= 0 || h <= 0) return;
 	int horizontal_padding = GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_CENTER ? 3 : state.padding.x;
 	int old_scroll_x = state.scroll.x;
 	//TODO(fran): im sure this can be done branchless
@@ -549,7 +541,7 @@ void scroll_to_caret(State& state) {
 		state.scroll.y += scroll;
 		ask_window_for_repaint(state.wnd);
 	}
-	else if ((GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_EXPANSIBLE) && h >= desired_height(state)) {
+	else if (state.scroll.y != 0 && (GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_EXPANSIBLE) && h >= desired_height(state)) {
 		//HACK?: scroll up if you can fit all lines
 		state.scroll.y = 0; //TODO(fran): im sure this special case will introduce bugs
 		ask_window_for_repaint(state.wnd);
@@ -729,7 +721,9 @@ void select_all(State& state) { set_selection<true>(state, 0, -1); } //TODO(fran
 
 size_t closest_caret_stop(const State& state, size_t character_index);
 
-void push_to_history(State& state, TextEditEntry& history_entry) { //TODO(fran): is the type right with & ? we want to take ownership of the object
+void push_to_history(State& state, TextEditEntry history_entry) {
+	auto edit_kind = history_entry.edit_kind;
+	auto selection_after = history_entry.selection_after;
 	if (state.history_helper.can_merge(history_entry.selection_before)) {
 		if (!state.history.update_latest([&history_entry](TextEditEntry& prior) -> size_t {
 			Assert(prior.edit_kind == history_entry.edit_kind);
@@ -767,9 +761,10 @@ void push_to_history(State& state, TextEditEntry& history_entry) { //TODO(fran):
 	}
 	else {
 	push_history:
-		state.history.push(history_entry, history_entry.memory_size()); //TODO(fran): template undo_history: if the entry type can do .memory_size() then simplify this function call to a single parameter and internally call .memory_size()
+		auto memory_size = history_entry.memory_size();
+		state.history.push(std::move(history_entry), memory_size); //TODO(fran): template undo_history: if the entry type can do .memory_size() then simplify this function call to a single parameter and internally call .memory_size()
 	}
-	state.history_helper.record_edit(history_entry.edit_kind, history_entry.selection_after);
+	state.history_helper.record_edit(edit_kind, selection_after);
 }
 
 template<bool AffectHistory = true>
@@ -811,7 +806,7 @@ bool remove_selection(State& state, size_t x_min, size_t x_max) {
 				.selection_before_trailing = selection_before_trailing,
 				.selection_after_trailing = state.caret.trailing,
 			};
-			push_to_history(state, history_entry);
+			push_to_history(state, std::move(history_entry));
 			if (cursor_was_snapped) state.history_helper.break_group();
 		}
 		return true;
@@ -883,7 +878,7 @@ bool insert_character(State& state, utf16_str s, size_t x_min, size_t x_max) {
 				.selection_before_trailing = selection_before_trailing,
 				.selection_after_trailing = state.caret.trailing,
 			};
-			push_to_history(state, history_entry);
+			push_to_history(state, std::move(history_entry));
 			if (cursor_was_snapped) state.history_helper.break_group();
 		}
 
@@ -999,8 +994,9 @@ bool end_IME_composition(State& state) {
 		if (!composition.provisional_text.empty()) {
 			size_t x_min = composition.position_x_min + composition.committed_text.length();
 			str empty_text;
-			if (!insert_character<false>(state, to_utf_str(empty_text), x_min, x_min + composition.provisional_text.length()))
+			if (!insert_character<false>(state, to_utf_str(empty_text), x_min, x_min + composition.provisional_text.length())) {
 				Assert(0);
+			}
 			composition.provisional_text.clear();
 		}
 
@@ -1019,15 +1015,16 @@ bool end_IME_composition(State& state) {
 				.selection_after_trailing = state.caret.trailing,
 			};
 			state.history_helper.record_transient_edit(TextEditEntry::Kind::ime);
-			push_to_history(state, history_entry);
+			push_to_history(state, std::move(history_entry));
 			committed_change = true;
 		}
 	}
 	else if (composition.document_replaced) {
 		size_t inserted_length = composition.committed_text.length() + composition.provisional_text.length();
 		if (!insert_character<false>(state, to_utf_str(composition.removed_text),
-			composition.position_x_min, composition.position_x_min + inserted_length))
+			composition.position_x_min, composition.position_x_min + inserted_length)) {
 			Assert(0);
+		}
 		set_selection(state, composition.selection_before.anchor, composition.selection_before.cursor,
 			composition.selection_before_trailing);
 	}
@@ -1074,12 +1071,21 @@ bool copy_selection(State& state) { return copy_selection(state, state.selection
 bool is_high_surrogate(utf16 c) { return c >= 0xd800 && c <= 0xdbff; }
 bool is_low_surrogate(utf16 c) { return c >= 0xdc00 && c <= 0xdfff; }
 
-str sanitize_pasted_text(str_view dirty_text, size_t max_char_count, bool multiline) {
+struct SanitizedPasteResult {
 	str text;
+	bool adjusted = false;
+};
+
+SanitizedPasteResult sanitize_pasted_text(str_view dirty_text, size_t max_char_count, bool multiline) {
+	SanitizedPasteResult result;
+	auto& text = result.text;
 	text.reserve(minimum(dirty_text.size(), max_char_count));
 
 	auto append_character = [&](utf16 c) {
-		if (text.size() >= max_char_count) return false;
+		if (text.size() >= max_char_count) {
+			result.adjusted = true;
+			return false;
+		}
 		text.push_back(c);
 		return true;
 	};
@@ -1087,36 +1093,54 @@ str sanitize_pasted_text(str_view dirty_text, size_t max_char_count, bool multil
 
 	for (size_t i = 0; i < dirty_text.size();) {
 		utf16 c = dirty_text[i++];
-		if (!c) break;
+		if (!c) {
+			result.adjusted = true;
+			break;
+		}
 
 		if (c == _t('\r')) {
 			if (i < dirty_text.size() && dirty_text[i] == _t('\n')) i++;
+			if (!multiline) result.adjusted = true;
 			if (!append_line_break()) break;
 		}
-		else if (c == _t('\n') || c == _t('\v') || c == _t('\f') || c == 0x0085 || c == 0x2028 || c == 0x2029) {
+		else if (c == _t('\n')) {
+			if (!multiline) result.adjusted = true;
+			if (!append_line_break()) break;
+		}
+		else if (c == _t('\v') || c == _t('\f') || c == 0x0085 || c == 0x2028 || c == 0x2029) {
+			result.adjusted = true;
 			if (!append_line_break()) break;
 		}
 		else if (c == _t('\t')) {
+			result.adjusted = true;
 			if (!append_character(_t(' '))) break;
 		}
 		else if (c < 0x20 || (c >= 0x7f && c <= 0x9f)) {
+			result.adjusted = true;
 			continue;
 		}
 		else if (is_high_surrogate(c)) {
 			if (i < dirty_text.size() && is_low_surrogate(dirty_text[i])) {
-				if (max_char_count - text.size() < 2) break;
+				if (max_char_count - text.size() < 2) {
+					result.adjusted = true;
+					break;
+				}
 				text.push_back(c);
 				text.push_back(dirty_text[i++]);
 			}
-			else if (!append_character(0xfffd)) break;
+			else {
+				result.adjusted = true;
+				if (!append_character(0xfffd)) break;
+			}
 		}
 		else if (is_low_surrogate(c)) {
+			result.adjusted = true;
 			if (!append_character(0xfffd)) break;
 		}
 		else if (!append_character(c)) break;
 	}
 
-	return text;
+	return result;
 }
 
 bool paste_dirty_text(State& state, str_view dirty_text) { //returns true if it could paste something
@@ -1125,11 +1149,13 @@ bool paste_dirty_text(State& state, str_view dirty_text) { //returns true if it 
 	u64 available_char_count = text_length_after_removal <= state.char_max_sz ? state.char_max_sz - text_length_after_removal : 0;
 	size_t max_char_count = (size_t)minimum(available_char_count, (u64)SIZE_MAX);
 	bool multiline = GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_MULTILINE;
-	str text = sanitize_pasted_text(dirty_text, max_char_count, multiline);
-	if (!text.empty()) {
+	auto sanitized = sanitize_pasted_text(dirty_text, max_char_count, multiline);
+	if (!sanitized.text.empty()) {
 		state.history_helper.record_transient_edit(TextEditEntry::Kind::paste);
-		res = insert_character(state, to_utf_str(text), state.selection.x_min(), state.selection.x_max());
+		res = insert_character(state, to_utf_str(sanitized.text), state.selection.x_min(), state.selection.x_max());
 	}
+	if (sanitized.adjusted && (res || sanitized.text.empty()))
+		show_tip(state.wnd, RCS(LANG_EDIT_PASTE_ADJUSTED), EDITONELINE_default_tooltip_duration, ETP::left | ETP::top);
 	return res;
 }
 
@@ -1204,16 +1230,18 @@ bool set_text(State& state, cstr* buf) {
 	cstr empty_txt = 0;
 	if (!buf) buf = &empty_txt; //NOTE: this is the standard default behaviour
 	
-	if (auto txt = to_utf_str(buf); txt.cnt() <= (size_t)state.char_max_sz) {
-		//TODO(fran): settext should check for invalid characters (use paste_dirty_text())
+	//TODO(fran): define WM_SETTEXT semantics separately from user input: whether to bypass
+	// edit limits and field filters, how to preserve CRLF and malformed UTF-16 safely,
+	// and how vault-loading callers should handle a failed SetWindowText.
+	if (auto text = to_utf_str(buf); text.cnt() <= (size_t)state.char_max_sz) {
 		state.history_helper.record_transient_edit(TextEditEntry::Kind::programmatic);
-		res = insert_character(state, txt, 0, -1);
+		res = insert_character(state, text, 0, -1);
 
 		if (res) {
 			state.history_helper.break_group();
 			if constexpr (ClearHistory) state.history.clear();
 
-			ask_window_for_repaint(state.wnd);//TODO(fran): probably unnecessary
+			ask_window_for_repaint(state.wnd);
 		}
 	}
 	return res;
@@ -1277,11 +1305,10 @@ void set_composition_pos(State& state)//TODO(fran): this must set the other stuf
 	}
 }
 
-//TODO(fran): the fact that true is hidden and false is shown is very unintuitive and prone to error, reverse it
-void set_IME_wnd(HWND wnd, bool hidden) {
+void set_IME_wnd(HWND wnd, bool show) {
 	State& state = *get_state(wnd);
 	if (&state) {
-		state.hide_ime_window = hidden;
+		state.hide_ime_window = !show;
 	}
 }
 
@@ -1451,17 +1478,19 @@ void move_selection(State& state, int direction, bool shift_is_down, bool ctrl_i
 	state.history_helper.break_group();
 }
 
-void move_selection_vertical(State& state, int direction, bool shift_is_down, bool ctrl_is_down) {
+void move_selection_vertical(State& state, int direction, bool shift_is_down, bool ctrl_is_down,
+	size_t line_count = 1, bool collapse_selection_only = true) {
 	Assert(direction == 1 || direction == -1);
 	if (ctrl_is_down) return;
 	size_t anchor;
 	TextCaretHit cursor{ state.selection.cursor, state.caret.trailing };
-	if (!shift_is_down && state.selection.has_selection()) {
+	if (!shift_is_down && state.selection.has_selection() && collapse_selection_only) {
 		cursor = { direction > 0 ? state.selection.x_max() : state.selection.x_min(), direction > 0 };
 	}
 	else {
 		auto [line_start, line_index] = char_idx_to_line_char_idx(state, state.selection.cursor);
-		if ((direction < 0 && !line_index) || (direction > 0 && line_index + 1 >= state.line_layouts.size()))
+		if ((direction < 0 && line_count > line_index) ||
+			(direction > 0 && line_count >= state.line_layouts.size() - line_index))
 			cursor = { direction > 0 ? state.char_text.size() : 0, direction > 0 };
 		else {
 			const TextLineLayout* current_line = get_line_layout(state, line_index);
@@ -1469,7 +1498,7 @@ void move_selection_vertical(State& state, int direction, bool shift_is_down, bo
 				state.selection.cursor - line_start, state.caret.trailing) : 0;
 			if (state.vertical_selection_stored_width > current_x) current_x = state.vertical_selection_stored_width;
 			else state.vertical_selection_stored_width = current_x;
-			size_t target_index = direction > 0 ? line_index + 1 : line_index - 1;
+			size_t target_index = direction > 0 ? line_index + line_count : line_index - line_count;
 			const TextLineLayout* target_line = get_line_layout(state, target_index);
 			if (target_line) {
 				auto local_hit = closest_caret_stop(*target_line, current_x - line_render_x(state, *target_line));
@@ -1668,7 +1697,6 @@ void render(State& state, HDC dc) {
 		// Calculate vertical position for the string so that it will be vertically centered
 		// We are single line so we want vertical alignment always
 		//TODO(fran): allow the user to select the vertical alignment (top, center, bottom)
-		//TODO(fran): BUG: vertical centering doesnt automatically occur when going from 2 lines to 1 by deleting the \n character, it remains with top centering until another letter is written by the user
 		int yPos = state.padding.y;
 
 		if (show_placeholder) {
@@ -1823,7 +1851,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		BOOL show = (BOOL)wparam;
 		if (!show) {
 			//We're going to be hidden, we must also hide our tooltips
-			SendMessage(state.wnd, WM_TIMER, EDITONELINE_tooltip_timer_id, 0); //TODO(fran): #robustness, we should know which timers are active to only disable those, also replace this crude SendMessage with a hide_tooltips()
+			hide_tip(state);
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
@@ -1884,17 +1912,18 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_STYLECHANGED:
 	{
+		bool recalculate_layout = false;
 		if (wparam == GWL_STYLE) {
 			auto cmp = (STYLESTRUCT*)lparam;
-			if ((cmp->styleOld & ES_PASSWORD) != (cmp->styleNew & ES_PASSWORD)) {
-				// style changed between using/not using password view
-				recalculate_text_layout(state);
-			}
+			recalculate_layout = (cmp->styleOld ^ cmp->styleNew) & (ES_PASSWORD | ES_CENTER);
 		}
 		else if (wparam == GWL_EXSTYLE) {
 			auto cmp = (STYLESTRUCT*)lparam;
-			if ((cmp->styleOld & WS_EX_RTLREADING) != (cmp->styleNew & WS_EX_RTLREADING))
-				recalculate_text_layout(state);
+			recalculate_layout = (cmp->styleOld ^ cmp->styleNew) & WS_EX_RTLREADING;
+		}
+		if (recalculate_layout) {
+			recalculate_text_layout(state);
+			ask_window_for_repaint(state.wnd);
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	}
@@ -1971,8 +2000,14 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_RBUTTONUP:
 	{
-		POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) }; MapWindowPoints(state.wnd, nil, &mouse, 1);
-		//TODO(fran): before showing the menu we have to update the selection, but only if the click happened outside of the current selection area. If the user right clicks inside of the currently selected area then we just show the menu
+		POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
+		auto cursor = point_to_char(state, mouse);
+		if (!state.selection.has_selection() || cursor.character_index < state.selection.x_min() ||
+			cursor.character_index >= state.selection.x_max())
+		{
+			set_selection<true>(state, cursor.character_index, cursor.character_index, cursor.trailing);
+		}
+		MapWindowPoints(state.wnd, nil, &mouse, 1);
 		show_rclickmenu(state, mouse);
 		return 0;
 	} break;
@@ -2055,7 +2090,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//Vertical Selection Stored Width:
 		bool reset_v_sel_stored_w = true;
 
-		//TODO(fran): process VK_NEXT VK_PREV
 		//NOTE: there are some keys that dont get sent to WM_CHAR, we gotta handle them here, also there are others that get sent to both, TODO(fran): it'd be nice to have all the key things in only one place
 		//NOTE: for things like _shortcuts_ you wanna handle them here cause on WM_CHAR things like Ctrl+V get translated to something else
 		//		also you want to use the uppercase version of the letter, eg case _t('V'):
@@ -2064,7 +2098,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		bool shift_is_down = HIBYTE(GetKeyState(VK_SHIFT));
 		//printf("%c : %d\n", vk, (i32)vk);
 		switch (vk) {
-		case VK_HOME://Home //TODO(fran): @multiline
+		case VK_HOME://Home
 		{
 			size_t anchor, cursor;
 
@@ -2075,19 +2109,17 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			else if (shift_is_down) {//Make a selection to the start of the line
 				anchor = state.selection.anchor;
 				cursor = char_idx_to_line_char_idx(state, state.selection.cursor).line_char_idx;
-				//cursor = 0;
 			}
 			else if (ctrl_is_down) {//Remove selection and Go to the start of the text
 				anchor = cursor = 0;
 			}
-			else {//Remove selection and Go to the start of the line (since we're singleline go to start of text)
-				//anchor = cursor = 0;
+			else {//Remove selection and go to the start of the line
 				anchor = cursor = char_idx_to_line_char_idx(state, state.selection.cursor).line_char_idx;
 			}
 
 			set_selection<true>(state, anchor, cursor);
 		} break;
-		case VK_END://End //TODO(fran): @multiline
+		case VK_END://End
 		{
 			size_t anchor, cursor;
 
@@ -2102,14 +2134,12 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			}
 			else if (shift_is_down) {//Make a selection to the end of the line
 				anchor = state.selection.anchor;
-				//cursor = state.char_text.length();
 				cursor = last_cursor_in_line(state);
 			}
 			else if (ctrl_is_down) {//Remove selection and Go to the end of the text
 				anchor = cursor = state.char_text.length();
 			}
-			else {//Remove selection and Go to the end of the line (since we're singleline go to start of text)
-				//anchor = cursor = state.char_text.length();
+			else {//Remove selection and go to the end of the line
 				anchor = cursor = last_cursor_in_line(state);
 			}
 
@@ -2133,7 +2163,16 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			move_selection_vertical(state, -1, shift_is_down, ctrl_is_down);
 			reset_v_sel_stored_w = false;
 		} break;
-		//TODO(fran): do we want to update scrolling to the left when deleting causes the text to get shorter than the right side of the element?
+		case VK_NEXT:
+		case VK_PRIOR:
+		{
+			RECT client_rect{};
+			GetClientRect(state.wnd, &client_rect);
+			size_t visible_lines = maximum(1, RECTH(client_rect) / maximum(1, calc_line_height_px(state)));
+			size_t page_lines = maximum((size_t)1, visible_lines - 1);
+			move_selection_vertical(state, vk == VK_NEXT ? +1 : -1, shift_is_down, ctrl_is_down, page_lines, false);
+			reset_v_sel_stored_w = false;
+		} break;
 		case VK_DELETE://What in spanish is the "Supr" key (delete character ahead of you)
 		{
 			if (!state.char_text.empty()) {
@@ -2208,12 +2247,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//TODO(fran): check that the candidates window has some candidates, if it doesnt then we can simply continue as if nothing happened
 			if (scancode == 0x148/*up arrow*/) {
 				state.ignore_ime_candidates = true;
-				//PostMessage(state.wnd, WM_KEYDOWN, VK_UP, lparam); TODO(fran): uncomment this and find out what it was for
 				reset_v_sel_stored_w = false;
 			}
 			if (scancode == 0x150/*down arrow*/) {
 				state.ignore_ime_candidates = true;
-				//PostMessage(state.wnd, WM_KEYDOWN, VK_DOWN, lparam); TODO(fran): uncomment this and find out what it was for
 				reset_v_sel_stored_w = false;
 			}
 
@@ -2290,7 +2327,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		}break;
 		case VK_ESCAPE://Escape
 		{
-			//TODO(fran): should we do something?
 			PostMessage(GetParent(state.wnd), WM_COMMAND, MAKELONG(state.identifier, EN_ESCAPE), (LPARAM)state.wnd);
 		}break;
 		default:
@@ -2301,17 +2337,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 		insert_control_char:
 
-			//TODO(fran): maybe this should be the first check for any WM_CHAR?
-
-			//if (contains_char(c, state.invalid_chars)) {
-			//	//display tooltip //TODO(fran): make this into a reusable function
-			//	str tooltip_msg = (RS(10) + L" " + state.invalid_chars);
-			//	show_tip(state.wnd, tooltip_msg.c_str(), EDITONELINE_default_tooltip_duration, ETP::left | ETP::top);
-			//	return 0;
-			//}
-
 			//We have some normal character
-			//TODO(fran): what happens with surrogate pairs? I dont even know what they are -> READ
 			if (safe_subtract0(state.char_text.length(), state.selection.sel_width()) < state.char_max_sz) {
 				state.history_helper.record_transient_edit(TextEditEntry::Kind::typing);
 				en_change = insert_character(state, c);
@@ -2328,11 +2354,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		switch (timerID) {
 		case EDITONELINE_tooltip_timer_id:
 		{
-			KillTimer(state.wnd, timerID);
-			TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
-			toolInfo.hwnd = state.wnd;
-			toolInfo.uId = (UINT_PTR)state.wnd;
-			SendMessage(state.controls.tooltip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&toolInfo);
+			hide_tip(state);
 			return 0;
 		} break;
 		case EDITONELINE_caret_timer_id:
@@ -2647,7 +2669,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case EM_SETSEL:
 	{
 		size_t anchor = wparam, cursor = lparam;
-		set_selection(state, anchor, cursor); //TODO(fran): probably should have set_selection<true>(...)
+		set_selection<true>(state, anchor, cursor);
 		return 0;
 	} break;
 	case EM_GETSEL://TODO(fran): EM_GETSEL_EX (to be able to request for size_t (possibly 64bit) values)

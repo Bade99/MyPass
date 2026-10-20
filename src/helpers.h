@@ -309,7 +309,7 @@ static RECT max_area(RECT* rcs, int len) {
 		int area = RECTW((*test)) * RECTH((*test));
 		if (area > max_area) { max_area = area; idx = i; }
 	}
-	return *(rcs + idx); //TODO(fran): might be better to simply return the pointer
+	return *(rcs + idx);
 }
 
 /**
@@ -350,12 +350,13 @@ static RECT clip_fit_childs(HWND parent, HWND child, RECT r) {
 	RECT res;
 	struct ClipFitChildrenTest { HWND parent; HWND child; HRGN rgn; };
 	ClipFitChildrenTest t; t.parent = parent;  t.child = child; t.rgn = CreateRectRgn(r.left, r.top, r.right, r.bottom); defer{ DeleteObject(t.rgn); };
+	if (!t.rgn) return r;
 
 	EnumChildWindows(
 		parent,
 		[](HWND other_child, LPARAM lparam) {
 			ClipFitChildrenTest* test = (ClipFitChildrenTest*)lparam;
-			if (other_child != test->child && GetParent(other_child)==test->parent /*avoid enumerating childs of childs*/) {//TODO(fran): we should also filter non visible wnds I think, if everybody starts using this it could work well, maybe not
+			if (other_child != test->child && GetParent(other_child)==test->parent && (GetWindowLongPtr(other_child, GWL_STYLE) & WS_VISIBLE)) {
 				RECT subtract_rc;
 				GetClientRect(other_child, &subtract_rc);
 				MapWindowPoints(other_child, test->parent, (LPPOINT)&subtract_rc, 2);
@@ -367,12 +368,11 @@ static RECT clip_fit_childs(HWND parent, HWND child, RECT r) {
 		},
 		(LPARAM)&t);
 
-	int rgn_len = GetRegionData(t.rgn, 0, 0);
+	DWORD rgn_len = GetRegionData(t.rgn, 0, 0);
+	if (rgn_len < sizeof(RGNDATAHEADER)) return r;
 	//INFO:RGNDATA always stores it's region polygon in RECTs
 	RGNDATA* rgn_data = (RGNDATA*)malloc(rgn_len); defer{ free(rgn_data); };
-	rgn_data->rdh.dwSize = sizeof(rgn_data->rdh); //TODO(fran): not sure I need to set anything in the header
-	GetRegionData(t.rgn, rgn_len, rgn_data);
-	//TODO(fran): check what happens when the region is empty, is there only one RECT with all zeroes or is it a null pointer and we crash
+	if (!rgn_data || !GetRegionData(t.rgn, rgn_len, rgn_data)) return r;
 	if (rgn_data->rdh.nCount) res = max_area((RECT*)rgn_data->Buffer, rgn_data->rdh.nCount);
 	else res = { 0,0,0,0 };
 
@@ -449,7 +449,6 @@ auto pack_squares(i32 w, i32 h, i32 n, i32 p) {
   */
 
 static u32 refresh_rate_hz(HWND wnd) {
-	//TODO(fran): this may be simpler with GetDeviceCaps
 	u32 res = 60;
 	HMONITOR mon = MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST);
 	if (mon) {
@@ -699,8 +698,7 @@ static i32 align_center(i32 current_dimension, i32 bound, i32 padding_on_overflo
 }
 
 static i32 align_right(i32 current_dimension, i32 bound) {
-	//TODO(fran): should we do something different on overflow?
-	i32 res = bound - current_dimension;
+	i32 res = maximum(0, bound - current_dimension);
 	return res;
 }
 

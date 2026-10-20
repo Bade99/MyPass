@@ -41,7 +41,12 @@ namespace detail {
 }
 
 // 1) trivially-copyable scalars/flat structs
-//TODO(fran): even for trivial structs different compilers may generate different padding within the struct, review that, we may need to require all serialized structs to have a user set alignment, or change the way we do the serialization to be invariant to different padding
+// NOTE: A trivially copyable struct is not necessarily a stable serialized format.
+// sizeof(T) can include padding, and member offsets can change with compiler, packing,
+// or architecture. For example, editor v1 saves fields individually; reading those
+// bytes into a whole struct would consume padding bytes that were never written.
+// Persist fields in a defined order and read them the same way, or use an explicitly
+// specified wire layout before relying on whole-struct reads and writes.
 template <Trivial T> 
 void append_to_buffer(raw_buffer& out, const T& v) {
 	detail::append_bytes(out, &v, sizeof(T));
@@ -82,7 +87,7 @@ struct RawBufferReader {
 	}
 
 	bool read_bytes(void* out, std::size_t n) {
-		if (pos + n > bytes.size()) return false;
+		if (n > remaining()) return false;
 		std::memcpy(out, bytes.data() + pos, n);
 		pos += n;
 		return true;
@@ -107,10 +112,10 @@ struct RawBufferReader {
 
 		// Writer inserts zero padding so each string starts at alignof(CharT).
 		const auto padding = detail::get_alignment_padding(pos, alignof(CharT));
+		if (padding > remaining()) return false;
 		#ifdef _DEBUG
-		if (padding > remaining())
-			for (std::size_t i = 0; i < padding; i++)
-				Assert(bytes[pos + i] == 0);
+		for (std::size_t i = 0; i < padding; i++)
+			Assert(bytes[pos + i] == 0);
 		#endif
 		if (!skip(padding)) return false;
 
@@ -142,7 +147,7 @@ struct RawBufferReader {
 	}
 
 	bool skip(std::size_t n) {
-		if (pos + n > bytes.size()) return false;
+		if (n > remaining()) return false;
 		pos += n;
 		return true;
 	}

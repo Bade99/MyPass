@@ -117,6 +117,7 @@
 #define LANG_MENU_CHECK_FOR_UPDATES     204
 #define LANG_MSG_USED_BACKUP_TITLE      205
 #define LANG_MSG_USED_BACKUP_TEXT       206
+#define LANG_EDIT_PASTE_ADJUSTED        207
 #define WMN_FIND                        32774
 #define WMN_SAVE                        32776
 

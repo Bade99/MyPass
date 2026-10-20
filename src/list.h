@@ -22,32 +22,19 @@
 //TODO(fran): rendering: there's something clearly screwed up, when you hover with the mouse along many elements you can see a vertical cut as it changes from one to another, wtf is that? also it doesnt always happen
 #define LBN_CLK (LBN_KILLFOCUS+10) //NOTE: LBN_KILLFOCUS is the last default listbox notif
 
-//TODO(fran): add extra functionality for non floating listboxes, eg VK_UP and VK_DOWN to change the selection
-
 namespace listbox {
 
 	State* get_state(HWND wnd) { _control_create_function__get_state }
+	void render_backbuffer(State& state);
 
 	void set_user_extra(HWND wnd, void* user_extra) {
 		State& state = *get_state(wnd);
 		if (&state) {
 			state.user_extra = user_extra;
-			//TODO(fran): should I redraw?
+			render_backbuffer(state);
+			ask_window_for_repaint(state.wnd);
 		}
 	}
-
-	//IMPORTANT: the return ptr must not be freed, it points to the actual elements of the listbox
-	//ptr<void*> get_all_elements(HWND wnd) {//TODO(fran): this shouldnt exist but I need it in order to be lazy in the searchbox
-	//	ptr<void*> res{ 0 };
-	//	auto& state = *get_state(wnd);
-	//	if (&state) {
-	//		if (state.elements.size()) {
-	//			res.mem = &state.elements[0];//TODO(fran): this isnt very nice
-	//			res.cnt = state.elements.size();
-	//		}
-	//	}
-	//	return res;
-	//}
 
 	//NOTE: "sz" should be the already precalculated size to cover all the render elements, and maxing out in its w component by the size of the window rectangle (since we allow vertical but not horizontal scrolling)
 	void resize_backbuffer(State& state, SIZE sz) {
@@ -58,21 +45,34 @@ namespace listbox {
 		state.backbuffer = CreateCompatibleBitmap(dc, state.backbuffer_dim.cx, state.backbuffer_dim.cy);
 	}
 
-	void render_backbuffer(State& state) {
+	void render_element_at(State& state, HDC dc, size_t element_index) {
+		//TODO(fran): we could apply a transform so the user can render as if from {0,0} and we simply send a SIZE obj and they dont have to bother with offsetting by left and top
+		rect_i32 elem_rc{
+			0,
+			(i32)element_index * state.element_dim.cy,
+			state.element_dim.cx,
+			state.element_dim.cy
+		};
+		//TODO(fran): offset rectangle by state.border_thickness
+
+		RenderFlags flags;
+		flags.on_clicked = state.clicked_element == element_index;
+		flags.on_selected = state.selected_element == element_index;
+		flags.on_mouseover = state.mouse_hover_element == element_index;
+
+		state.render_element(dc, elem_rc, flags, state.elements[element_index], state.user_extra);
+	}
+
+	void render_backbuffer(State& state, bool window_enabled) {
 		render_diagnostics::Scope diagnostic{ render_diagnostics::Event::list_backbuffer };
 		if (state.backbuffer) {
 			HDC& dc = state.offscreen_dc;
 			auto oldbmp = SelectBitmap(dc, state.backbuffer); defer{ SelectBitmap(dc,oldbmp); };
 
 			RECT backbuffer_rc{ 0,0,state.backbuffer_dim.cx,state.backbuffer_dim.cy };
-			bool window_enabled = IsWindowEnabled(state.wnd); //TODO(fran): we need to repaint the backbuf if the window is disabled and the dis_... are !=0 and != than the non dis_... brushes
 
 			//Paint the background
-#if 0
-			HBRUSH bk_br = window_enabled ? state.brushes.bk : state.brushes.bk_dis;
-#else
-			HBRUSH bk_br = state.brushes.bk;
-#endif
+			HBRUSH bk_br = !window_enabled && state.brushes.bk_disabled ? state.brushes.bk_disabled : state.brushes.bk;
 			FillRect(dc, &backbuffer_rc, bk_br);
 
 			//NOTE: do _not_ paint the border here, since it should fit the real size of the wnd
@@ -80,91 +80,56 @@ namespace listbox {
 			//Render the elements
 			//TODO(fran): we should have a list of changed elems so we know which ones need redrawing, otherwise this wont scale at all
 			if (state.render_element) {
-				for (size_t i = 0; i < state.elements.size(); i++) {
-					//TODO(fran): we could apply a transform so the user can render as if from {0,0} and we simply send a SIZE obj and they dont have to bother with offsetting by left and top
-					rect_i32 elem_rc{
-							backbuffer_rc.left
-						, backbuffer_rc.top + (i32)i * state.element_dim.cy
-						, state.element_dim.cx
-						, state.element_dim.cy
-					};
-					//TODO(fran): offset rectangle by state.border_thickness
-
-					RenderFlags flags;
-					flags.on_clicked = state.clicked_element == i;
-					flags.on_selected = state.selected_element == i;
-					flags.on_mouseover = state.mouse_hover_element == i;
-
-					state.render_element(dc, elem_rc, flags, state.elements[i], state.user_extra);
-				}
+				for (size_t i = 0; i < state.elements.size(); i++) render_element_at(state, dc, i);
 			}
 		}
 	}
+	void render_backbuffer(State& state) { render_backbuffer(state, IsWindowEnabled(state.wnd)); }
 
 	void render_backbuffer_element(State& state, size_t elem_idx) {
-		//TODO(fran): this is a quick HACK reusing render_backbuffer()'s code
 		if (state.backbuffer && elem_idx < state.elements.size()) {
 			HDC& dc = state.offscreen_dc;
 			auto oldbmp = SelectBitmap(dc, state.backbuffer); defer{ SelectBitmap(dc,oldbmp); };
 
-			RECT backbuffer_rc{ 0,0,state.backbuffer_dim.cx,state.backbuffer_dim.cy };
-			bool window_enabled = IsWindowEnabled(state.wnd); //TODO(fran): we need to repaint the backbuf if the window is disabled and the dis_... are !=0 and != than the non dis_... brushes
-
-			//Paint the background
-#if 0
-			HBRUSH bk_br = window_enabled ? state.brushes.bk : state.brushes.bk_dis;
-#else
-			HBRUSH bk_br = state.brushes.bk;
-#endif
-			//FillRect(dc, &backbuffer_rc, bk_br);
-
 			//NOTE: do _not_ paint the border here, since it should fit the real size of the wnd
 
-			//Render the elements
-			//TODO(fran): we should have a list of changed elems so we know which ones need redrawing, otherwise this wont scale at all
 			if (state.render_element) {
-				size_t i = elem_idx;
-				rect_i32 elem_rc{
-						backbuffer_rc.left
-					, backbuffer_rc.top + (i32)i * state.element_dim.cy
-					, state.element_dim.cx
-					, state.element_dim.cy
-				};
-
-				RenderFlags flags;
-				flags.on_clicked = state.clicked_element == i;
-				flags.on_selected = state.selected_element == i;
-				flags.on_mouseover = state.mouse_hover_element == i;
-
-				state.render_element(dc, elem_rc, flags, state.elements[i], state.user_extra);
+				RECT elem_rc = rectWH(0, (i32)elem_idx * state.element_dim.cy, state.element_dim.cx, state.element_dim.cy);
+				int saved_dc = SaveDC(dc);
+				if (saved_dc) IntersectClipRect(dc, elem_rc.left, elem_rc.top, elem_rc.right, elem_rc.bottom);
+				HBRUSH bk_br = !IsWindowEnabled(state.wnd) && state.brushes.bk_disabled ? state.brushes.bk_disabled : state.brushes.bk;
+				FillRect(dc, &elem_rc, bk_br);
+				render_element_at(state, dc, elem_idx);
+				if (saved_dc) RestoreDC(dc, saved_dc);
 			}
 		}
 	}
 
 	size_t mouse_element_at(State& state, POINT mouse) {
 		RECT client_rc; GetClientRect(state.wnd, &client_rc);
-		if (!PtInRect(&client_rc, mouse) || state.element_dim.cy <= 0) return UINT32_MAX;
+		if (!PtInRect(&client_rc, mouse) || state.element_dim.cy <= 0) return no_element;
 
-		i64 backbuffer_y = (i64)(state.scroll_y * (f32)state.backbuffer_dim.cy) + mouse.y;
-		if (backbuffer_y < 0) return UINT32_MAX;
+		i64 backbuffer_y = (i64)state.scroll_y + mouse.y;
+		if (backbuffer_y < 0) return no_element;
 		size_t element = (size_t)backbuffer_y / state.element_dim.cy;
-		return element < state.elements.size() && element != UINT32_MAX ? element : UINT32_MAX;
+		return element < state.elements.size() ? element : no_element;
 	}
 
 	void clear_clicked_element(State& state) {
 		size_t old_element = state.clicked_element;
-		state.clicked_element = UINT32_MAX;
-		if (old_element != UINT32_MAX && old_element < state.elements.size()) {
+		state.clicked_element = no_element;
+		if (old_element != no_element && old_element < state.elements.size()) {
 			render_backbuffer_element(state, old_element);
 			ask_window_for_repaint(state.wnd);
 		}
 	}
 
 	void full_backbuffer_redo(State& state) {
-		//SIZE sz = calc_element_placements(state);
 		size_t elem_cnt = state.elements.size();
 		SIZE sz{ state.element_dim.cx, (i32)elem_cnt * state.element_dim.cy };
 		resize_backbuffer(state, sz);
+		RECT client_rc; GetClientRect(state.wnd, &client_rc);
+		state.scroll_y = clamp(0, state.scroll_y, maximum(0, state.backbuffer_dim.cy - RECTH(client_rc)));
 		render_backbuffer(state);
 	}
 
@@ -243,7 +208,7 @@ namespace listbox {
 	}
 
 	void clear_selection(State& state) {
-		state.selected_element = state.mouse_hover_element = state.clicked_element = state.stored_clicked_element = UINT32_MAX;
+		state.selected_element = state.mouse_hover_element = state.clicked_element = state.stored_clicked_element = no_element;
 		//TODO(fran): not sure whether I want to clear everything or just the selected_element
 		notify_parent(state, LBN_SELCHANGE);
 	}
@@ -251,7 +216,7 @@ namespace listbox {
 	void clear_selected_noNotify(HWND wnd) {
 		auto& state = *get_state(wnd);
 		if (&state) {
-			state.selected_element = UINT32_MAX;
+			state.selected_element = no_element;
 		}
 	}
 
@@ -271,7 +236,7 @@ namespace listbox {
 	void add_elements(HWND wnd, void** values, size_t count) {
 		auto& state = *get_state(wnd);
 		if (&state) {
-			for (int i = 0; i < count; i++) state.elements.push_back(values + i);
+			for (size_t i = 0; i < count; i++) state.elements.push_back(values + i);
 			full_backbuffer_redo(state); //render new elements
 			ask_window_for_repaint(state.wnd);
 		}
@@ -339,18 +304,36 @@ namespace listbox {
 		return res;
 	}
 
+	void scroll_selection_into_view(State& state) {
+		RECT client_rc; GetClientRect(state.wnd, &client_rc);
+		int view_height = RECTH(client_rc);
+		int content_height = state.backbuffer_dim.cy;
+		if (view_height <= 0 || content_height <= 0 || state.element_dim.cy <= 0) return;
+
+		int max_offset = maximum(0, content_height - view_height);
+		int offset = clamp(0, state.scroll_y, max_offset);
+		i64 element_top = (i64)state.selected_element * state.element_dim.cy;
+		if (element_top < offset) offset = (int)element_top;
+		else if (element_top + state.element_dim.cy > offset + view_height)
+			offset = (int)(element_top + state.element_dim.cy - view_height);
+		state.scroll_y = clamp(0, offset, max_offset);
+	}
+
 	void sel_up(HWND wnd) {
 		auto& state = *get_state(wnd);
 		if (&state) {
 			if (state.elements.size()) {
-				if (state.selected_element != UINT32_MAX)
+				auto old_selected_element = state.selected_element;
+				if (state.selected_element != no_element)
 					state.selected_element = state.selected_element == 0 ?
 					state.elements.size() - 1 : (state.selected_element - 1) % state.elements.size();
 				else state.selected_element = state.elements.size() - 1;
-				//TODO(fran): only re-render if the selected_element changed 
-				notify_parent(state, LBN_SELCHANGE);
-				render_backbuffer(state);
-				ask_window_for_repaint(state.wnd);
+				if (old_selected_element != state.selected_element) {
+					notify_parent(state, LBN_SELCHANGE);
+					render_backbuffer(state);
+					scroll_selection_into_view(state);
+					ask_window_for_repaint(state.wnd);
+				}
 			}
 		}
 	}
@@ -359,13 +342,16 @@ namespace listbox {
 		auto& state = *get_state(wnd);
 		if (&state) {
 			if (state.elements.size()) {
-				if (state.selected_element != UINT32_MAX)
+				auto old_selected_element = state.selected_element;
+				if (state.selected_element != no_element)
 					state.selected_element = (state.selected_element + 1) % state.elements.size();
 				else state.selected_element = 0;
-				//TODO(fran): only re-render if the selected_element changed 
-				notify_parent(state, LBN_SELCHANGE);
-				render_backbuffer(state);
-				ask_window_for_repaint(state.wnd);
+				if (old_selected_element != state.selected_element) {
+					notify_parent(state, LBN_SELCHANGE);
+					render_backbuffer(state);
+					scroll_selection_into_view(state);
+					ask_window_for_repaint(state.wnd);
+				}
 			}
 		}
 	}
@@ -373,14 +359,16 @@ namespace listbox {
 	void set_sel(HWND wnd, size_t idx) {//TODO(fran): idk if it makes sense that this one is different and sends lbn_clk
 		auto& state = *get_state(wnd);
 		if (&state) {
-			if (idx == (size_t)-1) state.selected_element = UINT32_MAX;
+			auto old_selected_element = state.selected_element;
+			if (idx == no_element) state.selected_element = no_element;
 			else if (idx < state.elements.size()) {
 				state.selected_element = idx;
-				//TODO(fran): only re-render if the selected_element changed 
 				state.clicked_element = idx;
 				state.stored_clicked_element = state.clicked_element;
 				notify_parent(state, LBN_CLK);
-				state.clicked_element = UINT32_MAX;
+				state.clicked_element = no_element;
+			}
+			if (old_selected_element != state.selected_element) {
 				render_backbuffer(state);
 				ask_window_for_repaint(state.wnd);
 			}
@@ -391,12 +379,11 @@ namespace listbox {
 		auto& state = *get_state(wnd);
 		if (&state) {
 			auto old_selected_element = state.selected_element;
-			if (idx == (size_t)-1) state.selected_element = UINT32_MAX;
+			if (idx == no_element) state.selected_element = no_element;
 			else if (idx < state.elements.size()) {
 				state.selected_element = idx;
-				//TODO(fran): only re-render if the selected_element changed 
 				state.stored_clicked_element = idx;
-				state.clicked_element = UINT32_MAX;
+				state.clicked_element = no_element;
 			}
 			if (old_selected_element != state.selected_element) {
 				render_backbuffer(state);
@@ -421,7 +408,7 @@ namespace listbox {
 			//Assert(st->parent == 0);//NOTE: we only handle floating listboxes for now
 			st->elements = decltype(st->elements)();
 
-			st->selected_element = st->mouse_hover_element = st->clicked_element = st->stored_clicked_element = UINT32_MAX;//TODO(fran): use std::limits<size_t>::max()
+			st->selected_element = st->mouse_hover_element = st->clicked_element = st->stored_clicked_element = no_element;
 
 			HDC __front_dc = GetDC(st->wnd); defer{ ReleaseDC(st->wnd,__front_dc); };
 			st->offscreen_dc = CreateCompatibleDC(__front_dc);
@@ -512,9 +499,8 @@ namespace listbox {
 
 				state.mouse_hover_element = mouse_hover_element;
 
-				if (old_element != UINT32_MAX && old_element < state.elements.size()) render_backbuffer_element(state, old_element);
-				if (state.mouse_hover_element != UINT32_MAX && state.mouse_hover_element < state.elements.size()) render_backbuffer_element(state, state.mouse_hover_element);
-				//render_backbuffer(state);
+				if (old_element != no_element && old_element < state.elements.size()) render_backbuffer_element(state, old_element);
+				if (state.mouse_hover_element != no_element && state.mouse_hover_element < state.elements.size()) render_backbuffer_element(state, state.mouse_hover_element);
 				ask_window_for_repaint(state.wnd);
 
 			//We now need to know when the mouse exits our window to clear the mouse_hover_element
@@ -531,17 +517,18 @@ namespace listbox {
 		{
 			//we asked TrackMouseEvent for this so we can update when the mouse leaves our client area, which we dont get notified about otherwise and is needed, for example when the user hovers on top an element and then hovers outside the wnd
 			//Clear the mouse_hover_element
-			if (state.mouse_hover_element != UINT32_MAX) {
+			if (state.mouse_hover_element != no_element) {
 				size_t old_element = state.mouse_hover_element;
-				state.mouse_hover_element = UINT32_MAX;
-				if (old_element != UINT32_MAX && old_element < state.elements.size()) render_backbuffer_element(state, old_element);
-				//render_backbuffer(state);
+				state.mouse_hover_element = no_element;
+				if (old_element != no_element && old_element < state.elements.size()) render_backbuffer_element(state, old_element);
 				ask_window_for_repaint(state.wnd);
 			}
 			return 0;
 		} break;
 		case WM_MOUSEACTIVATE://When the user clicks on us this is 1st msg received
 		{
+			if (GetWindowLongPtr(state.wnd, GWL_STYLE) & WS_CHILD)
+				return DefWindowProc(hwnd, msg, wparam, lparam);
 			HWND parent = (HWND)wparam;
 			WORD hittest = LOWORD(lparam);
 			WORD mouse_msg = HIWORD(lparam);
@@ -550,6 +537,7 @@ namespace listbox {
 		case WM_LBUTTONDOWN:
 		{
 			//wparam = test for virtual keys pressed
+			if (GetWindowLongPtr(state.wnd, GWL_STYLE) & WS_CHILD) SetFocus(state.wnd);
 			POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };//Client coords, relative to upper-left corner of client area
 
 			size_t clicked_element = mouse_element_at(state, mouse);
@@ -558,11 +546,10 @@ namespace listbox {
 				clear_clicked_element(state);
 				state.clicked_element = clicked_element;
 
-				if (state.clicked_element != UINT32_MAX && state.clicked_element < state.elements.size()) render_backbuffer_element(state, state.clicked_element);
-				//render_backbuffer(state);
+				if (state.clicked_element != no_element && state.clicked_element < state.elements.size()) render_backbuffer_element(state, state.clicked_element);
 				ask_window_for_repaint(state.wnd);
 			}
-			if (clicked_element != UINT32_MAX) SetCapture(state.wnd);
+			if (clicked_element != no_element) SetCapture(state.wnd);
 
 			return 0;
 		} break;
@@ -576,9 +563,12 @@ namespace listbox {
 			size_t unclicked_element = mouse_element_at(state, mouse);
 
 			//Check the user released the click on the same element, otherwise they're canceling it
-			if (state.clicked_element != UINT32_MAX && state.clicked_element == unclicked_element && state.clicked_element < state.elements.size()) {
+			if (state.clicked_element != no_element && state.clicked_element == unclicked_element && state.clicked_element < state.elements.size()) {
 				//IMPORTANT: this must be sent via SendMessage since the selection/click will be cleared afterwards
-				state.stored_clicked_element = state.clicked_element;
+				size_t old_selected_element = state.selected_element;
+				state.selected_element = state.stored_clicked_element = state.clicked_element;
+				if (old_selected_element != no_element && old_selected_element != state.selected_element)
+					render_backbuffer_element(state, old_selected_element);
 				notify_parent(state, LBN_CLK);
 			}
 			//Clear the clicked element since the mouse btn is now up
@@ -602,10 +592,9 @@ namespace listbox {
 			HDC dc = BeginPaint(state.wnd, &ps);
 			HDC& offscreen_dc = state.offscreen_dc;
 			bool window_enabled = IsWindowEnabled(state.wnd);
-			//TODO(fran): we need to re-render backbuf if the window is disabled and the dis_... are !=0 and != than the non dis_... brushes
 			LONG_PTR style = GetWindowLongPtr(state.wnd, GWL_STYLE);
 			int backbuf_x = 0;
-			int backbuf_y = (int)(state.scroll_y * (f32)state.backbuffer_dim.cy);
+			int backbuf_y = state.scroll_y;
 			Assert(state.backbuffer_dim.cx == w);
 			int backbuf_w = w;
 			int backbuf_h = h;
@@ -616,25 +605,16 @@ namespace listbox {
 			}
 			// Border
 
-			HBRUSH border_br = window_enabled ? state.brushes.border : state.brushes.border_disabled;
+			HBRUSH border_br = !window_enabled && state.brushes.border_disabled ? state.brushes.border_disabled : state.brushes.border;
 			FillRectBorder(dc, rc, border_thickness, border_br, BORDERALL);
 
 			EndPaint(hwnd, &ps);
 			return 0;
 		} break;
-#if 0
-		case WM_MOUSEWHEEL:
-		{
-			//TODO(fran): offset state.scroll_y;
-			Assert(0);
-			return 0;
-		} break;
-#else
 		case WM_MOUSEWHEEL:
 		{
 			return DefWindowProc(hwnd, msg, wparam, lparam);//propagates the msg to the parent
 		} break;
-#endif
 		case WM_GETTEXT:
 		{
 			return 0;
@@ -684,6 +664,18 @@ namespace listbox {
 			//NOTE: for key events in this control we should handle on WM_KEYDOWN _not_ up
 			return 0;
 		}
+		case WM_GETDLGCODE:
+		{
+			return GetWindowLongPtr(state.wnd, GWL_STYLE) & WS_CHILD ? DLGC_WANTARROWS : 0;
+		}
+		case WM_KEYDOWN:
+		{
+			if (GetWindowLongPtr(state.wnd, GWL_STYLE) & WS_CHILD) {
+				if (wparam == VK_UP) { sel_up(state.wnd); return 0; }
+				if (wparam == VK_DOWN) { sel_down(state.wnd); return 0; }
+			}
+			return DefWindowProc(hwnd, msg, wparam, lparam);
+		}
 		case WM_CANCELMODE:
 		{
 			clear_clicked_element(state);
@@ -698,7 +690,7 @@ namespace listbox {
 		//---------Responses to the user---------:
 		case LB_GETCURSEL:
 		{
-			return state.selected_element;//TODO(fran): idk if we want to check if state.clicked_element is valid too
+			return state.selected_element;
 		} break;
 		case LB_GETCOUNT:
 		{
@@ -711,21 +703,12 @@ namespace listbox {
 			if (idx < state.elements.size()) res = state.elements[idx];
 			return (LRESULT)res;
 		} break;
-		//case WM_CANCELMODE:
-		//{
-		//	TRACKMOUSEEVENT track;
-		//	track.cbSize = sizeof(track);
-		//	track.hwndTrack = state.wnd;
-		//	track.dwFlags = TME_LEAVE | TME_CANCEL;//cancel previous TME_LEAVE request if active //TODO(fran): parametric/automatic way to know what to cancel
-		//	TrackMouseEvent(&track);
-		//	return 0;
-		//} break;
-		//case WM_ENABLE:
-		//{
-		//	BOOL enabled = (BOOL)wparam;//TODO(fran): here we could check whether the enabled state is actually changing and only then ask for repaint
-		//	ask_window_for_repaint(state.wnd);
-		//	return 0;
-		//} break;
+		case WM_ENABLE:
+		{
+			render_backbuffer(state, wparam != 0);
+			ask_window_for_repaint(state.wnd);
+			return 0;
+		} break;
 
 		default:
 #ifdef _DEBUG_HWND_MESSAGES

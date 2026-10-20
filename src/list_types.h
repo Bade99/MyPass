@@ -1,7 +1,9 @@
 #pragma once
+#include <limits>
 
 namespace listbox {
 constexpr auto& wndclass = wndclass_name("listbox");
+constexpr size_t no_element = std::numeric_limits<size_t>::max();
 
 struct RenderFlags {
 	bool on_selected, on_clicked, on_mouseover;
@@ -37,7 +39,7 @@ struct State {
 	HBITMAP backbuffer;
 	SIZE backbuffer_dim;
 
-	f32 scroll_y;//[0,1]
+	i32 scroll_y;
 
 	void* user_extra;
 };
