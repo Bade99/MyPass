@@ -1073,12 +1073,21 @@ bool copy_selection(State& state) { return copy_selection(state, state.selection
 bool is_high_surrogate(utf16 c) { return c >= 0xd800 && c <= 0xdbff; }
 bool is_low_surrogate(utf16 c) { return c >= 0xdc00 && c <= 0xdfff; }
 
-str sanitize_pasted_text(str_view dirty_text, size_t max_char_count, bool multiline) {
+struct SanitizedPasteResult {
 	str text;
+	bool adjusted = false;
+};
+
+SanitizedPasteResult sanitize_pasted_text(str_view dirty_text, size_t max_char_count, bool multiline) {
+	SanitizedPasteResult result;
+	auto& text = result.text;
 	text.reserve(minimum(dirty_text.size(), max_char_count));
 
 	auto append_character = [&](utf16 c) {
-		if (text.size() >= max_char_count) return false;
+		if (text.size() >= max_char_count) {
+			result.adjusted = true;
+			return false;
+		}
 		text.push_back(c);
 		return true;
 	};
@@ -1086,36 +1095,54 @@ str sanitize_pasted_text(str_view dirty_text, size_t max_char_count, bool multil
 
 	for (size_t i = 0; i < dirty_text.size();) {
 		utf16 c = dirty_text[i++];
-		if (!c) break;
+		if (!c) {
+			result.adjusted = true;
+			break;
+		}
 
 		if (c == _t('\r')) {
 			if (i < dirty_text.size() && dirty_text[i] == _t('\n')) i++;
+			if (!multiline) result.adjusted = true;
 			if (!append_line_break()) break;
 		}
-		else if (c == _t('\n') || c == _t('\v') || c == _t('\f') || c == 0x0085 || c == 0x2028 || c == 0x2029) {
+		else if (c == _t('\n')) {
+			if (!multiline) result.adjusted = true;
+			if (!append_line_break()) break;
+		}
+		else if (c == _t('\v') || c == _t('\f') || c == 0x0085 || c == 0x2028 || c == 0x2029) {
+			result.adjusted = true;
 			if (!append_line_break()) break;
 		}
 		else if (c == _t('\t')) {
+			result.adjusted = true;
 			if (!append_character(_t(' '))) break;
 		}
 		else if (c < 0x20 || (c >= 0x7f && c <= 0x9f)) {
+			result.adjusted = true;
 			continue;
 		}
 		else if (is_high_surrogate(c)) {
 			if (i < dirty_text.size() && is_low_surrogate(dirty_text[i])) {
-				if (max_char_count - text.size() < 2) break;
+				if (max_char_count - text.size() < 2) {
+					result.adjusted = true;
+					break;
+				}
 				text.push_back(c);
 				text.push_back(dirty_text[i++]);
 			}
-			else if (!append_character(0xfffd)) break;
+			else {
+				result.adjusted = true;
+				if (!append_character(0xfffd)) break;
+			}
 		}
 		else if (is_low_surrogate(c)) {
+			result.adjusted = true;
 			if (!append_character(0xfffd)) break;
 		}
 		else if (!append_character(c)) break;
 	}
 
-	return text;
+	return result;
 }
 
 bool paste_dirty_text(State& state, str_view dirty_text) { //returns true if it could paste something
@@ -1124,11 +1151,13 @@ bool paste_dirty_text(State& state, str_view dirty_text) { //returns true if it 
 	u64 available_char_count = text_length_after_removal <= state.char_max_sz ? state.char_max_sz - text_length_after_removal : 0;
 	size_t max_char_count = (size_t)minimum(available_char_count, (u64)SIZE_MAX);
 	bool multiline = GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_MULTILINE;
-	str text = sanitize_pasted_text(dirty_text, max_char_count, multiline);
-	if (!text.empty()) {
+	auto sanitized = sanitize_pasted_text(dirty_text, max_char_count, multiline);
+	if (!sanitized.text.empty()) {
 		state.history_helper.record_transient_edit(TextEditEntry::Kind::paste);
-		res = insert_character(state, to_utf_str(text), state.selection.x_min(), state.selection.x_max());
+		res = insert_character(state, to_utf_str(sanitized.text), state.selection.x_min(), state.selection.x_max());
 	}
+	if (sanitized.adjusted && (res || sanitized.text.empty()))
+		show_tip(state.wnd, RCS(LANG_EDIT_PASTE_ADJUSTED), EDITONELINE_default_tooltip_duration, ETP::left | ETP::top);
 	return res;
 }
 
@@ -1203,11 +1232,12 @@ bool set_text(State& state, cstr* buf) {
 	cstr empty_txt = 0;
 	if (!buf) buf = &empty_txt; //NOTE: this is the standard default behaviour
 	
-	bool multiline = GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_MULTILINE;
-	str text = sanitize_pasted_text(str_view{ buf }, SIZE_MAX, multiline);
-	if (text.size() <= (size_t)state.char_max_sz) {
+	//TODO(fran): define WM_SETTEXT semantics separately from user input: whether to bypass
+	// edit limits and field filters, how to preserve CRLF and malformed UTF-16 safely,
+	// and how vault-loading callers should handle a failed SetWindowText.
+	if (auto text = to_utf_str(buf); text.cnt() <= (size_t)state.char_max_sz) {
 		state.history_helper.record_transient_edit(TextEditEntry::Kind::programmatic);
-		res = insert_character(state, to_utf_str(text), 0, -1);
+		res = insert_character(state, text, 0, -1);
 
 		if (res) {
 			state.history_helper.break_group();
