@@ -184,11 +184,13 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 
 						auto img_br = item->itemState & ODS_GRAYED ? txt_br : colors.Img;
 
-						//TODO(fran): clipping
+						int saved_dc = SaveDC(item->hDC);
+						if (saved_dc) IntersectClipRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom);
 						if (bitmap.bmBitsPixel == 1)
 							urender::draw_menu_mask(item->hDC, bmp_align_width, bmp_align_height, bmp_width, bmp_height, hbmp, 0, 0, bitmap.bmWidth, bitmap.bmHeight, img_br);//TODO(fran): parametric brush
 						elif(bitmap.bmBitsPixel == 8)
 							urender::draw_menu_mask8(item->hDC, bmp_align_width, bmp_align_height, bmp_width, bmp_height, hbmp, img_br);
+						if (saved_dc) RestoreDC(item->hDC, saved_dc);
 					}
 				}
 

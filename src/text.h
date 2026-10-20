@@ -510,6 +510,14 @@ void show_tip(HWND wnd, const cstr* msg, int duration_ms, u32 ETP_flags) {
 	SetTimer(state.wnd, EDITONELINE_tooltip_timer_id, duration_ms, nil);
 }
 
+void hide_tip(State& state) {
+	KillTimer(state.wnd, EDITONELINE_tooltip_timer_id);
+	TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
+	toolInfo.hwnd = state.wnd;
+	toolInfo.uId = (UINT_PTR)state.wnd;
+	SendMessage(state.controls.tooltip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&toolInfo);
+}
+
 void scroll_to_caret(State& state) {
 	//TODO(fran): test right and center text alignments, @BUG: center alignment is wrong, probably due to my stupid use of padding.x, it should simply indicate the render area, instead Im using it to align the text when that should require a new variable
 
@@ -728,7 +736,9 @@ void select_all(State& state) { set_selection<true>(state, 0, -1); } //TODO(fran
 
 size_t closest_caret_stop(const State& state, size_t character_index);
 
-void push_to_history(State& state, TextEditEntry& history_entry) { //TODO(fran): is the type right with & ? we want to take ownership of the object
+void push_to_history(State& state, TextEditEntry history_entry) {
+	auto edit_kind = history_entry.edit_kind;
+	auto selection_after = history_entry.selection_after;
 	if (state.history_helper.can_merge(history_entry.selection_before)) {
 		if (!state.history.update_latest([&history_entry](TextEditEntry& prior) -> size_t {
 			Assert(prior.edit_kind == history_entry.edit_kind);
@@ -766,9 +776,10 @@ void push_to_history(State& state, TextEditEntry& history_entry) { //TODO(fran):
 	}
 	else {
 	push_history:
-		state.history.push(history_entry, history_entry.memory_size()); //TODO(fran): template undo_history: if the entry type can do .memory_size() then simplify this function call to a single parameter and internally call .memory_size()
+		auto memory_size = history_entry.memory_size();
+		state.history.push(std::move(history_entry), memory_size); //TODO(fran): template undo_history: if the entry type can do .memory_size() then simplify this function call to a single parameter and internally call .memory_size()
 	}
-	state.history_helper.record_edit(history_entry.edit_kind, history_entry.selection_after);
+	state.history_helper.record_edit(edit_kind, selection_after);
 }
 
 template<bool AffectHistory = true>
@@ -810,7 +821,7 @@ bool remove_selection(State& state, size_t x_min, size_t x_max) {
 				.selection_before_trailing = selection_before_trailing,
 				.selection_after_trailing = state.caret.trailing,
 			};
-			push_to_history(state, history_entry);
+			push_to_history(state, std::move(history_entry));
 			if (cursor_was_snapped) state.history_helper.break_group();
 		}
 		return true;
@@ -882,7 +893,7 @@ bool insert_character(State& state, utf16_str s, size_t x_min, size_t x_max) {
 				.selection_before_trailing = selection_before_trailing,
 				.selection_after_trailing = state.caret.trailing,
 			};
-			push_to_history(state, history_entry);
+			push_to_history(state, std::move(history_entry));
 			if (cursor_was_snapped) state.history_helper.break_group();
 		}
 
@@ -1018,7 +1029,7 @@ bool end_IME_composition(State& state) {
 				.selection_after_trailing = state.caret.trailing,
 			};
 			state.history_helper.record_transient_edit(TextEditEntry::Kind::ime);
-			push_to_history(state, history_entry);
+			push_to_history(state, std::move(history_entry));
 			committed_change = true;
 		}
 	}
@@ -1851,7 +1862,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		BOOL show = (BOOL)wparam;
 		if (!show) {
 			//We're going to be hidden, we must also hide our tooltips
-			SendMessage(state.wnd, WM_TIMER, EDITONELINE_tooltip_timer_id, 0); //TODO(fran): #robustness, we should know which timers are active to only disable those, also replace this crude SendMessage with a hide_tooltips()
+			hide_tip(state);
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
@@ -2161,7 +2172,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			move_selection_vertical(state, -1, shift_is_down, ctrl_is_down);
 			reset_v_sel_stored_w = false;
 		} break;
-		//TODO(fran): do we want to update scrolling to the left when deleting causes the text to get shorter than the right side of the element?
 		case VK_DELETE://What in spanish is the "Supr" key (delete character ahead of you)
 		{
 			if (!state.char_text.empty()) {
@@ -2316,7 +2326,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		}break;
 		case VK_ESCAPE://Escape
 		{
-			//TODO(fran): should we do something?
 			PostMessage(GetParent(state.wnd), WM_COMMAND, MAKELONG(state.identifier, EN_ESCAPE), (LPARAM)state.wnd);
 		}break;
 		default:
@@ -2344,11 +2353,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		switch (timerID) {
 		case EDITONELINE_tooltip_timer_id:
 		{
-			KillTimer(state.wnd, timerID);
-			TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
-			toolInfo.hwnd = state.wnd;
-			toolInfo.uId = (UINT_PTR)state.wnd;
-			SendMessage(state.controls.tooltip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&toolInfo);
+			hide_tip(state);
 			return 0;
 		} break;
 		case EDITONELINE_caret_timer_id:

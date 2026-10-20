@@ -38,22 +38,28 @@ namespace password_editor {
 
 			bool default_hidden;
 
+			void set_hidden(bool hidden) {
+				auto& controls = this->controls;
+				LONG_PTR style = GetWindowLongPtr(controls.text, GWL_STYLE);
+				if (hidden) style |= ES_PASSWORD;
+				else style &= ~ES_PASSWORD;
+				SetWindowLongPtr(controls.text, GWL_STYLE, style);
+				ask_window_for_repaint(controls.text);
+				button::set_selected(controls.btn_show, !hidden);
+				SendMessage(controls.btn_show, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)(hidden ? bmps.eye_open : bmps.eye_closed));
+			}
+
 			void set_default_hidden(bool new_default_hidden) {
 				auto& state = *this;
 				state.default_hidden = new_default_hidden;
 
 				auto& controls = state.controls;
 
-				LONG_PTR style = GetWindowLongPtr(controls.text, GWL_STYLE);
-				if (state.default_hidden) style |= ES_PASSWORD;
-				else style &= ~ES_PASSWORD;
-				SetWindowLongPtr(controls.text, GWL_STYLE, style);
-				ask_window_for_repaint(controls.text);
+				state.set_hidden(state.default_hidden);
 
 				button::set_selected(controls.btn_lock, state.default_hidden);
 
 				ShowWindow(controls.btn_show, state.default_hidden ? SW_SHOW : SW_HIDE);
-				SendMessage(controls.btn_show, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)(state.default_hidden ? bmps.eye_open : bmps.eye_closed));
 			}
 		};
 
@@ -324,12 +330,8 @@ void create_controls(State& state) {
 					button::set_functions(controls.btn_show, {
 						.on_click = [](void* data, HWND wnd) {
 							value_cell::State& state = *(value_cell::State*)data;
-							auto& controls = state.controls;
-							LONG_PTR style = GetWindowLongPtr(controls.text, GWL_STYLE) ^ ES_PASSWORD;
-							SetWindowLongPtr(controls.text, GWL_STYLE, style);
-							ask_window_for_repaint(controls.text);
-							SendMessage(controls.btn_show, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)(style & ES_PASSWORD ? bmps.eye_open : bmps.eye_closed));
-							//TODO: move to listener like set_default_hidden, and modify btn colors based on state
+							bool hidden = GetWindowLongPtr(state.controls.text, GWL_STYLE) & ES_PASSWORD;
+							state.set_hidden(!hidden);
 						}
 					});
 

@@ -192,20 +192,14 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_COMMAND:
 	{
 		// Msgs from my controls
+		HWND child = (HWND)lparam;
+		if (child && (child == state.controls.edit_username || child == state.controls.edit_password)) {
+			if (HIWORD(wparam) == EN_ENTER)
+				PostMessage(state.wnd, WM_COMMAND, MAKELONG(BTN_LOGIN, 0), (LPARAM)state.controls.button_login);//TODO(fran): decide on a general way to simulate the action of a child control, maybe simulate a click? idk
+			return 0;
+		}
 		switch (LOWORD(wparam))
 		{
-		case EDIT_USERNAME://TODO(fran): this is actually pretty stupid, we know all our hwnds so we dont really need identifiers where we could have duplicates without knowing
-		case EDIT_PASSWORD:
-		{
-			WORD msg_code = HIWORD(wparam);
-			switch (msg_code) {
-			case EN_ENTER://User pressed enter key, aka wants to login
-			{
-				PostMessage(state.wnd, WM_COMMAND, MAKELONG(BTN_LOGIN, 0), (LPARAM)state.controls.button_login);//TODO(fran): decide on a general way to simulate the action of a child control, maybe simulate a click? idk
-				return 0;
-			} break;
-			}
-		} break;
 		case BTN_LOGIN:
 		{
 			bool success = false;

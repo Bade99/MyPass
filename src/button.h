@@ -187,6 +187,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 			state.OnMouseTracking = false;
 		}
 		state.onLMouseClick = false;
+		state.onKeyboardClick = false;
 		state.onMouseOver = false;
 		ask_window_for_repaint(state.wnd);
 		return 0;
@@ -289,7 +290,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 			bkbr = theme.brushes.bk.disabled;
 			forebr = theme.brushes.foreground.disabled;
 			if (theme.brushes.border.disabled) borderbr = theme.brushes.border.disabled;
-		} elif ((state.onMouseOver && state.onLMouseClick) || state.selected) {
+		} elif ((state.onMouseOver && state.onLMouseClick) || state.onKeyboardClick || state.selected) {
 			bkbr = theme.brushes.bk.clicked;
 			forebr = theme.brushes.foreground.clicked;
 			if (theme.brushes.border.clicked) borderbr = theme.brushes.border.clicked;
@@ -342,7 +343,24 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 	} break;
 	case WM_KILLFOCUS:
 	{
+		state.onKeyboardClick = false;
 		ask_window_for_repaint(state.wnd);
+		return 0;
+	} break;
+	case WM_KEYDOWN:
+	{
+		if (wparam == VK_RETURN && !state.onKeyboardClick) {
+			state.onKeyboardClick = true;
+			RedrawWindow(state.wnd, nil, nil, RDW_INVALIDATE | RDW_UPDATENOW);
+		}
+		return 0;
+	} break;
+	case WM_KEYUP:
+	{
+		if (wparam == VK_RETURN && state.onKeyboardClick) {
+			state.onKeyboardClick = false;
+			ask_window_for_repaint(state.wnd);
+		}
 		return 0;
 	} break;
 	case WM_CHAR:
@@ -356,15 +374,12 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 		}break;
 		case VK_RETURN://Received when the user presses the "enter" key //Carriage Return aka \r
 		{
-			//SendMessage(state.wnd, WM_LBUTTONDOWN, ); //TODO(fran): send this to cause repaint and thus make it look as if the user clicked the button
 			notify_on_click(state);
 		}break;
 		}
 		return 0;
 	} break;
 	case WM_IME_SETCONTEXT: //We dont want IME for a button
-	case WM_KEYUP:
-	case WM_KEYDOWN: //Nothing for us here
 	case WM_NCCALCSIZE:
 	{
 		return 0;

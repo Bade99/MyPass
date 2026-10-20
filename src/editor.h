@@ -640,7 +640,6 @@ void get_controls_data_for_saving(State& state, raw_buffer& out) {
 		auto title = ed.controls.edo_title;
 		
 		append_control_text_to_buffer(out, title);
-		//TODO: im just using \r\n for compatibility with the text format, remove the stupid \r later if I end up actually using a text based encoding format with line jumps
 		
 		multiflag<password_editor::ItemFlag> pwed_flags = 0;
 		//TODO(fran): should we maintain ed.properties.flags up to date and use it directly instead?
@@ -828,7 +827,6 @@ void add_controls_transition_v0(State& state) {
 			});
 		AWT(controls.btn_confirm_transfer, LANG_TRANSITION_BTN_CONFIRM);
 
-		//TODO(fran): EM_SETENDOFLINE allows you to change between EC_ENDOFLINE_CRLF EC_ENDOFLINE_CR EC_ENDOFLINE_LF
 		controls.edit_passwords = create_window(state.wnd, L"Edit", nil, WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_CLIPCHILDREN | ES_NOHIDESEL /*to show selection even when you dont have the focus*/);
 
 		constexpr auto EDIT_PASSWORDS_MAX_TEXT_LENGTH = 32767 * 2; //32767 is the default

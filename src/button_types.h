@@ -53,6 +53,7 @@ struct Theme {
 struct State : WindowState { //NOTE: must be initialized to zero
 	bool onMouseOver;
 	bool onLMouseClick;//The left click is being pressed on the background area
+	bool onKeyboardClick;
 	bool OnMouseTracking; //Left click was pressed in our bar and now is still being held, the user will probably be moving the mouse around, so we want to track it to move the scrollbar
 
 	UINT msg_to_send;

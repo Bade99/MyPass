@@ -163,6 +163,7 @@ void show_listbox(State& state, bool show) {
 		if (state.on_listbox_opening) state.on_listbox_opening(state.wnd, state.controls.listbox, state.user_extra);
 		ShowWindow(state.controls.listbox, SW_SHOWNA);//TODO(fran): make sure it's on top of the z order, at least on top of us
 #endif
+		SetFocus(state.controls.button);
 		//We need to know when the user clicks outside of our editbox/listbox to be able to hide the listbox
 		if (!state.impl.mouse_click_hook) {
 			//TODO(fran): maybe this should be standard implementation in the listbox
@@ -215,6 +216,23 @@ LRESULT CALLBACK ButtonPaintProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lPar
 			flags.is_listbox_open = is_listbox_open(parent);
 
 			combo_state.render_combobox(dc, rect_i32::create_from(rc), flags, listbox::get_sel_element(combo_state.controls.listbox), combo_state.user_extra);
+			return 0;
+		}
+	} break;
+	case WM_KEYDOWN:
+	{
+		if (IsWindowVisible(combo_state.controls.listbox)) {
+			if (wparam == VK_UP) { listbox::sel_up(combo_state.controls.listbox); return 0; }
+			if (wparam == VK_DOWN) { listbox::sel_down(combo_state.controls.listbox); return 0; }
+			if (wparam == VK_ESCAPE) { show_listbox(combo_state, false); return 0; }
+		}
+	} break;
+	case WM_CHAR:
+	{
+		if (wparam == VK_RETURN && IsWindowVisible(combo_state.controls.listbox)) {
+			size_t selected = listbox::get_cur_sel(combo_state.controls.listbox);
+			if (selected != listbox::no_element) listbox::set_sel(combo_state.controls.listbox, selected);
+			else show_listbox(combo_state, false);
 			return 0;
 		}
 	} break;

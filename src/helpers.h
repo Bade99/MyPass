@@ -309,7 +309,7 @@ static RECT max_area(RECT* rcs, int len) {
 		int area = RECTW((*test)) * RECTH((*test));
 		if (area > max_area) { max_area = area; idx = i; }
 	}
-	return *(rcs + idx); //TODO(fran): might be better to simply return the pointer
+	return *(rcs + idx);
 }
 
 /**

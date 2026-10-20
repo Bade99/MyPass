@@ -159,30 +159,6 @@ void show_rclickmenu(State& state, POINT mouse) {
 	TrackPopupMenuEx(subm, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, mouse.x, mouse.y, state.wnd, 0);
 }
 
-void manual_maximize(State& state) {//Maximize only works correctly for WM_OVERLAPPEDWINDOW, we gotta do it by hand
-	WINDOWPLACEMENT old_placement; GetWindowPlacement(state.wnd, &old_placement);
-	HMONITOR mon = MonitorFromWindow(state.wnd, MONITOR_DEFAULTTOPRIMARY);
-	MONITORINFO monnfo{ sizeof(monnfo) };
-	BOOL res = GetMonitorInfo(mon, &monnfo);
-	Assert(res);
-	RECT work_rc = monnfo.rcWork;//NOTE: im in a 1 monitor setup and it's exactly the same as the other rc so idk when it's different. Strangely enough it still doesnt go over the taskbar area, so I guess there's a check inside the resizing code done by windows somewhere
-
-	//TODO(fran):we're gonna have to store our current size to be able to manually restore if the user tries to move us or presses maximize again. SetWindowPlacement?
-	//TODO(fran): gotta decide what we want to do with the resizing borders, the top and bottom ones are still user reachable, both visual studio and chrome dont allow resizing but chrome developers where a little lazy and didnt update the margins of the window, therefore on the bottom the mouse still changes to the resizing one even though they dont allow the resize
-	work_rc.left -= state.nc.cxLeftWidth;
-	work_rc.right += state.nc.cxRightWidth;
-	work_rc.top -= state.nc.cyTopHeight;
-	work_rc.bottom += state.nc.cyBottomHeight;
-	MoveWindow(state.wnd, work_rc.left, work_rc.top, RECTW(work_rc), RECTH(work_rc), TRUE);
-	WINDOWPLACEMENT placement{ sizeof(placement) };
-	placement.showCmd = SW_MAXIMIZE;
-	placement.flags = WPF_ASYNCWINDOWPLACEMENT;
-	placement.ptMaxPosition.x = work_rc.left;
-	placement.ptMaxPosition.y = work_rc.top;
-	placement.rcNormalPosition = old_placement.rcNormalPosition;//TODO(fran): for non WS_EX_TOOLWINDOW windows all this should be in workspace coords
-	SetWindowPlacement(state.wnd, &placement);//TODO(fran): I just wanted to set the placement, not ask this guy to update my window too (maybe I can do some extra resizing to adjust the situation)
-}
-
 void resize_menu_backbuffer(State& state) {
 	if (state.menu) {
 		RECT rc = calc_menu_rc(state);
@@ -520,7 +496,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			POINT cl_mouse = mouse; ScreenToClient(state.wnd, &cl_mouse);
 
 			if (test_pt_rc(cl_mouse, state.rc_icon)) {
-				PostMessage(state.wnd, WM_COMMAND, (WPARAM)MAKELONG(menu::close, 0), (LPARAM)state.btn_close);//TODO(fran): should I use WM_CLOSE?
+				PostMessage(state.wnd, WM_CLOSE, 0, 0);
 				return 0;
 			}
 
@@ -528,15 +504,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				WINDOWPLACEMENT p{ sizeof(p) }; GetWindowPlacement(state.wnd, &p);
 
 				if (p.showCmd == SW_SHOWMAXIMIZED) ShowWindow(state.wnd, SW_RESTORE);
-				else {
-	#if 1
-					//LONG_PTR  dwStyle = GetWindowLongPtr(state.wnd, GWL_STYLE);
-					//SetWindowLongPtr(state.wnd, GWL_STYLE, dwStyle | WS_OVERLAPPEDWINDOW);//TODO(fran): now im REALLY confused, I had to specifically take out WS_OVERLAPPEDWINDOW so it wouldnt paint over me and now it doesnt seem to, test more thoroughly //still though sizing isnt perfect, the top is still cut off
-					ShowWindow(state.wnd, SW_MAXIMIZE);
-	#else
-					manual_maximize(state);
-	#endif
-				}
+				else ShowWindow(state.wnd, SW_MAXIMIZE);
 			}
 		}
 		return 0;
@@ -616,9 +584,12 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_SIZE:
 	{
 		bool is_maximized = wparam == SIZE_MAXIMIZED;
+		bool maximize_state_changed = state.is_maximized != is_maximized;
 		set_is_maximized(state, is_maximized);
 
 		resize_controls(state);
+		if (maximize_state_changed && state.client)
+			RedrawWindow(state.client, nil, nil, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
 
 		resize_menu_backbuffer(state);
 		return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -718,9 +689,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		} break;
 		case menu::close:
 		{
-			bool client_handled = SendMessage(state.client, WM_CLOSE, 0, 0);
-			if (!client_handled) DestroyWindow(state.wnd);
-			return 0;
+			return SendMessage(state.wnd, WM_CLOSE, 0, 0);
 		} break;
 		default: return SendMessage(state.client, msg, wparam, lparam);
 		}

@@ -117,10 +117,10 @@ void make_selection(State& state, int p /*zero-based*/, int char_count) {
 	}
 }
 void scroll_to_selection(State& state) {//Scrolls the text to the current selection
-	//TODO(fran): this scrolls to the specific line, therefore the selection can end up on the first or last visible lines, we would prefer the selection gets a little more centered to the middle of the control
 	switch (state.parent_type) {
 	case ParentType::richedit:
 	{
+		//TODO(fran): center the selected line instead of leaving it at the first or last visible line
 		SendMessage(state.parent, EM_SCROLLCARET, 0, 0);
 	} break;
 	case ParentType::edit:
@@ -130,8 +130,10 @@ void scroll_to_selection(State& state) {//Scrolls the text to the current select
 		//The current selection should be on a visible line, now we move that line a little closer to the center if it is too close to the top or bottom
 		int first_visible_line = (int)SendMessage(state.parent, EM_GETFIRSTVISIBLELINE, 0, 0);
 		//EM_GETLASTVISIBLELINE
-		RECT r; SendMessage(state.parent, EM_GETRECT, 0, (LPARAM)&r);//TODO(fran): make sure this is actually useful when the rect is modified instead of just using getclientrect
-		DWORD c = (DWORD)SendMessage(state.parent, EM_CHARFROMPOS, 0, MAKELONG(0,RECTH(r)-1));
+		RECT r; SendMessage(state.parent, EM_GETRECT, 0, (LPARAM)&r);
+		if (r.right <= r.left || r.bottom <= r.top) break;
+		DWORD c = (DWORD)SendMessage(state.parent, EM_CHARFROMPOS, 0, MAKELONG(r.left, r.bottom - 1));
+		if (c == 0xffffffff) break;
 		int last_visible_line = HIWORD(c);
 		int max_visible_lines = distance(first_visible_line,last_visible_line);
 		int current_line = (int)SendMessage(state.parent, EM_LINEFROMCHAR, -1 /*get the line of the current selection*/, 0);
@@ -498,10 +500,10 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 				case EN_CHANGE:
 				{
 					int char_len = (int)SendMessage(state.controls.edit_match, WM_GETTEXTLENGTH, 0, 0);//doesnt include null terminator
-					if (!char_len) {
+					if (!char_len && state.parent_type != ParentType::custom) {
 						DWORD sel_start;
-						SendMessage(state.parent, EM_GETSEL, (WPARAM)&sel_start, 0); //TODO(fran): this should be type dependent, but really everybody should have this same one
-						SendMessage(state.parent, EM_SETSEL, sel_start, sel_start); //TODO(fran): this should be type dependent, but really everybody should have this same one
+						SendMessage(state.parent, EM_GETSEL, (WPARAM)&sel_start, 0);
+						SendMessage(state.parent, EM_SETSEL, sel_start, sel_start);
 					}
 					search_and_scroll(state,true);
 				} break;

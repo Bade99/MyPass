@@ -149,16 +149,13 @@ public:
 	//·On failure returns (LANGID)-2 if the language is invalid, (LANGID)-3 if failed to change the language
 	LANGID ChangeLanguage(Language newLang)
 	{
-		//if (newLang == this->CurrentLanguage) return -1;//TODO: negative values wrap around to huge values, I assume not all lcid values are valid, find out if these arent
 		BOOL res = this->IsValidLanguage(newLang);
 		if (!res) return (LANGID)-2;
 
 		this->language = newLang;
-		//LCID previousLang = SetThreadLocale(this->GetLCID(newLang));
 		//INFO: thanks https://www.curlybrace.com/words/2008/06/10/setthreadlocale-and-setthreaduilanguage-for-localization-on-windows-xp-and-vista/
 		// SetThreadLocale has no effect on Vista and above
 		LANGID newLANGID = this->GetLANGID(newLang);
-		//INFO: On non-Vista platforms, SetThreadLocale can be used. Instead of a language identifier, it accepts a locale identifier
 		LANGID lang_res = SetThreadUILanguage(newLANGID); //If successful returns the same value that you sent it
 
 		for (auto const& hwnd_sid : this->Hwnds)
@@ -341,25 +338,12 @@ private:
 		return res;
 	}
 
-	LCID GetLCID(Language lang)
-	{
-		switch (lang) {
-		case Language::English:
-			return MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_NEUTRAL), SORT_DEFAULT); //TODO(fran):this is deprecated and not great for macros, unless we set each enum to this values
-		case Language::Español:
-			return MAKELCID(MAKELANGID(LANG_SPANISH, SUBLANG_NEUTRAL), SORT_DEFAULT);
-		default:
-			Assert(0);
-			return NULL;
-		}
-	}
-
 	LANGID GetLANGID(Language lang)
 	{
 		//INFO: https://docs.microsoft.com/en-us/windows/win32/intl/language-identifier-constants-and-strings
 		switch (lang) {
 		case Language::English:
-			return MAKELANGID(LANG_ENGLISH, SUBLANG_NEUTRAL);//TODO(fran): same as GetLCID
+			return MAKELANGID(LANG_ENGLISH, SUBLANG_NEUTRAL);
 		case Language::Español:
 			return MAKELANGID(LANG_SPANISH, SUBLANG_NEUTRAL);
 		default:

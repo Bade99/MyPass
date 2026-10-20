@@ -22,8 +22,6 @@
 //TODO(fran): rendering: there's something clearly screwed up, when you hover with the mouse along many elements you can see a vertical cut as it changes from one to another, wtf is that? also it doesnt always happen
 #define LBN_CLK (LBN_KILLFOCUS+10) //NOTE: LBN_KILLFOCUS is the last default listbox notif
 
-//TODO(fran): add extra functionality for non floating listboxes, eg VK_UP and VK_DOWN to change the selection
-
 namespace listbox {
 
 	State* get_state(HWND wnd) { _control_create_function__get_state }
@@ -47,6 +45,24 @@ namespace listbox {
 		state.backbuffer = CreateCompatibleBitmap(dc, state.backbuffer_dim.cx, state.backbuffer_dim.cy);
 	}
 
+	void render_element_at(State& state, HDC dc, size_t element_index) {
+		//TODO(fran): we could apply a transform so the user can render as if from {0,0} and we simply send a SIZE obj and they dont have to bother with offsetting by left and top
+		rect_i32 elem_rc{
+			0,
+			(i32)element_index * state.element_dim.cy,
+			state.element_dim.cx,
+			state.element_dim.cy
+		};
+		//TODO(fran): offset rectangle by state.border_thickness
+
+		RenderFlags flags;
+		flags.on_clicked = state.clicked_element == element_index;
+		flags.on_selected = state.selected_element == element_index;
+		flags.on_mouseover = state.mouse_hover_element == element_index;
+
+		state.render_element(dc, elem_rc, flags, state.elements[element_index], state.user_extra);
+	}
+
 	void render_backbuffer(State& state, bool window_enabled) {
 		render_diagnostics::Scope diagnostic{ render_diagnostics::Event::list_backbuffer };
 		if (state.backbuffer) {
@@ -64,55 +80,23 @@ namespace listbox {
 			//Render the elements
 			//TODO(fran): we should have a list of changed elems so we know which ones need redrawing, otherwise this wont scale at all
 			if (state.render_element) {
-				for (size_t i = 0; i < state.elements.size(); i++) {
-					//TODO(fran): we could apply a transform so the user can render as if from {0,0} and we simply send a SIZE obj and they dont have to bother with offsetting by left and top
-					rect_i32 elem_rc{
-							backbuffer_rc.left
-						, backbuffer_rc.top + (i32)i * state.element_dim.cy
-						, state.element_dim.cx
-						, state.element_dim.cy
-					};
-					//TODO(fran): offset rectangle by state.border_thickness
-
-					RenderFlags flags;
-					flags.on_clicked = state.clicked_element == i;
-					flags.on_selected = state.selected_element == i;
-					flags.on_mouseover = state.mouse_hover_element == i;
-
-					state.render_element(dc, elem_rc, flags, state.elements[i], state.user_extra);
-				}
+				for (size_t i = 0; i < state.elements.size(); i++) render_element_at(state, dc, i);
 			}
 		}
 	}
 	void render_backbuffer(State& state) { render_backbuffer(state, IsWindowEnabled(state.wnd)); }
 
 	void render_backbuffer_element(State& state, size_t elem_idx) {
-		//TODO(fran): this is a quick HACK reusing render_backbuffer()'s code
 		if (state.backbuffer && elem_idx < state.elements.size()) {
 			HDC& dc = state.offscreen_dc;
 			auto oldbmp = SelectBitmap(dc, state.backbuffer); defer{ SelectBitmap(dc,oldbmp); };
-
-			RECT backbuffer_rc{ 0,0,state.backbuffer_dim.cx,state.backbuffer_dim.cy };
 
 			//NOTE: do _not_ paint the border here, since it should fit the real size of the wnd
 
 			//Render the elements
 			//TODO(fran): we should have a list of changed elems so we know which ones need redrawing, otherwise this wont scale at all
 			if (state.render_element) {
-				size_t i = elem_idx;
-				rect_i32 elem_rc{
-						backbuffer_rc.left
-					, backbuffer_rc.top + (i32)i * state.element_dim.cy
-					, state.element_dim.cx
-					, state.element_dim.cy
-				};
-
-				RenderFlags flags;
-				flags.on_clicked = state.clicked_element == i;
-				flags.on_selected = state.selected_element == i;
-				flags.on_mouseover = state.mouse_hover_element == i;
-
-				state.render_element(dc, elem_rc, flags, state.elements[i], state.user_extra);
+				render_element_at(state, dc, elem_idx);
 			}
 		}
 	}
@@ -121,7 +105,7 @@ namespace listbox {
 		RECT client_rc; GetClientRect(state.wnd, &client_rc);
 		if (!PtInRect(&client_rc, mouse) || state.element_dim.cy <= 0) return no_element;
 
-		i64 backbuffer_y = (i64)(state.scroll_y * (f32)state.backbuffer_dim.cy) + mouse.y;
+		i64 backbuffer_y = (i64)state.scroll_y + mouse.y;
 		if (backbuffer_y < 0) return no_element;
 		size_t element = (size_t)backbuffer_y / state.element_dim.cy;
 		return element < state.elements.size() ? element : no_element;
@@ -141,6 +125,8 @@ namespace listbox {
 		size_t elem_cnt = state.elements.size();
 		SIZE sz{ state.element_dim.cx, (i32)elem_cnt * state.element_dim.cy };
 		resize_backbuffer(state, sz);
+		RECT client_rc; GetClientRect(state.wnd, &client_rc);
+		state.scroll_y = clamp(0, state.scroll_y, maximum(0, state.backbuffer_dim.cy - RECTH(client_rc)));
 		render_backbuffer(state);
 	}
 
@@ -247,7 +233,7 @@ namespace listbox {
 	void add_elements(HWND wnd, void** values, size_t count) {
 		auto& state = *get_state(wnd);
 		if (&state) {
-			for (int i = 0; i < count; i++) state.elements.push_back(values + i);
+			for (size_t i = 0; i < count; i++) state.elements.push_back(values[i]);
 			full_backbuffer_redo(state); //render new elements
 			ask_window_for_repaint(state.wnd);
 		}
@@ -315,6 +301,21 @@ namespace listbox {
 		return res;
 	}
 
+	void scroll_selection_into_view(State& state) {
+		RECT client_rc; GetClientRect(state.wnd, &client_rc);
+		int view_height = RECTH(client_rc);
+		int content_height = state.backbuffer_dim.cy;
+		if (view_height <= 0 || content_height <= 0 || state.element_dim.cy <= 0) return;
+
+		int max_offset = maximum(0, content_height - view_height);
+		int offset = clamp(0, state.scroll_y, max_offset);
+		i64 element_top = (i64)state.selected_element * state.element_dim.cy;
+		if (element_top < offset) offset = (int)element_top;
+		else if (element_top + state.element_dim.cy > offset + view_height)
+			offset = (int)(element_top + state.element_dim.cy - view_height);
+		state.scroll_y = clamp(0, offset, max_offset);
+	}
+
 	void sel_up(HWND wnd) {
 		auto& state = *get_state(wnd);
 		if (&state) {
@@ -327,6 +328,7 @@ namespace listbox {
 				if (old_selected_element != state.selected_element) {
 					notify_parent(state, LBN_SELCHANGE);
 					render_backbuffer(state);
+					scroll_selection_into_view(state);
 					ask_window_for_repaint(state.wnd);
 				}
 			}
@@ -344,6 +346,7 @@ namespace listbox {
 				if (old_selected_element != state.selected_element) {
 					notify_parent(state, LBN_SELCHANGE);
 					render_backbuffer(state);
+					scroll_selection_into_view(state);
 					ask_window_for_repaint(state.wnd);
 				}
 			}
@@ -523,6 +526,8 @@ namespace listbox {
 		} break;
 		case WM_MOUSEACTIVATE://When the user clicks on us this is 1st msg received
 		{
+			if (GetWindowLongPtr(state.wnd, GWL_STYLE) & WS_CHILD)
+				return DefWindowProc(hwnd, msg, wparam, lparam);
 			HWND parent = (HWND)wparam;
 			WORD hittest = LOWORD(lparam);
 			WORD mouse_msg = HIWORD(lparam);
@@ -531,6 +536,7 @@ namespace listbox {
 		case WM_LBUTTONDOWN:
 		{
 			//wparam = test for virtual keys pressed
+			if (GetWindowLongPtr(state.wnd, GWL_STYLE) & WS_CHILD) SetFocus(state.wnd);
 			POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };//Client coords, relative to upper-left corner of client area
 
 			size_t clicked_element = mouse_element_at(state, mouse);
@@ -585,7 +591,7 @@ namespace listbox {
 			bool window_enabled = IsWindowEnabled(state.wnd);
 			LONG_PTR style = GetWindowLongPtr(state.wnd, GWL_STYLE);
 			int backbuf_x = 0;
-			int backbuf_y = (int)(state.scroll_y * (f32)state.backbuffer_dim.cy);
+			int backbuf_y = state.scroll_y;
 			Assert(state.backbuffer_dim.cx == w);
 			int backbuf_w = w;
 			int backbuf_h = h;
@@ -654,6 +660,18 @@ namespace listbox {
 			//NOTE: erroneous input received when using the listbox for the searchbox, while the user writes on the editbox we get keyboard focus and therefore a keyup that should have gone to the editbox
 			//NOTE: for key events in this control we should handle on WM_KEYDOWN _not_ up
 			return 0;
+		}
+		case WM_GETDLGCODE:
+		{
+			return GetWindowLongPtr(state.wnd, GWL_STYLE) & WS_CHILD ? DLGC_WANTARROWS : 0;
+		}
+		case WM_KEYDOWN:
+		{
+			if (GetWindowLongPtr(state.wnd, GWL_STYLE) & WS_CHILD) {
+				if (wparam == VK_UP) { sel_up(state.wnd); return 0; }
+				if (wparam == VK_DOWN) { sel_down(state.wnd); return 0; }
+			}
+			return DefWindowProc(hwnd, msg, wparam, lparam);
 		}
 		case WM_CANCELMODE:
 		{

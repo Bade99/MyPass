@@ -311,6 +311,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	return 0;
 }
 
+// Standard Edit controls can choose CRLF, CR, or LF line endings with
+// EM_SETENDOFLINE on Windows 10 version 1809 and later.
+
 /**
   * Richedit (a possible candidate to replace the standard text editor)
   */

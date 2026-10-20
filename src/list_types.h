@@ -39,7 +39,7 @@ struct State {
 	HBITMAP backbuffer;
 	SIZE backbuffer_dim;
 
-	f32 scroll_y;//[0,1]
+	i32 scroll_y;
 
 	void* user_extra;
 };
