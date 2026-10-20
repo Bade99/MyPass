@@ -698,8 +698,7 @@ static i32 align_center(i32 current_dimension, i32 bound, i32 padding_on_overflo
 }
 
 static i32 align_right(i32 current_dimension, i32 bound) {
-	//TODO(fran): should we do something different on overflow?
-	i32 res = bound - current_dimension;
+	i32 res = maximum(0, bound - current_dimension);
 	return res;
 }
 

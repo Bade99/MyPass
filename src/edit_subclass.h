@@ -24,6 +24,7 @@ struct EditProcState {
 
 	HWND vscrollbar;// , hscrollbar;
 	HWND search;	//addon search window
+	int wheel_delta_remainder;
 
 	//NOTE: EditProc controls require the creation of a EditProcState struct with calloc, and for it to be passed as the 4th param in SetWindowSubclass, the object will now be managed by the procedure and does not need the user to handle its memory
 	//NOTE: no left-right scrolling, it is handled with line wrap
@@ -83,14 +84,24 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UIN
 	} break;
 	case WM_MOUSEWHEEL:
 	{
-		//TODO(fran): look at more reasonable algorithms, also this one should probably get a little exponential
-		short zDelta = (short)(((float)GET_WHEEL_DELTA_WPARAM(wparam) / (float)WHEEL_DELTA) * 3.f);
-		auto line_msg = SB_LINEUP;
-		if (zDelta < 0) {
-			zDelta *= -1;
-			line_msg = SB_LINEDOWN;
+		UINT scroll_lines = 3;
+		SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
+		if (!scroll_lines) {
+			state.wheel_delta_remainder = 0;
+			return 0;
 		}
-		for (int i = 0; i < zDelta; i++) SendMessage(state.wnd, WM_VSCROLL, MAKELONG(line_msg, 0), 0); //TODO(fran): use ScrollWindowEx ?
+		int wheel_delta = state.wheel_delta_remainder + GET_WHEEL_DELTA_WPARAM(wparam);
+		int notches = wheel_delta / WHEEL_DELTA;
+		state.wheel_delta_remainder = wheel_delta % WHEEL_DELTA;
+		if (!notches) return 0;
+
+		int visible_lines = maximum(1, state.get_max_visible_lines(hwnd));
+		if (scroll_lines == WHEEL_PAGESCROLL || scroll_lines > (UINT)visible_lines) {
+			UINT scroll_command = notches > 0 ? SB_PAGEUP : SB_PAGEDOWN;
+			for (int i = 0; i < abs(notches); i++) SendMessage(hwnd, EM_SCROLL, scroll_command, 0);
+		}
+		else SendMessage(hwnd, EM_LINESCROLL, 0, -notches * (int)scroll_lines);
+		state.update_scrollbar();
 		return 0;
 	} break;
 	case EM_GET_MAX_VISIBLE_LINES: {

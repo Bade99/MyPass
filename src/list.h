@@ -233,7 +233,7 @@ namespace listbox {
 	void add_elements(HWND wnd, void** values, size_t count) {
 		auto& state = *get_state(wnd);
 		if (&state) {
-			for (size_t i = 0; i < count; i++) state.elements.push_back(values[i]);
+			for (size_t i = 0; i < count; i++) state.elements.push_back(values + i);
 			full_backbuffer_redo(state); //render new elements
 			ask_window_for_repaint(state.wnd);
 		}
@@ -356,18 +356,18 @@ namespace listbox {
 	void set_sel(HWND wnd, size_t idx) {//TODO(fran): idk if it makes sense that this one is different and sends lbn_clk
 		auto& state = *get_state(wnd);
 		if (&state) {
+			auto old_selected_element = state.selected_element;
 			if (idx == no_element) state.selected_element = no_element;
 			else if (idx < state.elements.size()) {
-				auto old_selected_element = state.selected_element;
 				state.selected_element = idx;
 				state.clicked_element = idx;
 				state.stored_clicked_element = state.clicked_element;
 				notify_parent(state, LBN_CLK);
 				state.clicked_element = no_element;
-				if (old_selected_element != state.selected_element) {
-					render_backbuffer(state);
-					ask_window_for_repaint(state.wnd);
-				}
+			}
+			if (old_selected_element != state.selected_element) {
+				render_backbuffer(state);
+				ask_window_for_repaint(state.wnd);
 			}
 		}
 	}
@@ -565,7 +565,10 @@ namespace listbox {
 			//Check the user released the click on the same element, otherwise they're canceling it
 			if (state.clicked_element != no_element && state.clicked_element == unclicked_element && state.clicked_element < state.elements.size()) {
 				//IMPORTANT: this must be sent via SendMessage since the selection/click will be cleared afterwards
-				state.stored_clicked_element = state.clicked_element;
+				size_t old_selected_element = state.selected_element;
+				state.selected_element = state.stored_clicked_element = state.clicked_element;
+				if (old_selected_element != no_element && old_selected_element != state.selected_element)
+					render_backbuffer_element(state, old_selected_element);
 				notify_parent(state, LBN_CLK);
 			}
 			//Clear the clicked element since the mouse btn is now up

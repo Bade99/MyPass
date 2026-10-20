@@ -320,7 +320,6 @@ namespace urender {
 
 		//Create bitmap
 		HBITMAP new_mask = CreateBitmap(scaled_mask.width, scaled_mask.height, 1, scaled_mask.bits_per_pixel, scaled_mask.mem);
-		//TODO(fran): do I need to set the palette?
 		return new_mask;
 	}
 
@@ -398,7 +397,7 @@ namespace urender {
 		graphics.DrawImage(&bmp,
 			Gdiplus::Rect(destination_x, destination_y, destination_width, destination_height),
 			source_x, source_y, source_width, source_height,
-			Gdiplus::Unit::UnitPixel);//TODO(fran): get the current unit from the device
+			Gdiplus::Unit::UnitPixel);
 	}
 
 	//NOTE: specific procedure for drawing images on windows' menus, other drawing functions may fail on specific situations

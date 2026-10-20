@@ -61,6 +61,8 @@ void set_wnd_size(HWND scrollable_area, i32 h) {
 		};
 		state.scroll += page_y - page_relative_to_space.top;
 		MoveWindow(state.controls.content_area, page, false);
+		if (page_y != page_relative_to_space.top)
+			RedrawWindow(state.controls.content_area, nil, nil, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
 
 		scrollbar::set_stats(state.controls.v_scroll, page.h, page_space_h, abs(minimum(page.y, 0)));
 		SendMessage(state.controls.v_scroll, scrollbar::custom_message::AUTORESIZE, 0, 0);
@@ -191,13 +193,23 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		if (state.does_scrolling) {
 			AssertAll(state.controls.all);
-			auto zDelta = (f32)GET_WHEEL_DELTA_WPARAM(wparam) / (f32)WHEEL_DELTA;
-			int dy = avg_str_dim(fonts.General, 1).cy;
+			UINT scroll_lines = 3;
+			SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
+			if (!scroll_lines) {
+				state.wheel_scroll_remainder = 0;
+				return 0;
+			}
 
-			//TODO(fran): SystemParametersInfo(SPI_GETWHEELSCROLLLINES) to scroll based on windows mouse scroll sensitivity the user set?
-
-			int step = zDelta * 3 * dy;
-			smooth_scroll(state, step);
+			int view_height = RECTH(get_client_rect(state.wnd));
+			if (view_height <= 0) return 0;
+			int line_height = maximum(1, avg_str_dim(fonts.General, 1).cy);
+			int scroll_distance = scroll_lines == WHEEL_PAGESCROLL || scroll_lines > (UINT)(view_height / line_height)
+				? view_height : (int)scroll_lines * line_height;
+			f32 requested_scroll = state.wheel_scroll_remainder +
+				(f32)GET_WHEEL_DELTA_WPARAM(wparam) * (f32)scroll_distance / (f32)WHEEL_DELTA;
+			int step = (int)requested_scroll;
+			state.wheel_scroll_remainder = requested_scroll - step;
+			if (step) smooth_scroll(state, step);
 			return 0;
 		}
 		else return DefWindowProc(hwnd, msg, wparam, lparam);//propagates msg to the parent

@@ -53,6 +53,7 @@ struct State {
 	std::deque<int> scroll_tasks;
 
 	f32 scroll;//vertical scrolling of page //@int NOTE(fran): given the limitations of MoveWindow we must interpret this value as an integer (cast), the float precision is only used for animations
+	f32 wheel_scroll_remainder;
 
 	void init() {
 		scroll_tasks = decltype(scroll_tasks)();

@@ -9,8 +9,6 @@
 //TODO(fran): paint/handle my own IME window https://docs.microsoft.com/en-us/windows/win32/intl/ime-window-class
 //TODO(fran): since WM_SETTEXT doesnt notify by default we should change WM_SETTEXT_NO_NOTIFY to WM_SETTEXT_NOTIFY and reverse the current roles
 //TODO(fran): IDEA for multiline with wrap around text, keep a list of wrap around points, be it a new line, word break or word that doesnt fit on its line, then we can go straight from user clicking the wnd to the corresponding line by looking how many lines does the mouse go and input that into the wrap around list to get to that line's first char idx
-//TODO(fran): on WM_STYLECHANGING check for password changes, that'd need a full recalculation
-//TODO(fran): on a WM_STYLECHANGING we should check if the alignment has changed and recalc/redraw every char, NOTE: I dont think windows' controls bother with this since it's not too common of a use case
 //TODO(fran): at some point I got to trigger a secondary IME candidates window which for some reason decided to show up, this BUG is probably related to the multiple candidates window, maybe we need to manually block the secondary ones, it could be that if you write too much text this extra candidate windows appear
 //TODO(fran): it seems like the IME window is global or smth like that, if I dont ask for candidate windows on WM_IME_SETCONTEXT then it also wont show them for other controls, wtf
 //TODO(fran): change EM_SETINVALIDCHARS to be a function call provided by the user, 2 opts: bool that says tell me if there's anything invalid OR remove anything invalid, 2nd opt return array with indexes of invalid chars
@@ -428,22 +426,9 @@ SIZE calc_text_dim(State& state) {
 //(This will be either 0 for the first line, or one character past the \n of the previous line for all other lines)
 auto char_idx_to_line_char_idx(const State& state, size_t char_idx) {
 	struct CharIndexToLineCharacterIndexResult { u64 line_char_idx; u64 line_idx; } res;
-	res.line_char_idx = state.char_text.rfind('\n', safe_subtract0(char_idx, 1)) + 1; //TODO(fran): I do this instead of iterating over state.line_breaks cause I think it scales better to larger strings and may even be generally faster or close to it, though there maybe be a fast way to search through state.line_breaks, otherwise having that cache is pointless & I should remove it
-
-	res.line_idx = 0;
-	if (res.line_char_idx) {
-		auto line_break = std::lower_bound(state.line_breaks.begin(), state.line_breaks.end(), res.line_char_idx - 1);
-		if (line_break != state.line_breaks.end() && *line_break == res.line_char_idx - 1) {
-			u64 line_idx = line_break - state.line_breaks.begin();
-			if (char_idx == *line_break) res.line_idx = line_idx;
-			else res.line_idx = line_idx + 1;
-		}
-	}
-	//TODO(fran): now I need to know the line idx, I guess the cache wasnt so pointless after all, although this search pattern may even be faster if I now add a hash table to store a mapping line_char_idx -> line_idx (remember to remove the -1 before using it on the hash table though)
-		//NOTE: I will usually need both line_idx and line_char_idx, since I use the first one to move in Y and the other to move in X
-		//TODO(fran)?: if we dont want to do the hash table thing we could estimate the index: line_idx_estimation = (char_idx / total_chars) * total_lines; and iterate forward or backwards from there
-
-	//TODO(fran): im having this issue with the fact that line_idx = 0 is not always a valid index into state.line_breaks, and we have a dual mapping for 0, it will return 0 when there are no line breaks, but also 0 when we are on the first line break. The code needs to be re-tought, maybe we should return a line count, that is always at least 1. This would fix the dual mapping problem though it would still not fix the access into state.line_breaks
+	auto next_line_break = std::lower_bound(state.line_breaks.begin(), state.line_breaks.end(), minimum(char_idx, state.char_text.size()));
+	res.line_idx = next_line_break - state.line_breaks.begin();
+	res.line_char_idx = next_line_break == state.line_breaks.begin() ? 0 : *(next_line_break - 1) + 1;
 	return res;
 }
 
@@ -1491,17 +1476,19 @@ void move_selection(State& state, int direction, bool shift_is_down, bool ctrl_i
 	state.history_helper.break_group();
 }
 
-void move_selection_vertical(State& state, int direction, bool shift_is_down, bool ctrl_is_down) {
+void move_selection_vertical(State& state, int direction, bool shift_is_down, bool ctrl_is_down,
+	size_t line_count = 1, bool collapse_selection_only = true) {
 	Assert(direction == 1 || direction == -1);
 	if (ctrl_is_down) return;
 	size_t anchor;
 	TextCaretHit cursor{ state.selection.cursor, state.caret.trailing };
-	if (!shift_is_down && state.selection.has_selection()) {
+	if (!shift_is_down && state.selection.has_selection() && collapse_selection_only) {
 		cursor = { direction > 0 ? state.selection.x_max() : state.selection.x_min(), direction > 0 };
 	}
 	else {
 		auto [line_start, line_index] = char_idx_to_line_char_idx(state, state.selection.cursor);
-		if ((direction < 0 && !line_index) || (direction > 0 && line_index + 1 >= state.line_layouts.size()))
+		if ((direction < 0 && line_count > line_index) ||
+			(direction > 0 && line_count >= state.line_layouts.size() - line_index))
 			cursor = { direction > 0 ? state.char_text.size() : 0, direction > 0 };
 		else {
 			const TextLineLayout* current_line = get_line_layout(state, line_index);
@@ -1509,7 +1496,7 @@ void move_selection_vertical(State& state, int direction, bool shift_is_down, bo
 				state.selection.cursor - line_start, state.caret.trailing) : 0;
 			if (state.vertical_selection_stored_width > current_x) current_x = state.vertical_selection_stored_width;
 			else state.vertical_selection_stored_width = current_x;
-			size_t target_index = direction > 0 ? line_index + 1 : line_index - 1;
+			size_t target_index = direction > 0 ? line_index + line_count : line_index - line_count;
 			const TextLineLayout* target_line = get_line_layout(state, target_index);
 			if (target_line) {
 				auto local_hit = closest_caret_stop(*target_line, current_x - line_render_x(state, *target_line));
@@ -1923,17 +1910,18 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_STYLECHANGED:
 	{
+		bool recalculate_layout = false;
 		if (wparam == GWL_STYLE) {
 			auto cmp = (STYLESTRUCT*)lparam;
-			if ((cmp->styleOld & ES_PASSWORD) != (cmp->styleNew & ES_PASSWORD)) {
-				// style changed between using/not using password view
-				recalculate_text_layout(state);
-			}
+			recalculate_layout = (cmp->styleOld ^ cmp->styleNew) & (ES_PASSWORD | ES_CENTER);
 		}
 		else if (wparam == GWL_EXSTYLE) {
 			auto cmp = (STYLESTRUCT*)lparam;
-			if ((cmp->styleOld & WS_EX_RTLREADING) != (cmp->styleNew & WS_EX_RTLREADING))
-				recalculate_text_layout(state);
+			recalculate_layout = (cmp->styleOld ^ cmp->styleNew) & WS_EX_RTLREADING;
+		}
+		if (recalculate_layout) {
+			recalculate_text_layout(state);
+			ask_window_for_repaint(state.wnd);
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	}
@@ -2010,8 +1998,14 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_RBUTTONUP:
 	{
-		POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) }; MapWindowPoints(state.wnd, nil, &mouse, 1);
-		//TODO(fran): before showing the menu we have to update the selection, but only if the click happened outside of the current selection area. If the user right clicks inside of the currently selected area then we just show the menu
+		POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
+		auto cursor = point_to_char(state, mouse);
+		if (!state.selection.has_selection() || cursor.character_index < state.selection.x_min() ||
+			cursor.character_index >= state.selection.x_max())
+		{
+			set_selection<true>(state, cursor.character_index, cursor.character_index, cursor.trailing);
+		}
+		MapWindowPoints(state.wnd, nil, &mouse, 1);
 		show_rclickmenu(state, mouse);
 		return 0;
 	} break;
@@ -2094,7 +2088,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//Vertical Selection Stored Width:
 		bool reset_v_sel_stored_w = true;
 
-		//TODO(fran): process VK_NEXT VK_PREV
 		//NOTE: there are some keys that dont get sent to WM_CHAR, we gotta handle them here, also there are others that get sent to both, TODO(fran): it'd be nice to have all the key things in only one place
 		//NOTE: for things like _shortcuts_ you wanna handle them here cause on WM_CHAR things like Ctrl+V get translated to something else
 		//		also you want to use the uppercase version of the letter, eg case _t('V'):
@@ -2103,7 +2096,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		bool shift_is_down = HIBYTE(GetKeyState(VK_SHIFT));
 		//printf("%c : %d\n", vk, (i32)vk);
 		switch (vk) {
-		case VK_HOME://Home //TODO(fran): @multiline
+		case VK_HOME://Home
 		{
 			size_t anchor, cursor;
 
@@ -2114,19 +2107,17 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			else if (shift_is_down) {//Make a selection to the start of the line
 				anchor = state.selection.anchor;
 				cursor = char_idx_to_line_char_idx(state, state.selection.cursor).line_char_idx;
-				//cursor = 0;
 			}
 			else if (ctrl_is_down) {//Remove selection and Go to the start of the text
 				anchor = cursor = 0;
 			}
-			else {//Remove selection and Go to the start of the line (since we're singleline go to start of text)
-				//anchor = cursor = 0;
+			else {//Remove selection and go to the start of the line
 				anchor = cursor = char_idx_to_line_char_idx(state, state.selection.cursor).line_char_idx;
 			}
 
 			set_selection<true>(state, anchor, cursor);
 		} break;
-		case VK_END://End //TODO(fran): @multiline
+		case VK_END://End
 		{
 			size_t anchor, cursor;
 
@@ -2141,14 +2132,12 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			}
 			else if (shift_is_down) {//Make a selection to the end of the line
 				anchor = state.selection.anchor;
-				//cursor = state.char_text.length();
 				cursor = last_cursor_in_line(state);
 			}
 			else if (ctrl_is_down) {//Remove selection and Go to the end of the text
 				anchor = cursor = state.char_text.length();
 			}
-			else {//Remove selection and Go to the end of the line (since we're singleline go to start of text)
-				//anchor = cursor = state.char_text.length();
+			else {//Remove selection and go to the end of the line
 				anchor = cursor = last_cursor_in_line(state);
 			}
 
@@ -2170,6 +2159,16 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		case VK_UP://Up arrow
 		{
 			move_selection_vertical(state, -1, shift_is_down, ctrl_is_down);
+			reset_v_sel_stored_w = false;
+		} break;
+		case VK_NEXT:
+		case VK_PRIOR:
+		{
+			RECT client_rect{};
+			GetClientRect(state.wnd, &client_rect);
+			size_t visible_lines = maximum(1, RECTH(client_rect) / maximum(1, calc_line_height_px(state)));
+			size_t page_lines = maximum((size_t)1, visible_lines - 1);
+			move_selection_vertical(state, vk == VK_NEXT ? +1 : -1, shift_is_down, ctrl_is_down, page_lines, false);
 			reset_v_sel_stored_w = false;
 		} break;
 		case VK_DELETE://What in spanish is the "Supr" key (delete character ahead of you)
@@ -2668,7 +2667,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case EM_SETSEL:
 	{
 		size_t anchor = wparam, cursor = lparam;
-		set_selection(state, anchor, cursor); //TODO(fran): probably should have set_selection<true>(...)
+		set_selection<true>(state, anchor, cursor);
 		return 0;
 	} break;
 	case EM_GETSEL://TODO(fran): EM_GETSEL_EX (to be able to request for size_t (possibly 64bit) values)

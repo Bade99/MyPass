@@ -73,10 +73,9 @@ static LRESULT handle_wm_measureitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM l
 
 static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam, HMENU top_level_menu = nil) {
 	DRAWITEMSTRUCT* item = (DRAWITEMSTRUCT*)lparam;
-	switch (wparam) {//wparam specifies the identifier of the control that needs painting
-	case 0: //menu
+	switch (item->CtlType) {
+	case ODT_MENU:
 	{
-		Assert(item->CtlType == ODT_MENU); //TODO(fran): I could use this instead of wparam
 		/*NOTES
 		- item->CtlID isnt used for menus
 		- item->itemID menu item identifier
@@ -112,14 +111,14 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 			else
 			{
 				txt_br = colors.ControlTxt;
+				bk_br = colors.CaptionBk;
 				Assert((UINT)(UINT_PTR)item->hwndItem);
 				//GetMenuInfo((HMENU)item->hwndItem, &mnfo); //We will not ask our "parent" hmenu since sometimes it decides it doesnt have the hbrush, we'll go straight to the menu bar, if there is one
 				if (top_level_menu) {
 					MENUINFO mnfo{ sizeof(mnfo) }; mnfo.fMask = MIM_BACKGROUND;
-					GetMenuInfo(top_level_menu, &mnfo);
-					bk_br = mnfo.hbrBack;
+					if (GetMenuInfo(top_level_menu, &mnfo) && mnfo.hbrBack)
+						bk_br = mnfo.hbrBack;
 				}
-				else bk_br = colors.CaptionBk;
 
 			}
 			//TODO(fran): separate menu brushes
@@ -140,31 +139,26 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 				TCHAR menu_str[64]; *menu_str = 0;
 				i32 menu_str_char_cnt = GetMenuString((HMENU)item->hwndItem, item->itemID, menu_str, ARRAYSIZE(menu_str), MF_BYCOMMAND);
 
-				//Thanks https://stackoverflow.com/questions/3478180/correct-usage-of-getcliprgn
-				//WINDOWS THIS MAKES NO SENSE!!!!!!!!!
-				HRGN restoreRegion = CreateRectRgn(0, 0, 0, 0); if (GetClipRgn(item->hDC, restoreRegion) != 1) { DeleteObject(restoreRegion); restoreRegion = NULL; }
-
-				// Set new region, do drawing
-				IntersectClipRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom);//This is also stupid, did they have something against RECT ???????
+				int saved_dc = SaveDC(item->hDC);
+				if (saved_dc) IntersectClipRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom);
 				urender::draw_text(item->hDC, item->rcItem, to_utf_str(menu_str), fonts.Menu, txt_br,
 					urender::TextAlignment::center, 0);
-
-				SelectClipRgn(item->hDC, restoreRegion); if (restoreRegion != NULL) DeleteObject(restoreRegion); //Restore old region
+				if (saved_dc) RestoreDC(item->hDC, saved_dc);
 			}
 			else {
 
 				//Render img on the left
 				{
-					MENUITEMINFO menu_img;
+					MENUITEMINFO menu_img{};
 					menu_img.cbSize = sizeof(menu_img);
 					menu_img.fMask = MIIM_CHECKMARKS | MIIM_STATE;
-					GetMenuItemInfo((HMENU)item->hwndItem, item->itemID, FALSE, &menu_img);
+					bool has_menu_img = GetMenuItemInfo((HMENU)item->hwndItem, item->itemID, FALSE, &menu_img);
 					HBITMAP hbmp = nil;
-					if (menu_img.fState & MFS_CHECKED) {
+					if (has_menu_img && (menu_img.fState & MFS_CHECKED)) {
 						Assert(menu_img.hbmpChecked);
 						hbmp = menu_img.hbmpChecked;
 					}
-					else {
+					else if (has_menu_img) {
 						hbmp = menu_img.hbmpUnchecked;
 					}
 					if (hbmp) {
@@ -200,23 +194,12 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 				TCHAR menu_str[64]; *menu_str = 0;
 				i32 menu_str_char_cnt = GetMenuString((HMENU)item->hwndItem, item->itemID, menu_str, ARRAYSIZE(menu_str), MF_BYCOMMAND);
 
-				//Thanks https://stackoverflow.com/questions/3478180/correct-usage-of-getcliprgn
-				//WINDOWS THIS MAKES NO SENSE!!!!!!!!!
-				HRGN restoreRegion = CreateRectRgn(0, 0, 0, 0);
-				if (GetClipRgn(item->hDC, restoreRegion) != 1)
-				{
-					DeleteObject(restoreRegion);
-					restoreRegion = NULL;
-				}
-
-				// Set new region, do drawing
-				IntersectClipRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom);//This is also stupid, did they have something against RECT ???????
+				int saved_dc = SaveDC(item->hDC);
+				if (saved_dc) IntersectClipRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom);
 				RECT text_bounds = item->rcItem;
 				text_bounds.left = text_left;
 				urender::draw_menu_text(item->hDC, text_bounds, str_view(menu_str, menu_str_char_cnt), fonts.Menu, txt_br);
-
-				SelectClipRgn(item->hDC, restoreRegion);
-				if (restoreRegion) DeleteObject(restoreRegion);
+				if (saved_dc) RestoreDC(item->hDC, saved_dc);
 
 				if (menu_type.hSubMenu) { //Draw the submenu arrow
 					HBITMAP mask = bmps.solid_arrow_right; //TODO(fran): parametric
@@ -243,13 +226,12 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 		{
 			const int separator_x_padding = 3;
 
-			HBRUSH bk_br;
+			HBRUSH bk_br = colors.CaptionBk;
 			if (top_level_menu) {
 				MENUINFO mnfo{ sizeof(mnfo) }; mnfo.fMask = MIM_BACKGROUND;
-				GetMenuInfo(top_level_menu, &mnfo);
-				bk_br = mnfo.hbrBack; //TODO: unfinished trash
+				if (GetMenuInfo(top_level_menu, &mnfo) && mnfo.hbrBack)
+					bk_br = mnfo.hbrBack;
 			}
-			else bk_br = colors.CaptionBk;
 
 			FillRect(item->hDC, &item->rcItem, bk_br);
 			RECT separator_rc;
@@ -258,7 +240,7 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 			separator_rc.left = item->rcItem.left + separator_x_padding;
 			separator_rc.right = item->rcItem.right - separator_x_padding;
 			FillRect(item->hDC, &separator_rc, colors.ControlTxt);
-		}
+		} break;
 		default: return DefWindowProc(wnd, msg, wparam, lparam);
 		}
 

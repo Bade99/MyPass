@@ -10,7 +10,6 @@ namespace search {
   * Returns zero-based index of the first char of the match or -1 if not found
   */
 auto search(State& state, bool search_in_current_selection) { 
-	//TODO(fran): extra param, search from sel_start or sel_end, when the user presses the enter key or the find button they want to start from sel_end, while they are writing they want to start from sel_start
 	//INFO: from_sel_start: taking by reference point a search downwards if true the search happens from the start of the current selection, otherwise from the end, the same desired behaviour will happen for searching up where from_sel_start true will mean to search from the end, yes confusing, just take into account how it works for searching downwards and it will automatically work perfectly for searching up
 	
 	struct SearchResult { int p, sz_char; } res, fail_res{.p = -1};
