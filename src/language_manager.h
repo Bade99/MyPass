@@ -1,6 +1,8 @@
 #pragma once
 #include <windows.h>
+#include <CommCtrl.h>
 #include <map>
+#include <set>
 #include <vector>
 #include "helpers.h"
 #include "reflection.h"
@@ -119,9 +121,9 @@ public:
 	//·Returns FALSE if invalid hwnd or stringID
 	BOOL AddWindowText(HWND hwnd, UINT stringID)
 	{
-		BOOL res = UpdateHwnd(hwnd, stringID);
-		if (res) this->Hwnds[hwnd] = stringID;
-		return res && HasStringResource(stringID);
+		return AddWindowRegistration(this->Hwnds, hwnd, hwnd, stringID, [this, hwnd, stringID] {
+			return UpdateHwnd(hwnd, stringID);
+		});
 	}
 
 	//·Adds the hwnd to the list of managed hwnds and sets its default text corresponding to stringID and the current language
@@ -129,9 +131,9 @@ public:
 	//·Next time there is a language change the window will be automatically updated
 	//·Returns FALSE if invalid hwnd or stringID
 	BOOL AddWindowDefaultText(HWND hwnd, u32 stringID) {
-		BOOL res = UpdateHwndDefault(hwnd, stringID);
-		if (res) this->HwndsDefault[hwnd] = stringID;
-		return res && HasStringResource(stringID);
+		return AddWindowRegistration(this->HwndsDefault, hwnd, hwnd, stringID, [this, hwnd, stringID] {
+			return UpdateHwndDefault(hwnd, stringID);
+		});
 	}
 
 	//·Adds the hwnd to the list of managed hwnds and sets its tooltip text corresponding to stringID and the current language
@@ -139,9 +141,9 @@ public:
 	//·Next time there is a language change the window will be automatically updated
 	//·Returns FALSE if invalid hwnd or stringID
 	BOOL AddWindowTooltipText(HWND hwnd, u32 stringID) {
-		BOOL res = UpdateHwndTooltip(hwnd, stringID);
-		if (res) this->HwndsTooltip[hwnd] = stringID;
-		return res && HasStringResource(stringID);
+		return AddWindowRegistration(this->HwndsTooltip, hwnd, hwnd, stringID, [this, hwnd, stringID] {
+			return UpdateHwndTooltip(hwnd, stringID);
+		});
 	}
 
 	//·Updates all managed objects to the new language, all the ones added after this call will also use the new language
@@ -158,31 +160,37 @@ public:
 		LANGID newLANGID = this->GetLANGID(newLang);
 		LANGID lang_res = SetThreadUILanguage(newLANGID); //If successful returns the same value that you sent it
 
-		for (auto const& hwnd_sid : this->Hwnds)
-			this->UpdateHwnd(hwnd_sid.first, hwnd_sid.second);
+		ForEachCurrentRegistration(this->Hwnds, [this](HWND hwnd, UINT stringID) {
+			UpdateHwnd(hwnd, stringID);
+		});
 
-		for (auto const& hwnd_sid : this->HwndsDefault)
-			this->UpdateHwndDefault(hwnd_sid.first, hwnd_sid.second);
+		ForEachCurrentRegistration(this->HwndsDefault, [this](HWND hwnd, UINT stringID) {
+			UpdateHwndDefault(hwnd, stringID);
+		});
 
-		for (auto const& hwnd_sid : this->HwndsTooltip)
-			this->UpdateHwndTooltip(hwnd_sid.first, hwnd_sid.second);
+		ForEachCurrentRegistration(this->HwndsTooltip, [this](HWND hwnd, UINT stringID) {
+			UpdateHwndTooltip(hwnd, stringID);
+		});
 
-		for (auto const& hwnd_id_sid : this->Comboboxes)
-			this->UpdateCombo(hwnd_id_sid.first.first, hwnd_id_sid.first.second, hwnd_id_sid.second);
+		ForEachCurrentRegistration(this->Comboboxes, [this](const std::pair<HWND, UINT>& hwnd_id, UINT stringID) {
+			UpdateCombo(hwnd_id.first, hwnd_id.second, stringID);
+		});
 
 		//TODO(fran): Notify each managed control's layout owner once after updating translated text,
 		//so size-dependent controls relayout and repaint without callers handling language changes.
 		//AddDynamicText currently requires manual registration and allows only one message per HWND.
-		for (auto const& hwnd_msg : this->DynamicHwnds) {
-			this->UpdateDynamicHwnd(hwnd_msg.first, hwnd_msg.second);
-		}
+		ForEachCurrentRegistration(this->DynamicHwnds, [this](HWND hwnd, UINT messageID) {
+			UpdateDynamicHwnd(hwnd, messageID);
+		});
 
 		for (auto const& hmenu_id_sid : this->Menus) {
 			this->UpdateMenu(hmenu_id_sid.first.first, hmenu_id_sid.first.second, hmenu_id_sid.second);
 		}
-		for (auto const& menudrawer : this->MenuDrawers) {
+		const auto menu_drawers = this->MenuDrawers;
+		for (HWND menudrawer : menu_drawers) {
+			if (!this->MenuDrawers.contains(menudrawer)) continue;
 			DrawMenuBar(menudrawer);
-			UpdateWindow(menudrawer);
+			if (this->MenuDrawers.contains(menudrawer)) UpdateWindow(menudrawer);
 		}
 
 		return (lang_res == newLANGID ? lang_res : -3);//is this NULL when failed?
@@ -205,9 +213,9 @@ public:
 	//·Next time there is a language change the window will be automatically updated
 	BOOL AddComboboxText(HWND hwnd, UINT ID, UINT stringID)
 	{
-		BOOL res = UpdateCombo(hwnd, ID, stringID);
-		if (res) this->Comboboxes[std::make_pair(hwnd, ID)] = stringID;
-		return res && HasStringResource(stringID);
+		return AddWindowRegistration(this->Comboboxes, hwnd, std::make_pair(hwnd, ID), stringID, [this, hwnd, ID, stringID] {
+			return UpdateCombo(hwnd, ID, stringID);
+		});
 	}
 
 	//Set the hinstance from where the string resources will be retrieved
@@ -225,7 +233,7 @@ public:
 	//One hwnd can only be linked to one messageID
 	BOOL AddDynamicText(HWND hwnd, UINT messageID)
 	{
-		if (!IsWindow(hwnd)) return FALSE;
+		if (!TrackWindow(hwnd)) return FALSE;
 		this->DynamicHwnds[hwnd] = messageID;
 		this->UpdateDynamicHwnd(hwnd, messageID);
 		return TRUE;
@@ -235,11 +243,9 @@ public:
 	//to indicate which window to call for its menus to be redrawn
 	BOOL AddMenuDrawingHwnd(HWND MenuDrawer)
 	{
-		if (IsWindow(MenuDrawer)) {
-			this->MenuDrawers.push_back(MenuDrawer);
-			return TRUE;
-		}
-		return FALSE;
+		if (!TrackWindow(MenuDrawer)) return FALSE;
+		this->MenuDrawers.insert(MenuDrawer);
+		return TRUE;
 	}
 
 	BOOL AddMenuText(HMENU hmenu, UINT_PTR ID, UINT stringID)
@@ -274,7 +280,10 @@ public:
 
 private:
 	LanguageManager() {}
-	~LanguageManager() {}
+	~LanguageManager() {
+		for (const auto& tracked : this->TrackedWindows)
+			RemoveWindowSubclass(tracked.first, WindowSubclassProc, 0);
+	}
 
 	HINSTANCE hInstance = NULL;
 	bool HasStringResource(UINT stringID) const {
@@ -288,9 +297,84 @@ private:
 	std::map<HWND, UINT> DynamicHwnds;
 	std::map<std::pair<HWND, UINT>, UINT> Comboboxes;
 
-	std::vector<HWND> MenuDrawers;
+	std::map<HWND, size_t> TrackedWindows;
+	size_t next_window_registration = 0;
+	std::set<HWND> MenuDrawers;
 	std::map<std::pair<HMENU, UINT_PTR>, UINT> Menus;
-	//Add list of hwnd that have dynamic text, therefore need to know when there was a lang change to update their text
+
+	static LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR subclass_id, DWORD_PTR ref_data)
+	{
+		if (message == WM_NCDESTROY) {
+			auto& manager = *reinterpret_cast<LanguageManager*>(ref_data);
+			manager.UnregisterWindow(hwnd);
+			RemoveWindowSubclass(hwnd, WindowSubclassProc, subclass_id);
+		}
+		return DefSubclassProc(hwnd, message, wparam, lparam);
+	}
+
+	size_t TrackWindow(HWND hwnd)
+	{
+		if (GetWindowThreadProcessId(hwnd, nullptr) != GetCurrentThreadId()) return 0;
+		if (auto tracked = this->TrackedWindows.find(hwnd); tracked != this->TrackedWindows.end()) return tracked->second;
+		if (!SetWindowSubclass(hwnd, WindowSubclassProc, 0, reinterpret_cast<DWORD_PTR>(this))) return 0;
+		size_t registration = ++this->next_window_registration;
+		this->TrackedWindows[hwnd] = registration;
+		return registration;
+	}
+
+	bool IsTrackedWindow(HWND hwnd, size_t registration) const
+	{
+		auto tracked = this->TrackedWindows.find(hwnd);
+		return tracked != this->TrackedWindows.end() && tracked->second == registration;
+	}
+
+	void UnregisterWindow(HWND hwnd)
+	{
+		this->TrackedWindows.erase(hwnd);
+		this->Hwnds.erase(hwnd);
+		this->HwndsDefault.erase(hwnd);
+		this->HwndsTooltip.erase(hwnd);
+		this->DynamicHwnds.erase(hwnd);
+		auto combo = this->Comboboxes.lower_bound(std::make_pair(hwnd, 0u));
+		while (combo != this->Comboboxes.end() && combo->first.first == hwnd)
+			combo = this->Comboboxes.erase(combo);
+		this->MenuDrawers.erase(hwnd);
+	}
+
+	template<typename Key, typename Update>
+	BOOL AddWindowRegistration(std::map<Key, UINT>& registrations, HWND hwnd, const Key& key, UINT stringID, Update&& update)
+	{
+		size_t registration = TrackWindow(hwnd);
+		if (!registration) return FALSE;
+		BOOL res = update();
+		if (!IsTrackedWindow(hwnd, registration)) return FALSE;
+		if (res) registrations[key] = stringID;
+		return res && HasStringResource(stringID);
+	}
+
+	static HWND RegisteredHwnd(HWND hwnd) { return hwnd; }
+	static HWND RegisteredHwnd(const std::pair<HWND, UINT>& hwnd_id) { return hwnd_id.first; }
+
+	template<typename Registry, typename Update>
+	void ForEachCurrentRegistration(const Registry& registrations, Update&& update)
+	{
+		struct SnapshotEntry {
+			typename Registry::key_type key;
+			UINT value;
+			size_t window_registration;
+		};
+		std::vector<SnapshotEntry> snapshot;
+		snapshot.reserve(registrations.size());
+		for (const auto& [key, value] : registrations) {
+			auto tracked = this->TrackedWindows.find(RegisteredHwnd(key));
+			if (tracked != this->TrackedWindows.end()) snapshot.push_back({ key, value, tracked->second });
+		}
+		for (const auto& entry : snapshot) {
+			if (!IsTrackedWindow(RegisteredHwnd(entry.key), entry.window_registration)) continue;
+			auto current = registrations.find(entry.key);
+			if (current != registrations.end() && current->second == entry.value) update(entry.key, entry.value);
+		}
+	}
 
 	BOOL UpdateHwnd(HWND hwnd, UINT stringID)
 	{
@@ -320,11 +404,18 @@ private:
 
 	BOOL UpdateCombo(HWND hwnd, UINT ID, UINT stringID)
 	{
+		auto tracked = this->TrackedWindows.find(hwnd);
+		if (tracked == this->TrackedWindows.end()) return FALSE;
+		size_t registration = tracked->second;
 		UINT currentSelection = (UINT)SendMessage(hwnd, CB_GETCURSEL, 0, 0);//TODO(fran): is there truly no better solution than having to do all this just to change a string?
+		if (!IsTrackedWindow(hwnd, registration)) return FALSE;
 		SendMessage(hwnd, CB_DELETESTRING, ID, 0);
+		if (!IsTrackedWindow(hwnd, registration)) return FALSE;
 		LRESULT res = SendMessage(hwnd, CB_INSERTSTRING, ID, (LPARAM)this->RequestString(stringID).c_str());
+		if (!IsTrackedWindow(hwnd, registration)) return FALSE;
 		if (currentSelection != CB_ERR) {
 			SendMessage(hwnd, CB_SETCURSEL, currentSelection, 0);
+			if (!IsTrackedWindow(hwnd, registration)) return FALSE;
 			ask_window_for_repaint(hwnd);
 		}
 		return res >= 0;

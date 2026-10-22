@@ -215,8 +215,6 @@ void create_controls(State& state) {
 		}
 	});
 	
-	//TODO(fran): this controls being dynamic, with the possibility of the parent being eliminated and thus them too, poses a big issue for the language_manager, it could be setting the text of another control without knowing. We would need to manually unregister the control from the language_manager on delete, a huge pain.
-
 	controls.edo_title = create_window(controls.btn_card, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
 	auto hollow_brush = (HBRUSH)GetStockObject(HOLLOW_BRUSH);
 	edit_oneline::set_theme(controls.edo_title, themes.clear_editoneline);
