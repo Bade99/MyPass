@@ -29,25 +29,32 @@ static void free_file_memory(void* memory) {
 	if (memory) VirtualFree(memory, 0, MEM_RELEASE);
 }
 
-struct ReadEntireFileResult { void* mem; u32 sz;/*bytes*/ };
+enum class ReadEntireFileStatus { success, missing, error };
+struct ReadEntireFileResult { void* mem; u32 sz;/*bytes*/ ReadEntireFileStatus status; };
 //NOTE: free the memory with free_file_memory()
 static ReadEntireFileResult read_entire_file(const cstr* filename) {
-	ReadEntireFileResult res{ 0 };
+	ReadEntireFileResult res{ .status = ReadEntireFileStatus::error };
 	HANDLE hFile = CreateFile(filename, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
-	if (hFile != INVALID_HANDLE_VALUE) {
-		defer{ CloseHandle(hFile); };
-		if (LARGE_INTEGER sz; GetFileSizeEx(hFile, &sz)) {
-			u32 sz32 = safe_u64_to_u32(sz.QuadPart);
-			void* mem = VirtualAlloc(0, sz32, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-			if (mem) {
-				if (DWORD bytes_read; ReadFile(hFile, mem, sz32, &bytes_read, 0) && sz32 == bytes_read) {
-					//SUCCESS
-					res.mem = mem;
-					res.sz = sz32;
-				}
-				else {
-					free_file_memory(mem);
-				}
+	if (hFile == INVALID_HANDLE_VALUE) {
+		if (GetLastError() == ERROR_FILE_NOT_FOUND) res.status = ReadEntireFileStatus::missing;
+		return res;
+	}
+	defer{ CloseHandle(hFile); };
+	if (LARGE_INTEGER sz; GetFileSizeEx(hFile, &sz) && sz.QuadPart >= 0 && (u64)sz.QuadPart <= U32MAX) {
+		u32 sz32 = (u32)sz.QuadPart;
+		if (!sz32) {
+			res.status = ReadEntireFileStatus::success;
+			return res;
+		}
+		void* mem = VirtualAlloc(0, sz32, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+		if (mem) {
+			if (DWORD bytes_read; ReadFile(hFile, mem, sz32, &bytes_read, 0) && sz32 == bytes_read) {
+				res.mem = mem;
+				res.sz = sz32;
+				res.status = ReadEntireFileStatus::success;
+			}
+			else {
+				free_file_memory(mem);
 			}
 		}
 	}
@@ -85,7 +92,8 @@ static bool append_to_file(const cstr* filename, const void* memory, u32 mem_sz)
 static bool file_matches_memory(const cstr* filename, const void* memory, u32 mem_sz) {
 	auto file_read = read_entire_file(filename); defer{ free_file_memory(file_read.mem); };
 
-	return file_read.mem && file_read.sz == mem_sz && !memcmp(memory, file_read.mem, mem_sz);
+	return file_read.status == ReadEntireFileStatus::success && file_read.sz == mem_sz &&
+		(!mem_sz || (file_read.mem && !memcmp(memory, file_read.mem, mem_sz)));
 }
 
 static bool flush_existing_file(const cstr* filename) {

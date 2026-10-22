@@ -871,10 +871,9 @@ u32 detect_save_version(void* data, u32 sz_bytes) {
 
 login::AttemptResult startup(State& state, const Start* start, bool start_from_backup) {
 	login::AttemptResult start_attempt;
-	bool passwords_need_save = false;
 
 	auto file_read = load_file_user(state.current_user, start_from_backup); defer{ free_file_memory(file_read.mem); };
-	if (file_read.mem) {
+	if (file_read.status == ReadEntireFileStatus::success && file_read.mem) {
 		if (start->signup) { // Can't signup, user already exists
 			start_attempt = login::AttemptResult::fail_signup_username_exists;
 		}
@@ -950,14 +949,12 @@ login::AttemptResult startup(State& state, const Start* start, bool start_from_b
 			}
 		}
 	}
-	else {
+	else if (file_read.status == ReadEntireFileStatus::missing) {
 		//NOTE: if the user previously created an account but didnt save then it will not count as a created account and next time they will be prompted to create the account again, this is a limitation of the fact that we dont save anything inside the user folder till the first time they save what they wrote, therefore we cannot currently do this any other way since there's no information inside the folder to allow us to check whether the second time the user input the same password as the first time
 		bool signup = start->signup;
 		start_attempt = signup ? login::AttemptResult::success : login::AttemptResult::fail_username;
-		passwords_need_save = signup;
 	}
-	if (passwords_need_save && start_attempt == login::AttemptResult::success)
-		set_passwords_need_save(state, passwords_need_save);
+	else start_attempt = login::AttemptResult::fail_corrupted;
 	return start_attempt;
 }
 
@@ -1093,17 +1090,25 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//We gotta keep this data to be able to save the file later, probably some more secure/intelligent ways exist
 			state.current_user = str(start->username.str, start->username.sz_chars);
 
-			auto should_try_backup = [](login::AttemptResult attempt) { return attempt != login::AttemptResult::fail_signup_username_exists; };
-			
 			bool used_backup = false;
 
 			start_attempt = startup(state, start, false);
-			if (start_attempt != login::AttemptResult::success && should_try_backup(start_attempt)) {
-				used_backup = true;
-				start_attempt = startup(state, start, true);
+			if (start_attempt == login::AttemptResult::success && start->signup) {
+				auto backup_attempt = startup(state, start, true);
+				if (backup_attempt != login::AttemptResult::success) start_attempt = backup_attempt;
+			}
+			else if (start_attempt != login::AttemptResult::success && start_attempt != login::AttemptResult::fail_signup_username_exists) {
+				auto backup_attempt = startup(state, start, true);
+				if (backup_attempt == login::AttemptResult::success) {
+					start_attempt = backup_attempt;
+					used_backup = true;
+				}
+				else if (start_attempt == login::AttemptResult::fail_username && backup_attempt != login::AttemptResult::fail_username)
+					start_attempt = backup_attempt;
 			}
 		
 			if (start_attempt == login::AttemptResult::success) {
+				if (start->signup) set_passwords_need_save(state, true);
 				set_app_shortcuts(state.wnd, ED_SHORTCUTS);
 				generate_salt(state.salt); // New salt to be used for all future saves during the current session
 				u32 key[8];
