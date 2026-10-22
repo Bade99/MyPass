@@ -1103,7 +1103,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 					start_attempt = backup_attempt;
 					used_backup = true;
 				}
-				else if (start_attempt == login::AttemptResult::fail_username && backup_attempt != login::AttemptResult::fail_username)
+				else if ((start_attempt == login::AttemptResult::fail_username && backup_attempt != login::AttemptResult::fail_username) ||
+					(start_attempt == login::AttemptResult::fail_corrupted && backup_attempt == login::AttemptResult::fail_newer_version))
 					start_attempt = backup_attempt;
 			}
 		
