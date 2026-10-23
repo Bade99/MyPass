@@ -255,7 +255,7 @@ void add_controls(State& state) {
 			else
 				for (auto p : state.controls.password_editors) {
 					auto& pw_ed = *password_editor::get_state(p);
-					utf16 title[50]; 
+					utf16 title[64];
 					i32 title_len = GetWindowText(pw_ed.controls.edo_title, title, ARRAYSIZE(title));
 
 					if (!title_len) { ShowWindow(p, SW_SHOW); continue; } //always keep ones that are still being edited
@@ -370,6 +370,7 @@ void add_controls(State& state) {
 			auto sorting_function = (item.value == SortOption::date_created_newest) ?
 				[](SortDate a, SortDate b) { return a.date > b.date; } :
 				[](SortDate a, SortDate b) { return a.date < b.date; };
+			std::sort(to_sort_pinned.begin(), to_sort_pinned.end(), sorting_function);
 			std::sort(to_sort.begin(), to_sort.end(), sorting_function);
 			for (const auto& [i, value] : to_sort_pinned | std::views::enumerate) vec[i] = value.wnd;
 			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i + to_sort_pinned.size()] = value.wnd;
@@ -866,12 +867,14 @@ login::AttemptResult startup(State& state, const Start* start, bool start_from_b
 					SecureZeroMemory(key, sizeof(key));
 					twofish_decrypt(file_read.mem, file_read.sz, file_read.mem);
 
-					if (auto file_read_chars = file_read.sz / sizeof(state.current_user[0]);
-						file_read_chars >= state.current_user.size() && !wcsncmp(state.current_user.c_str(), (cstr*)file_read.mem, state.current_user.size())
-						) { //Valid password, provided username matches stored username
+					std::span decrypted((const cstr*)file_read.mem, file_read.sz / sizeof(cstr));
+					auto username_size = state.current_user.size();
+					if (decrypted.size() > username_size &&
+						!wcsncmp(state.current_user.c_str(), decrypted.data(), username_size) &&
+						std::ranges::contains(std::views::reverse(decrypted.subspan(username_size)), cstr{})) {
 						set_mode(state, Mode::transition_v0);
 
-						SetWindowText(state.controls.transition_v0.edit_passwords, ((cstr*)file_read.mem) + start->username.sz_chars);
+						SetWindowText(state.controls.transition_v0.edit_passwords, decrypted.data() + username_size);
 						SecureZeroMemory(file_read.mem, file_read.sz);
 						start_attempt = login::AttemptResult::success;
 					}

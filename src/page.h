@@ -88,6 +88,7 @@ void smooth_scroll(State& state, int increment) {
 
 
 	static void (*scroll_timeout)(HWND, UINT, UINT_PTR, DWORD) = [](HWND hwnd, UINT, UINT_PTR anim_id, DWORD) {
+		KillTimer(hwnd, anim_id);
 		State& state = *get_state(hwnd);
 		if (&state) {
 			if (state.scroll_tasks.size()) {
