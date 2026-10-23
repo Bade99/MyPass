@@ -288,12 +288,26 @@ static HBITMAP rotate_bitmap1(HBITMAP source_bitmap, Rotation rotation) { //AI g
   * Menu
   */
 
-static bool append_item_to_menu(HMENU menu, u32 item_id, u32 msg_id, HBITMAP img) {
+static bool append_popup_to_menu(HMENU menu, HMENU submenu, u32 msg_id) {
+	if (!AppendMenu(menu, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)submenu, (cstr*)menu)) return false;
+	return SetMenuItemString(menu, GetMenuItemCount(menu) - 1, TRUE, RCS(msg_id));
+}
+
+static bool append_popup_to_menu(HMENU menu, HMENU submenu, u32 msg_id, HBITMAP img, HBITMAP checked_img = nil) {
+	if (!append_popup_to_menu(menu, submenu, msg_id)) return false;
+	return SetMenuItemBitmaps(menu, (UINT)(UINT_PTR)submenu, MF_BYCOMMAND, img, checked_img);
+}
+
+static bool append_item_to_menu(HMENU menu, u32 item_id, const cstr* label, HBITMAP img, HBITMAP checked_img = nil) {
 	bool res;
 	res = AppendMenu(menu, MF_STRING | MF_OWNERDRAW, item_id, (cstr*)menu);
-	res = SetMenuItemString(menu, item_id, FALSE, RCS(msg_id));
-	res = SetMenuItemBitmaps(menu, item_id, MF_BYCOMMAND, img, nil);
+	res = SetMenuItemString(menu, item_id, FALSE, label);
+	res = SetMenuItemBitmaps(menu, item_id, MF_BYCOMMAND, img, checked_img);
 	return res;
+}
+
+static bool append_item_to_menu(HMENU menu, u32 item_id, u32 msg_id, HBITMAP img, HBITMAP checked_img = nil) {
+	return append_item_to_menu(menu, item_id, RCS(msg_id), img, checked_img);
 }
 
 static bool append_item_to_menu(HMENU menu, u32 item_id, u32 msg_id, HBITMAP img, bool disabled) {

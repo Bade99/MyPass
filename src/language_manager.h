@@ -1,8 +1,6 @@
 #pragma once
-#include <windows.h>
-#include <CommCtrl.h>
+#include "win_sdk.h"
 #include <map>
-#include <set>
 #include <vector>
 #include "helpers.h"
 #include "reflection.h"
@@ -22,9 +20,6 @@
 
 //Add combobox string in specific ID (Nth element of the list)
 #define ACT(hwnd,ID,stringID) LanguageManager::Instance().AddComboboxText(hwnd, ID, stringID);
-
-//Add menu string
-#define AMT(hmenu,ID,stringID) LanguageManager::Instance().AddMenuText(hmenu,ID,stringID);
 
 //Add dynamic window (gets notified with this message when the language changes)
 //One common use case could be using a WM_SIZE message to trigger a full re-render
@@ -113,7 +108,7 @@ public:
 	LanguageManager(LanguageManager const&) = delete;
 	void operator=(LanguageManager const&) = delete;
 
-	//INFO: all Add... functions send the text update message when called, for dynamic hwnds you should create everything first and only then add it
+	//INFO: text registrations update immediately, and dynamic windows receive their message when registered
 
 	//·Adds the hwnd to the list of managed hwnds and sets its text corresponding to stringID and the current language
 	//·Many hwnds can use the same stringID
@@ -182,15 +177,11 @@ public:
 		ForEachCurrentRegistration(this->DynamicHwnds, [this](HWND hwnd, UINT messageID) {
 			UpdateDynamicHwnd(hwnd, messageID);
 		});
-
-		for (auto const& hmenu_id_sid : this->Menus) {
-			this->UpdateMenu(hmenu_id_sid.first.first, hmenu_id_sid.first.second, hmenu_id_sid.second);
-		}
-		const auto menu_drawers = this->MenuDrawers;
-		for (HWND menudrawer : menu_drawers) {
-			if (!this->MenuDrawers.contains(menudrawer)) continue;
-			DrawMenuBar(menudrawer);
-			if (this->MenuDrawers.contains(menudrawer)) UpdateWindow(menudrawer);
+		for (const auto& creator : this->MenuCreators) {
+			HWND hwnd = creator.first;
+			auto tracked = this->TrackedWindows.find(hwnd);
+			if (tracked != this->TrackedWindows.end())
+				PostMessage(hwnd, WM_MENU_CREATOR, (WPARAM)tracked->second, 0);
 		}
 
 		return (lang_res == newLANGID ? lang_res : -3);//is this NULL when failed?
@@ -239,20 +230,13 @@ public:
 		return TRUE;
 	}
 
-	//Menus are not draw by themselves, instead their owner window draws them, so if you want a menu to be redrawn you need to use this function
-	//to indicate which window to call for its menus to be redrawn
-	BOOL AddMenuDrawingHwnd(HWND MenuDrawer)
-	{
-		if (!TrackWindow(MenuDrawer)) return FALSE;
-		this->MenuDrawers.insert(MenuDrawer);
-		return TRUE;
-	}
+	using MenuCreator = void(*)(HWND);
 
-	BOOL AddMenuText(HMENU hmenu, UINT_PTR ID, UINT stringID)
+	BOOL AddMenuCreatorHwnd(HWND hwnd, MenuCreator create_menu)
 	{
-		BOOL res = UpdateMenu(hmenu, ID, stringID);
-		if (res) this->Menus[std::make_pair(hmenu, ID)] = stringID;
-		return res && HasStringResource(stringID);
+		if (!create_menu || !TrackWindow(hwnd)) return FALSE;
+		this->MenuCreators[hwnd] = create_menu;
+		return TRUE;
 	}
 
 	Language GetCurrentLanguage()
@@ -296,16 +280,22 @@ private:
 	std::map<HWND, UINT> HwndsTooltip;
 	std::map<HWND, UINT> DynamicHwnds;
 	std::map<std::pair<HWND, UINT>, UINT> Comboboxes;
+	std::map<HWND, MenuCreator> MenuCreators;
 
 	std::map<HWND, size_t> TrackedWindows;
 	size_t next_window_registration = 0;
-	std::set<HWND> MenuDrawers;
-	std::map<std::pair<HMENU, UINT_PTR>, UINT> Menus;
-
 	static LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR subclass_id, DWORD_PTR ref_data)
 	{
+		auto& manager = *reinterpret_cast<LanguageManager*>(ref_data);
+		if (message == WM_MENU_CREATOR) {
+			if (auto creator = manager.MenuCreators.find(hwnd);
+				creator != manager.MenuCreators.end() && manager.IsTrackedWindow(hwnd, (size_t)wparam)) {
+				auto create_menu = creator->second;
+				create_menu(hwnd);
+			}
+			return 0;
+		}
 		if (message == WM_NCDESTROY) {
-			auto& manager = *reinterpret_cast<LanguageManager*>(ref_data);
 			manager.UnregisterWindow(hwnd);
 			RemoveWindowSubclass(hwnd, WindowSubclassProc, subclass_id);
 		}
@@ -335,10 +325,10 @@ private:
 		this->HwndsDefault.erase(hwnd);
 		this->HwndsTooltip.erase(hwnd);
 		this->DynamicHwnds.erase(hwnd);
+		this->MenuCreators.erase(hwnd);
 		auto combo = this->Comboboxes.lower_bound(std::make_pair(hwnd, 0u));
 		while (combo != this->Comboboxes.end() && combo->first.first == hwnd)
 			combo = this->Comboboxes.erase(combo);
-		this->MenuDrawers.erase(hwnd);
 	}
 
 	template<typename Key, typename Update>
@@ -419,17 +409,6 @@ private:
 			ask_window_for_repaint(hwnd);
 		}
 		return res >= 0;
-	}
-
-	BOOL UpdateMenu(HMENU hmenu, UINT_PTR ID, UINT stringID)
-	{
-		MENUITEMINFO menu_setter;
-		menu_setter.cbSize = sizeof(MENUITEMINFO);
-		menu_setter.fMask = MIIM_STRING;
-		str temp_text = this->RequestString(stringID);
-		menu_setter.dwTypeData = (cstr*)temp_text.c_str();
-		BOOL res = SetMenuItemInfo(hmenu, (UINT)ID, FALSE, &menu_setter);
-		return res;
 	}
 
 	LANGID GetLANGID(Language lang)

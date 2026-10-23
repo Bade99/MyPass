@@ -476,36 +476,22 @@ void add_controls(State& state) {
 
 void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), toolbars are kinda stupid, just useful till you learn shortcuts https://docs.microsoft.com/en-us/windows/win32/controls/create-toolbars
 	//NOTE: each menu gets its parent HMENU stored in the itemData part of the struct
-	LanguageManager::Instance().AddMenuDrawingHwnd(state.wnd);
-
-	//INFO: the top 32 bits of an HMENU are random each execution, in a way, they can actually get set to FFFFFFFF or to 00000000, so if you're gonna check two of those you better make sure you cut the top part in BOTH
 
 	HMENU menu = CreateMenu(); state.menu = menu;
 	HMENU menu_file = CreateMenu(); state.menu_file = menu_file;
 	HMENU menu_file_lang = CreateMenu(); state.menu_file_lang = menu_file_lang;
 	HMENU menu_edit = CreateMenu(); state.menu_edit = menu_edit;
-	AppendMenu(menu, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_file, (LPCWSTR)menu);
-	AMT(menu, (UINT_PTR)menu_file, LANG_MENU_FILE);
+	append_popup_to_menu(menu, menu_file, LANG_MENU_FILE);
 
-	AppendMenu(menu_file, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_SAVE, (LPCWSTR)menu_file);
-	AMT(menu_file, SHOWPASSWORDS_MENU_SAVE, LANG_MENU_SAVE);
-	SetMenuItemBitmaps(menu_file, SHOWPASSWORDS_MENU_SAVE, MF_BYCOMMAND, bmps.menu_save, bmps.menu_save);
+	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_SAVE, LANG_MENU_SAVE, bmps.menu_save, bmps.menu_save);
 
 	#ifdef _DEBUG
-	AppendMenu(menu_file, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_SAVE_V0, (LPCWSTR)menu_file);
-	AMT(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, LANG_MENU_SAVE);
-	MENUITEMINFO menu_setter{ sizeof(MENUITEMINFO) };
-	menu_setter.fMask = MIIM_STRING;
-	menu_setter.dwTypeData = (cstr*)_t("Save V0");
-	SetMenuItemInfo(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, FALSE, &menu_setter);
-	SetMenuItemBitmaps(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, MF_BYCOMMAND, bmps.menu_save, bmps.menu_save);
+	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, _t("Save V0"), bmps.menu_save, bmps.menu_save);
 	#endif
 
 	append_separator_to_menu(menu_file);
 
-	AppendMenu(menu_file, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_file_lang, (LPCWSTR)menu_file);
-	AMT(menu_file, (UINT_PTR)menu_file_lang, LANG_MENU_LANGUAGE);
-	//TODO(fran): SetMenuItemInfo only accepts UINT, not the UINT_PTR of MF_POPUP, plz dont tell me I have to redo all of it a different way (LanguageManager just does it normally not caring for the extra 32 bits)
+	append_popup_to_menu(menu_file, menu_file_lang, LANG_MENU_LANGUAGE, bmps.language, bmps.language);
 
 #define _language_appendtomenu(member,value_expr) \
 		AppendMenu(menu_file_lang, MF_STRING | MF_OWNERDRAW, Language::member, (LPCWSTR)menu_file_lang); \
@@ -515,26 +501,16 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 	_foreach_language(_language_appendtomenu)
 #undef _language_appendtomenu
 	CheckMenuItem(menu_file_lang, LanguageManager::Instance().GetCurrentLanguage(), MF_BYCOMMAND | MF_CHECKED);
-	SetMenuItemBitmaps(menu_file, (UINT)(UINT_PTR)menu_file_lang, MF_BYCOMMAND, bmps.language, bmps.language);
 
-	AppendMenu(menu_file, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, (LPCWSTR)menu_file);
-	AMT(menu_file, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, LANG_MENU_CHECK_FOR_UPDATES);
-	SetMenuItemBitmaps(menu_file, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, MF_BYCOMMAND, bmps.menu_update, bmps.menu_update);
+	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, LANG_MENU_CHECK_FOR_UPDATES, bmps.menu_update, bmps.menu_update);
 
-	AppendMenu(menu, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_edit, (LPCWSTR)menu);
-	AMT(menu, (UINT_PTR)menu_edit, LANG_MENU_EDIT);
+	append_popup_to_menu(menu, menu_edit, LANG_MENU_EDIT);
 
-	AppendMenu(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_UNDO, (LPCWSTR)menu_edit);
-	AMT(menu_edit, SHOWPASSWORDS_MENU_UNDO, LANG_MENU_EDIT_UNDO);
-	SetMenuItemBitmaps(menu_edit, SHOWPASSWORDS_MENU_UNDO, MF_BYCOMMAND, bmps.menu_undo, bmps.menu_undo);
+	append_item_to_menu(menu_edit, SHOWPASSWORDS_MENU_UNDO, LANG_MENU_EDIT_UNDO, bmps.menu_undo, bmps.menu_undo);
 
-	AppendMenu(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_REDO, (LPCWSTR)menu_edit);
-	AMT(menu_edit, SHOWPASSWORDS_MENU_REDO, LANG_MENU_EDIT_REDO);
-	SetMenuItemBitmaps(menu_edit, SHOWPASSWORDS_MENU_REDO, MF_BYCOMMAND, bmps.menu_redo, bmps.menu_redo);
+	append_item_to_menu(menu_edit, SHOWPASSWORDS_MENU_REDO, LANG_MENU_EDIT_REDO, bmps.menu_redo, bmps.menu_redo);
 
-	AppendMenu(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_FIND, (LPCWSTR)menu_edit);
-	AMT(menu_edit, SHOWPASSWORDS_MENU_FIND, LANG_MENU_EDIT_FIND);
-	SetMenuItemBitmaps(menu_edit, SHOWPASSWORDS_MENU_FIND, MF_BYCOMMAND, bmps.menu_search, bmps.menu_search);
+	append_item_to_menu(menu_edit, SHOWPASSWORDS_MENU_FIND, LANG_MENU_EDIT_FIND, bmps.menu_search, bmps.menu_search);
 
 	nonclient::set_menu(state.nc_parent, state.menu);
 }
@@ -981,6 +957,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		add_controls(state);
 
 		add_menus(state);
+		LanguageManager::Instance().AddMenuCreatorHwnd(state.wnd, [](HWND hwnd) {
+			State& state = *get_state(hwnd);
+			resize_controls(state);
+			add_menus(state);
+		});
 	} break;
 	case WM_SIZE:
 	{
@@ -1023,10 +1004,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			_foreach_language(_generate_enum_cases_language)
 			{
 				LanguageManager::Instance().ChangeLanguage((Language)LOWORD(wparam));
-				resize_controls(state);
-				HMENU old_menu = GetMenu(state.nc_parent);
-				add_menus(state);
-				DestroyMenu(old_menu);
 				return 0;
 			} break;
 			case SHOWPASSWORDS_MENU_UNDO:

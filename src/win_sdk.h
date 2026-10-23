@@ -40,6 +40,8 @@
 
 #define WM_REDO (extramsgs_base_msg_addr+5)
 
+#define WM_MENU_CREATOR (WM_APP + 1)
+
 #define wndclass_name(name) _APP_NAME _t("_wndclass_") _t(name)
 
 
