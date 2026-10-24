@@ -98,7 +98,7 @@ void draw_image(State& state, HDC dc, HBRUSH br, DWORD style, rect_i32& bounds, 
 
 void draw_text(State& state, HDC dc, HBRUSH br, const rect_i32& bounds) {
 	TCHAR title[max_expected_text_length]{};
-	SendMessage(state.wnd, WM_GETTEXT, ARRAYSIZE(title), (LPARAM)title);
+	GetWindowText(state.wnd, title, ARRAYSIZE(title));
 	RECT text_bounds{ bounds.left, bounds.top, bounds.left + bounds.w, bounds.top + bounds.h };
 	urender::draw_text(dc, text_bounds, to_utf_str(title), state.theme.font, br,
 		urender::TextAlignment::center, 0);
@@ -111,19 +111,26 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 	{
 		SIZE* sz = (SIZE*)lparam;//NOTE: all sizes are relative to the entire button, not just the img or text
 		DWORD style = (DWORD)GetWindowLongPtr(state.wnd, GWL_STYLE);
-		constexpr auto text_scale_factor = 1.2f;
+		auto text_sz = [](State& state) {
+			HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd, dc); };
+			HFONT old_font = state.theme.font ? SelectFont(dc, state.theme.font) : nil;
+			defer{ if (old_font) SelectFont(dc, old_font); };
+
+			cstr title[max_expected_text_length]{};
+			auto title_len = (size_t)GetWindowText(state.wnd, title, ARRAYSIZE(title));
+			SIZE res = urender::measure_text(dc, state.theme.font, { title, title_len });
+			res.cx += urender::measure_text(dc, state.theme.font, L"    ").cx;
+
+			TEXTMETRIC metrics{};
+			GetTextMetrics(dc, &metrics);
+			res.cy = maximum(res.cy, metrics.tmHeight) + 2 * (i32)ceilf(DPI(4));
+			return res;
+		};
 		if (sz->cx) { //calculate cy based on cx
 			auto image_sz_cy = [](const SIZE* sz) { return sz->cx; }; //we assume that imgs are always square
-			auto text_sz_cy = [](State& state) {
-				HFONT font = state.theme.font;
-				HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd,dc); };
-				if (font) SelectFont(dc, font);
-				TEXTMETRIC tm; GetTextMetrics(dc, &tm);
-				return (i32)((f32)tm.tmHeight * text_scale_factor);
-			};
 			sz->cy = image_only(state, style) ? image_sz_cy(sz)
-				: image_and_text(state, style) ? maximum(image_sz_cy(sz), text_sz_cy(state))
-				: text_sz_cy(state);
+				: image_and_text(state, style) ? maximum(image_sz_cy(sz), text_sz(state).cy)
+				: text_sz(state).cy;
 		}
 		else { //calculate cx and cy
 			auto image_sz = [](State& state, DWORD style) {
@@ -138,20 +145,6 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 					res.cx = bitmap.bmWidth;
 					res.cy = bitmap.bmHeight;
 				}
-				return res;
-			};
-			auto text_sz = [](State& state) {
-				SIZE res{};
-				HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd,dc); };
-				if (state.theme.font) SelectFont(dc, state.theme.font);
-				TEXTMETRIC tm; GetTextMetrics(dc, &tm);
-
-				cstr t[max_expected_text_length];
-				int len = (int)SendMessage(state.wnd, WM_GETTEXT, ARRAYSIZE(t), (LPARAM)t);
-
-				res = urender::measure_text(dc, state.theme.font, { t, (size_t)len });
-				res.cx = (i32)((f32)res.cx * text_scale_factor);
-				res.cy = (i32)((f32)res.cy * text_scale_factor);
 				return res;
 			};
 			*sz = image_only(state, style) ? image_sz(state, style)
