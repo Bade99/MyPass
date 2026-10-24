@@ -212,7 +212,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 
 	HWND login_wnd = create_root_window(
 		hInstance, 
-		validate_nonclient_rect_in_screen(nonclient::calc_nonclient_rc_from_client(login_cl.rc, false), login_cl.rc, login_nclpparam.min_window_width),
+		validate_nonclient_rect_in_screen(nonclient::calc_nonclient_rc_from_client(login_cl.rc, true), login_cl.rc, login_nclpparam.min_window_width),
 		&login_nclpparam
 	);
 

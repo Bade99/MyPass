@@ -171,12 +171,15 @@ public:
 			UpdateCombo(hwnd_id.first, hwnd_id.second, stringID);
 		});
 
-		//TODO(fran): Notify each managed control's layout owner once after updating translated text,
-		//so size-dependent controls relayout and repaint without callers handling language changes.
-		//AddDynamicText currently requires manual registration and allows only one message per HWND.
 		ForEachCurrentRegistration(this->DynamicHwnds, [this](HWND hwnd, UINT messageID) {
 			UpdateDynamicHwnd(hwnd, messageID);
 		});
+		for (const auto& layout : this->LanguageLayouts) {
+			HWND hwnd = layout.first;
+			auto tracked = this->TrackedWindows.find(hwnd);
+			if (tracked != this->TrackedWindows.end())
+				PostMessage(hwnd, WM_LANGUAGE_LAYOUT, (WPARAM)tracked->second, 0);
+		}
 		for (const auto& creator : this->MenuCreators) {
 			HWND hwnd = creator.first;
 			auto tracked = this->TrackedWindows.find(hwnd);
@@ -230,6 +233,15 @@ public:
 		return TRUE;
 	}
 
+	using LanguageLayout = void(*)(HWND);
+
+	BOOL AddLanguageLayoutHwnd(HWND hwnd, LanguageLayout update_layout)
+	{
+		if (!update_layout || !TrackWindow(hwnd)) return FALSE;
+		this->LanguageLayouts[hwnd] = update_layout;
+		return TRUE;
+	}
+
 	using MenuCreator = void(*)(HWND);
 
 	BOOL AddMenuCreatorHwnd(HWND hwnd, MenuCreator create_menu)
@@ -280,6 +292,7 @@ private:
 	std::map<HWND, UINT> HwndsTooltip;
 	std::map<HWND, UINT> DynamicHwnds;
 	std::map<std::pair<HWND, UINT>, UINT> Comboboxes;
+	std::map<HWND, LanguageLayout> LanguageLayouts;
 	std::map<HWND, MenuCreator> MenuCreators;
 
 	std::map<HWND, size_t> TrackedWindows;
@@ -287,6 +300,15 @@ private:
 	static LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR subclass_id, DWORD_PTR ref_data)
 	{
 		auto& manager = *reinterpret_cast<LanguageManager*>(ref_data);
+		if (message == WM_LANGUAGE_LAYOUT) {
+			if (auto layout = manager.LanguageLayouts.find(hwnd);
+				layout != manager.LanguageLayouts.end() && manager.IsTrackedWindow(hwnd, (size_t)wparam)) {
+				auto update_layout = layout->second;
+				update_layout(hwnd);
+				if (manager.IsTrackedWindow(hwnd, (size_t)wparam)) ask_window_for_repaint(hwnd);
+			}
+			return 0;
+		}
 		if (message == WM_MENU_CREATOR) {
 			if (auto creator = manager.MenuCreators.find(hwnd);
 				creator != manager.MenuCreators.end() && manager.IsTrackedWindow(hwnd, (size_t)wparam)) {
@@ -325,6 +347,7 @@ private:
 		this->HwndsDefault.erase(hwnd);
 		this->HwndsTooltip.erase(hwnd);
 		this->DynamicHwnds.erase(hwnd);
+		this->LanguageLayouts.erase(hwnd);
 		this->MenuCreators.erase(hwnd);
 		auto combo = this->Comboboxes.lower_bound(std::make_pair(hwnd, 0u));
 		while (combo != this->Comboboxes.end() && combo->first.first == hwnd)

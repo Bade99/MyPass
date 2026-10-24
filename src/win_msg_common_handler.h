@@ -1,5 +1,13 @@
 #pragma once
 
+#define _wm_command_language_case(member,value_expr) case Language::member:
+#define WM_COMMAND_LANGUAGE_CASES(command_wparam) \
+	_foreach_language(_wm_command_language_case) \
+	{ \
+		LanguageManager::Instance().ChangeLanguage((Language)LOWORD(command_wparam)); \
+		return 0; \
+	}
+
 static LRESULT handle_wm_mouseactivate() { return MA_ACTIVATE; }
 
 static LRESULT handle_wm_setcursor(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam, HCURSOR cursor) {

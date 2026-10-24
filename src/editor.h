@@ -493,15 +493,7 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 	append_separator_to_menu(menu_file);
 
 	append_popup_to_menu(menu_file, menu_file_lang, LANG_MENU_LANGUAGE, bmps.language, bmps.language);
-
-#define _language_appendtomenu(member,value_expr) \
-		AppendMenu(menu_file_lang, MF_STRING | MF_OWNERDRAW, Language::member, (LPCWSTR)menu_file_lang); \
-		SetMenuItemString(menu_file_lang, Language::member, FALSE, _t(#member)); \
-		SetMenuItemBitmaps(menu_file_lang, Language::member, MF_BYCOMMAND, NULL, bmps.circle); \
-
-	_foreach_language(_language_appendtomenu)
-#undef _language_appendtomenu
-	CheckMenuItem(menu_file_lang, LanguageManager::Instance().GetCurrentLanguage(), MF_BYCOMMAND | MF_CHECKED);
+	append_language_items_to_menu(menu_file_lang);
 
 	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, LANG_MENU_CHECK_FOR_UPDATES, bmps.menu_update, bmps.menu_update);
 
@@ -965,10 +957,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		add_controls(state);
 
 		add_menus(state);
+		LanguageManager::Instance().AddLanguageLayoutHwnd(state.wnd, [](HWND hwnd) {
+			resize_controls(*get_state(hwnd));
+		});
 		LanguageManager::Instance().AddMenuCreatorHwnd(state.wnd, [](HWND hwnd) {
-			State& state = *get_state(hwnd);
-			resize_controls(state);
-			add_menus(state);
+			add_menus(*get_state(hwnd));
 		});
 	} break;
 	case WM_SIZE:
@@ -1008,12 +1001,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				return 0;
 			} break;
 			#endif
-#define _generate_enum_cases_language(member,value_expr) case Language::member:
-			_foreach_language(_generate_enum_cases_language)
-			{
-				LanguageManager::Instance().ChangeLanguage((Language)LOWORD(wparam));
-				return 0;
-			} break;
+			WM_COMMAND_LANGUAGE_CASES(wparam)
 			case SHOWPASSWORDS_MENU_UNDO:
 			{
 				if constexpr (debug_text_view) SendMessage(state.controls.transition_v0.edit_passwords, EM_UNDO, 0, 0); //TODO(fran): undo is terrible in edit controls, we gotta manage that in the subclass //NOTE: WM_UNDO seems to do the same

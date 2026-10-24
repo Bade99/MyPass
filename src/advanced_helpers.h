@@ -317,6 +317,13 @@ static bool append_item_to_menu(HMENU menu, u32 item_id, u32 msg_id, HBITMAP img
 	return res;
 }
 
+static void append_language_items_to_menu(HMENU menu) {
+#define _append_language_item(member,value_expr) append_item_to_menu(menu, Language::member, _t(#member), nil, bmps.circle);
+	_foreach_language(_append_language_item)
+#undef _append_language_item
+	CheckMenuItem(menu, LanguageManager::Instance().GetCurrentLanguage(), MF_BYCOMMAND | MF_CHECKED);
+}
+
 static bool append_separator_to_menu(HMENU menu) {
 	bool res;
 	res = AppendMenu(menu, MF_SEPARATOR | MF_OWNERDRAW, 0, (LPCWSTR)menu);

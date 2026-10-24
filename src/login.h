@@ -137,6 +137,14 @@ void add_controls(State& state) {
 	button::set_theme(controls.button_login, themes.login_btn);
 }
 
+void add_menu(State& state) {
+	HMENU menu = CreateMenu();
+	HMENU menu_lang = CreateMenu();
+	append_popup_to_menu(menu, menu_lang, LANG_MENU_LANGUAGE);
+	append_language_items_to_menu(menu_lang);
+	nonclient::set_menu(state.nc_parent, menu);
+}
+
 void save_settings(State& state) {
 	RECT rc; GetWindowRect(state.wnd, &rc);
 	state.settings->rc = rc;
@@ -156,6 +164,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		CREATESTRUCT* createnfo = (CREATESTRUCT*)lparam;
 		add_controls(state);
+		add_menu(state);
+		LanguageManager::Instance().AddLanguageLayoutHwnd(state.wnd, [](HWND hwnd) {
+			resize_controls(*get_state(hwnd));
+		});
+		LanguageManager::Instance().AddMenuCreatorHwnd(state.wnd, [](HWND hwnd) {
+			add_menu(*get_state(hwnd));
+		});
 		return 0;
 	} break;
 	case WM_SIZE:
@@ -286,14 +301,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			}
 			return 0;
 		}
-#define _generate_enum_cases(member,value_expr) case Language::member:
-		_foreach_language(_generate_enum_cases)
-		{
-			LanguageManager::Instance().ChangeLanguage((Language)LOWORD(wparam));
-			resize_controls(state);
-			ask_window_for_repaint(state.wnd);
-			return 0;
-		}
+		WM_COMMAND_LANGUAGE_CASES(wparam)
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
