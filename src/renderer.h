@@ -348,6 +348,7 @@ namespace urender {
 		mask_img.height = masknfo.bmHeight;
 		mask_img.bits_per_pixel = masknfo.bmBitsPixel;
 		mask_img.pitch = masknfo.bmWidthBytes;
+		Assert(mask_img.pitch == mask_img.width);
 		int mask_sz = mask_img.height * mask_img.pitch;
 		mask_img.mem = malloc(mask_sz); defer{ free(mask_img.mem); };
 		int getbits = GetBitmapBits(mask, mask_sz, mask_img.mem); Assert(getbits == mask_sz);

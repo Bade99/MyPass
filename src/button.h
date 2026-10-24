@@ -194,7 +194,8 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 	} break;
 	case WM_CAPTURECHANGED:
 	{
-		//We lost mouse capture
+		state.OnMouseTracking = false;
+		state.onLMouseClick = false;
 		ask_window_for_repaint(state.wnd);
 		return 0;
 	} break;
@@ -322,10 +323,13 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 			draw_text(state, dc, forebr, bounds);
 		return 0;
 	} break;
-	case WM_DESTROY:
+	case WM_NCDESTROY:
 	{
+		LRESULT res = DefWindowProc(hwnd, msg, wparam, lparam);
+		set_window_state(hwnd, nil);
 		free(&state);
-	}break;
+		return res;
+	} break;
 	case WM_SETFONT:
 	{
 		state.theme.font = (HFONT)wparam;
@@ -386,7 +390,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 	} break;
 	#ifdef _DEBUG_HWND_MESSAGES
 	case WM_CREATE:
-	case WM_NCDESTROY:
+	case WM_DESTROY:
 	case WM_MOVE:
 	case WM_SIZE: 
 	case WM_WINDOWPOSCHANGED:
