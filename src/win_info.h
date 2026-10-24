@@ -274,22 +274,30 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 /**
   * Window Proc Messages Specific for Non Client Windows
   */
-// WM_GETMINMAXINFO notes from an earlier custom-frame experiment:
-// The message arrived before the window state was usable, so maximization code
-// cannot assume state initialized by WM_CREATE or WM_NCCREATE is available.
-// With WS_OVERLAPPEDWINDOW, the experiment found that ptMaxPosition.y >= 1
-// allowed a custom top position, while zero or negative values left Windows
-// accounting for the taskbar. Without that style, taskbar handling was manual.
-// Maximized windows can extend their resize frame past the visible monitor edge,
-// including the top; that affects caption/button/menu placement and may overlap
-// a top taskbar. The experiment observed Chrome exposing a resize cursor and
-// drawing above a top taskbar, whereas Visual Studio handled it correctly.
-// A test measured frame margins with AdjustWindowRect(WS_OVERLAPPEDWINDOW) and
-// tried ptMaxPosition.y = 0 and ptMaxSize.y -= 16. Those hard-coded values were
-// diagnostic only; any solution must account for monitor/work area and frame
-// metrics, including taskbar position and multiple monitors.
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	switch (msg) {
+	case WM_GETMINMAXINFO:
+	{
+		// It can be the first message sent to a window, before its state is usable.
+		// It arrives before a size or position change and can override the maximized
+		// size and position or the minimum and maximum tracking sizes. The default
+		// maximized values are relative to the primary monitor; Windows adjusts them
+		// for secondary monitors. Maximization code cannot assume state initialized
+		// by WM_CREATE or WM_NCCREATE is available.
+		// With WS_OVERLAPPEDWINDOW, an earlier custom-frame experiment found that
+		// ptMaxPosition.y >= 1 allowed a custom top position, while zero or negative
+		// values left Windows accounting for the taskbar. Without that style, taskbar
+		// handling was manual. Maximized windows can extend their resize frame past
+		// the visible monitor edge, including the top; that affects caption/button/menu
+		// placement and may overlap a top taskbar. The experiment observed Chrome
+		// exposing a resize cursor and drawing above a top taskbar, whereas Visual
+		// Studio handled it correctly. A test measured frame margins with
+		// AdjustWindowRect(WS_OVERLAPPEDWINDOW) and tried ptMaxPosition.y = 0 and
+		// ptMaxSize.y -= 16. Those hard-coded values were diagnostic only; any solution
+		// must account for monitor/work area and frame metrics, including taskbar
+		// position and multiple monitors.
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
 	case WM_NCPAINT: 
 	{
 		// Check https://chromium.googlesource.com/chromium/chromium/+/5db69ae220c803e9c1675219b5cc5766ea3bb698/chrome/views/window.cc they block drawing so windows doesnt draw on top of them, cause the non client area is also painted in other msgs like settext

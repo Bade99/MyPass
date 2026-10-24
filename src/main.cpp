@@ -190,6 +190,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 		.client_class_name = login::wndclass,
 		.client_lp_param = &login_data,
 		.can_maximize = false,
+		.min_window_width = (i32)DPI(300),
 	};
 
 	editor::Data editor_data{
@@ -199,22 +200,25 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 	nonclient::LpParam show_nclpparam{
 		.client_class_name = editor::wndclass,
 		.client_lp_param = &editor_data,
+		.min_window_width = (i32)DPI(500),
 	};
 
-	auto validate_nonclient_rect_in_screen = [](RECT nc, RECT default_nc) {
+	auto validate_nonclient_rect_in_screen = [](RECT nc, RECT default_nc, i32 min_width) {
+		nc.right = maximum(nc.right, nc.left + min_width);
+		default_nc.right = maximum(default_nc.right, default_nc.left + min_width);
 		validate_rect_in_screen(nc, default_nc);
 		return nc;
 	};
 
 	HWND login_wnd = create_root_window(
 		hInstance, 
-		validate_nonclient_rect_in_screen(nonclient::calc_nonclient_rc_from_client(login_cl.rc, false), login_cl.rc),
+		validate_nonclient_rect_in_screen(nonclient::calc_nonclient_rc_from_client(login_cl.rc, false), login_cl.rc, login_nclpparam.min_window_width),
 		&login_nclpparam
 	);
 
 	HWND editor_wnd = create_root_window(
 		hInstance, 
-		validate_nonclient_rect_in_screen(nonclient::calc_nonclient_rc_from_client(editor_cl.rc, true), editor_cl.rc),
+		validate_nonclient_rect_in_screen(nonclient::calc_nonclient_rc_from_client(editor_cl.rc, true), editor_cl.rc, show_nclpparam.min_window_width),
 		&show_nclpparam
 	);
 	

@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef RENDER_DIAGNOSTICS_ENABLED
-#define RENDER_DIAGNOSTICS_ENABLED 1
+#define RENDER_DIAGNOSTICS_ENABLED 0
 #endif
 
 #include "win_sdk.h"

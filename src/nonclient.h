@@ -708,11 +708,15 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		PostQuitMessage(0);
 	} break;
 	case WM_GETMINMAXINFO:
-		//FIRST msg sent to the window
-		//Sent when size or position are about to change
-		//Can override default maximized size and position, and the tracking size which sets the limit for the minimum & max size your window can be resized to, NOTE: the sizes/positions are relative to the primary monitor, windows automatically adjusts this values for secondary ones
 	{
-		return DefWindowProc(hwnd, msg, wparam, lparam);
+		LRESULT result = DefWindowProc(hwnd, msg, wparam, lparam);
+		// This message can arrive before WM_NCCREATE initializes the window state.
+		if (State* state = get_state(hwnd); state && state->settings) {
+			MINMAXINFO& limits = *(MINMAXINFO*)lparam;
+			limits.ptMinTrackSize.x = maximum(limits.ptMinTrackSize.x, state->settings->min_window_width);
+			return 0;
+		}
+		return result;
 	} break;
 	case WM_ERASEBKGND:
 	{

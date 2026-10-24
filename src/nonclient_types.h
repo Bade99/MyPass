@@ -12,6 +12,7 @@ namespace nonclient {
 		const TCHAR* client_class_name;
 		void* client_lp_param;
 		bool can_maximize = true;
+		i32 min_window_width = 0;
 	};
 
 	struct MY_MARGINS
