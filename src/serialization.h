@@ -117,7 +117,7 @@ static size_t find_identifier(str s, size_t offset, str compare) {
 	return str::npos;
 }
 
-static str load_file_serialized(str folder = _t("\\unCap"), str filename = _t("\\serialized.txt")) {
+static str load_file_serialized(str folder, str filename = _t("\\serialized.txt")) {
 	cstr* general_folder = nil;
 	if (FAILED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &general_folder)) || !general_folder) {
 		CoTaskMemFree(general_folder);

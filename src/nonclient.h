@@ -95,8 +95,8 @@ HMENU get_menu(HWND wnd) {
 	return state.menu;
 }
 
-void set_menu(HWND uncapnc, HMENU menu) {
-	State& state = *get_state(uncapnc);
+void set_menu(HWND nc, HMENU menu) {
+	State& state = *get_state(nc);
 	HMENU old_menu = state.menu;
 
 	if (menu) {

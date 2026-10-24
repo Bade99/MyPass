@@ -60,52 +60,12 @@
 
 #include "debug.h"
 
-str GetFontFaceName() {
-	//Font guidelines: https://docs.microsoft.com/en-us/windows/win32/uxguide/vis-fonts
-	//Stock fonts: https://docs.microsoft.com/en-us/windows/win32/gdi/using-a-stock-font-to-draw-text
-
-	//TODO(fran): can we take the best codepage from each font and create our own? (look at font linking & font fallback)
-	//TODO(fran): speed up: use a custom allocator that starts by performing a single wchar_t[2500][22] allocation instead of using individually allocated strings
-
-	//We looked at 2195 fonts, this is what's left
-	//Options:
-	//Segoe UI (good txt, jp ok) (10 codepages) (supported on most versions of windows)
-	//-Arial Unicode MS (good text; good jp) (33 codepages) (doesnt come with windows)
-	//-Microsoft YaHei or UI (look the same,good txt,good jp) (6 codepages) (supported on most versions of windows)
-	//-Microsoft JhengHei or UI (look the same,good txt,ok jp) (3 codepages) (supported on most versions of windows)
-
-	i64 cnt = StartCounter(); defer{ printf("ELAPSED FIND FONT: %f ms\n",EndCounter(cnt)); };
-
-	HDC dc = GetDC(GetDesktopWindow()); defer{ ReleaseDC(GetDesktopWindow(),dc); };
-	struct FontNameLess {
-		bool operator()(const str& left, const str& right) const {
-			return _wcsicmp(left.c_str(), right.c_str()) < 0;
-		}
-	};
-	using FontNames = std::set<str, FontNameLess>;
-	FontNames fontnames;
-	EnumFontFamiliesEx(dc, NULL
-		, [](const LOGFONT* lpelfe, const TEXTMETRIC* /*lpntme*/, DWORD /*FontType*/, LPARAM lParam) -> int {
-			((FontNames*)lParam)->insert(lpelfe->lfFaceName);
-			return TRUE;
-		}
-	, (LPARAM)&fontnames, NULL);
-
-	const TCHAR* requested_fontname[] = { TEXT("Segoe UI"), TEXT("Arial Unicode MS"), TEXT("Microsoft YaHei"), TEXT("Microsoft YaHei UI"), TEXT("Microsoft JhengHei"), TEXT("Microsoft JhengHei UI") };
-
-	for (const auto requested_font : requested_fontname)
-		if (auto font = fontnames.find(requested_font); font != fontnames.end())
-			return *font;
-
-	return TEXT("");
-}
-
 void setup_fonts() {
 	LOGFONT lf{ 0 };
 	lf.lfQuality = CLEARTYPE_QUALITY;
 	lf.lfHeight = DPI(-15);
 	//INFO: by default if I dont set faceName it uses "Modern", looks good but it lacks some charsets
-	string_copy(lf.lfFaceName, str_view(GetFontFaceName()));
+	string_copy(lf.lfFaceName, str_view(GetAppFontName()));
 	fonts.General = CreateFontIndirect(&lf);
 	Assert(fonts.General);
 
@@ -151,23 +111,25 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 	setup_debug_console();
 	setup_fonts();
 
-	const str to_deserialize = load_file_serialized(serialization_folder);
 
 	LanguageManager& lang_mgr = LanguageManager::Instance(); lang_mgr.SetHInstance(hInstance);
 	login::Settings login_cl;
 	editor::Settings editor_cl;
 
-	_BeginDeserialize();
-	_deserialize_struct(lang_mgr, to_deserialize);
-	_deserialize_struct(login_cl, to_deserialize);
-	login_cl.validate();
-	_deserialize_struct(editor_cl, to_deserialize);
-	editor_cl.validate();
-	#ifndef _DEBUG // While debugging always use default struct colors to make it easier to try different ones
-	_deserialize_struct(colors, to_deserialize);
-	#endif
-	default_colors_if_not_set(&colors);
-	defer{ for (HBRUSH& b : colors.brushes) if (b) { DeleteBrush(b); b = NULL; } };
+	{
+		const str to_deserialize = load_file_serialized(serialization_folder);
+		_BeginDeserialize();
+		_deserialize_struct(lang_mgr, to_deserialize);
+		_deserialize_struct(login_cl, to_deserialize);
+		login_cl.validate();
+		_deserialize_struct(editor_cl, to_deserialize);
+		editor_cl.validate();
+		#ifndef _DEBUG // While debugging always use default struct colors to make it easier to try different ones
+		_deserialize_struct(colors, to_deserialize);
+		#endif
+		default_colors_if_not_set(&colors);
+		atexit([]() { for (HBRUSH& b : colors.brushes) if (b) { DeleteBrush(b); b = nil; } });
+	}
 
 	load_styles();
 

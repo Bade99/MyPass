@@ -25,10 +25,10 @@
   * Assert
   */
 #ifdef _DEBUG
-#define UNCAP_ASSERTIONS
+#define ENABLE_DEBUG_ASSERTIONS
 #endif
 
-#ifdef UNCAP_ASSERTIONS
+#ifdef ENABLE_DEBUG_ASSERTIONS
 #define Assert(assertion) if(!(assertion))*(int*)NULL=0
 #define AssertAll(assertion_list) for (auto& e : assertion_list) if(!(e))*(int*)NULL=0
 #else 

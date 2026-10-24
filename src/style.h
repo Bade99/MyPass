@@ -5,6 +5,44 @@
 //constexpr DWORD style_button_bmp = WS_CHILD | WS_TABSTOP | button::style::roundrect | BS_BITMAP;
 //constexpr DWORD style_button_icon = WS_CHILD | WS_TABSTOP | button::style::roundrect | BS_ICON;
 
+str GetAppFontName() {
+	//Font guidelines: https://docs.microsoft.com/en-us/windows/win32/uxguide/vis-fonts
+	//Stock fonts: https://docs.microsoft.com/en-us/windows/win32/gdi/using-a-stock-font-to-draw-text
+
+	//TODO(fran): can we take the best codepage from each font and create our own? (look at font linking & font fallback)
+	//TODO(fran): speed up: use a custom allocator that starts by performing a single wchar_t[2500][22] allocation instead of using individually allocated strings
+
+	//We looked at 2195 fonts, this is what's left
+	//Options:
+	//Segoe UI (good txt, jp ok) (10 codepages) (supported on most versions of windows)
+	//-Arial Unicode MS (good text; good jp) (33 codepages) (doesnt come with windows)
+	//-Microsoft YaHei or UI (look the same,good txt,good jp) (6 codepages) (supported on most versions of windows)
+	//-Microsoft JhengHei or UI (look the same,good txt,ok jp) (3 codepages) (supported on most versions of windows)
+
+	//i64 cnt = StartCounter(); defer{ printf("ELAPSED FIND FONT: %f ms\n",EndCounter(cnt)); };
+
+	HDC dc = GetDC(GetDesktopWindow()); defer{ ReleaseDC(GetDesktopWindow(),dc); };
+	struct FontNameLess {
+		bool operator()(const str& left, const str& right) const { return _wcsicmp(left.c_str(), right.c_str()) < 0; }
+	};
+	using FontNames = std::set<str, FontNameLess>;
+	FontNames fontnames;
+	EnumFontFamiliesEx(dc, nil
+		, [](const LOGFONT* lpelfe, const TEXTMETRIC* /*lpntme*/, DWORD /*FontType*/, LPARAM lParam) -> int {
+			((FontNames*)lParam)->insert(lpelfe->lfFaceName);
+			return TRUE;
+		}
+	, (LPARAM)&fontnames, 0);
+
+	auto requested_fontname = { _t("Segoe UI"), _t("Arial Unicode MS"), _t("Microsoft YaHei"), _t("Microsoft YaHei UI") };
+
+	for (const auto requested_font : requested_fontname)
+		if (auto font = fontnames.find(requested_font); font != fontnames.end())
+			return *font;
+
+	return _t("");
+}
+
 struct Themes {
 	button::Theme base_btn;
 	button::Theme login_btn;
