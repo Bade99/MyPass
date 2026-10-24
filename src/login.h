@@ -202,6 +202,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		{
 		case BTN_LOGIN:
 		{
+			if (state.transition_pending) return 0;
 			bool success = false;
 			size_t username_len = GetWindowTextLength(state.controls.edit_username) + 1;//includes null terminator
 			size_t password_len = GetWindowTextLength(state.controls.edit_password) + 1;//includes null terminator
@@ -241,6 +242,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 					return 0;
 				}
 
+				secure_zero_free(state.results->password);
+				secure_zero_free(state.results->username);
+
 				if (sizeof(*username_buf) == 1) {//we got ascii data, we always want utf16 otherwise the key would stop working when switching from ascii to unicode controls
 					defer{ secure_zero_free(username_buf, username_len * sizeof(*username_buf)); secure_zero_free(password_buf, password_len * sizeof(*password_buf)); };
 					int username_sz_char = MultiByteToWideChar(CP_ACP, 0, (LPCCH)username_buf, username_sz, 0, 0);
@@ -251,8 +255,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 						if (username_mem && password_mem) {
 							MultiByteToWideChar(CP_ACP, 0, (LPCCH)username_buf, username_sz, (LPWSTR)username_mem, username_sz_char);
 							MultiByteToWideChar(CP_ACP, 0, (LPCCH)password_buf, password_sz, (LPWSTR)password_mem, password_sz_char);
-							if (state.results->password.str) secure_zero_free(state.results->password);//this shouldnt ever happen
-							if (state.results->username.str) secure_zero_free(state.results->username);//this shouldnt ever happen
 							state.results->password.str = (WCHAR*)password_mem;
 							state.results->password.sz_chars = password_sz_char;
 							state.results->username.str = (WCHAR*)username_mem;
@@ -270,7 +272,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 					state.results->signup = state.signup_mode;
 					success = true;
 				}
-				if(success) PostMessage(0, WM_STATE_NEXT, 0, 0);//TODO(fran): maybe storing the results in WM_STATE_NEXT is better?
+				if (success) {
+					if (PostMessage(0, WM_STATE_NEXT, 0, 0)) state.transition_pending = true;
+					else {
+						secure_zero_free(state.results->password);
+						secure_zero_free(state.results->username);
+					}
+				}
 			}
 			else {
 				if(username_len==1) edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_EMPTY), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
@@ -333,6 +341,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				open_link(url);
 		} break;
 		}
+		state.transition_pending = false;
 	} break;
 	case WM_STATE_RESET:
 	{
@@ -340,6 +349,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		secure_zero_free(state.results->username);
 		SetWindowText(state.controls.edit_password, _t(""));
 		SetWindowText(state.controls.edit_username, _t(""));
+		state.transition_pending = false;
 	} break;
 	case WM_CLOSE:
 	{

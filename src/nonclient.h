@@ -11,10 +11,6 @@
 #include "render_diagnostics.h"
 
 // ------------------------ USAGE NOTES ------------------------ //
-// - If you need menus to resize, for example when you change languages
-//   you'll need to re-create the menu and set it up like new, I havent
-//   yet found a way to get windows' menu handler to want to recalculate
-//   menu sizes
 // - To be able to paint the menus ourselves we need them to be MF_OWNERDRAW,
 //   each menu item that has MF_OWNERDRAW must store the HMENU of its 
 //   parent into their itemData, hopefully this wont be needed some day
@@ -101,6 +97,7 @@ HMENU get_menu(HWND wnd) {
 
 void set_menu(HWND uncapnc, HMENU menu) {
 	State& state = *get_state(uncapnc);
+	HMENU old_menu = state.menu;
 
 	if (menu) {
 		state.menu = menu;
@@ -113,6 +110,9 @@ void set_menu(HWND uncapnc, HMENU menu) {
 	}
 	else {
 		state.menu = NULL;
+	}
+	if (old_menu && old_menu != menu) {
+		DestroyMenu(old_menu);
 	}
 	RECT wndrc; GetWindowRect(state.wnd, &wndrc);
 	//Update to accommodate for menu change
@@ -617,6 +617,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_NCDESTROY:
 	{
 		if (&state) {
+			if (state.menu) {
+				DestroyMenu(state.menu);
+				state.menu = nil;
+			}
 			if (state.menu_backbuffer) { DeleteBitmap(state.menu_backbuffer); state.menu_backbuffer = nil; }
 			DeleteDC(state.menu_offscreen_dc);
 			set_window_state(state.wnd, nil);

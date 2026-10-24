@@ -3,6 +3,15 @@
 #include "win_sdk.h"
 
 /**
+  * Clipboard
+  * OpenClipboard(owner_wnd) gives EmptyClipboard a window to assign ownership to.
+  * The owner is for API compliance, not delayed rendering: eager CF_UNICODETEXT
+  * data requires no WM_RENDERFORMAT or WM_RENDERALLFORMATS handling.
+  * Some Windows versions accept SetClipboardData without an owner, but skipping
+  * EmptyClipboard leaves unrelated formats from the previous clipboard contents.
+  */
+
+/**
   * Custom window state structs must be initialized to zero when created
   */
 struct State { /*...*/ };
@@ -37,6 +46,7 @@ namespace Placement {
   */
 // NOTE: Windows' menu bar is terrible, it doesnt care to update for nothing
 // Calling SetMenu after one has already been set doesn't really work, the user should call our set_menu and get_menu instead of Windows' SetMenu and GetMenu
+//INFO: the top 32 bits of an HMENU are random each execution, in a way, they can actually get set to FFFFFFFF or to 00000000, so if you're gonna check two of those you better make sure you cut the top part in BOTH
 
 void show_rclickmenu(HWND wnd, POINT mouse) {
 	HMENU m = CreateMenu();

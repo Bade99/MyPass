@@ -273,6 +273,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 
 				// Attempt to start the next state
 				auto start_attempt = (login::AttemptResult)SendMessage(nonclient::get_state(new_state.wnd)->client, WM_STATE_START, (WPARAM)&editor_start, 0);
+				login::secure_zero_free(login_results.password);
+				login::secure_zero_free(login_results.username);
 
 				if (start_attempt == login::AttemptResult::success) {
 					PostMessage(nonclient::get_state(old_state.wnd)->client, WM_STATE_RESET, 0, 0);
@@ -325,7 +327,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 	serialized += _serialize_struct(editor_cl);
 	serialized += _serialize_struct(colors);
 
-	save_to_file_serialized(serialized, serialization_folder);
+	if (!save_to_file_serialized(serialized, serialization_folder))
+		MessageBox(0, _t("Unable to save application settings"), RCS(LANG_ERROR), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
 
 	return (int) msg.wParam;
 }

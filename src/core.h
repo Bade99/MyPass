@@ -3,16 +3,24 @@
 #include "sha256.h"
 #include "twofish.h"
 
-static str get_general_save_folder() { //NOTE: this folder is guaranteed to exist
+static str get_general_save_folder() { //Returns empty if the work folder is unavailable
 	static str folder; //folder stored globally, if the user decides to delete it mid execution I wish them good luck
 	if (folder.empty()) {
 		constexpr auto& application_folder = _t("\\MyPass");
-		cstr* general_folder;
-		SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &general_folder);//NOTE: I dont think this has an ansi version that isnt deprecated
+		cstr* general_folder = nil;
+		if (FAILED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &general_folder)) || !general_folder) {
+			CoTaskMemFree(general_folder);
+			MessageBox(0, _t("Unable to locate AppData\\Roaming"), _t("Error"), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
+			return {};
+		}
 		(folder = general_folder) += application_folder;
 		CoTaskMemFree(general_folder);
 		BOOL res = CreateDirectory(folder.c_str(), 0);
-		runtime_assert(res || GetLastError()==ERROR_ALREADY_EXISTS, _t("Unable to create work folder on AppData\\Roaming"));
+		if (!res && GetLastError() != ERROR_ALREADY_EXISTS) {
+			MessageBox(0, _t("Unable to create work folder on AppData\\Roaming"), _t("Error"), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
+			folder.clear();
+			return {};
+		}
 	}
 	return folder;
 }

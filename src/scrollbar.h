@@ -280,7 +280,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_CAPTURECHANGED:
 	{
-		//We lost mouse capture
+		state.tracking_bar = false;
+		update_btn_visibility(state);
 		ask_window_for_repaint(state.wnd);
 	} break;
 	case WM_LBUTTONUP:

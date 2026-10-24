@@ -69,6 +69,7 @@ struct State {
 	Results* results;
 
 	bool signup_mode;
+	bool transition_pending;
 };
 
 enum class AttemptResult {

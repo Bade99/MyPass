@@ -255,7 +255,7 @@ void add_controls(State& state) {
 			else
 				for (auto p : state.controls.password_editors) {
 					auto& pw_ed = *password_editor::get_state(p);
-					utf16 title[50]; 
+					utf16 title[64];
 					i32 title_len = GetWindowText(pw_ed.controls.edo_title, title, ARRAYSIZE(title));
 
 					if (!title_len) { ShowWindow(p, SW_SHOW); continue; } //always keep ones that are still being edited
@@ -370,6 +370,7 @@ void add_controls(State& state) {
 			auto sorting_function = (item.value == SortOption::date_created_newest) ?
 				[](SortDate a, SortDate b) { return a.date > b.date; } :
 				[](SortDate a, SortDate b) { return a.date < b.date; };
+			std::sort(to_sort_pinned.begin(), to_sort_pinned.end(), sorting_function);
 			std::sort(to_sort.begin(), to_sort.end(), sorting_function);
 			for (const auto& [i, value] : to_sort_pinned | std::views::enumerate) vec[i] = value.wnd;
 			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i + to_sort_pinned.size()] = value.wnd;
@@ -476,36 +477,22 @@ void add_controls(State& state) {
 
 void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), toolbars are kinda stupid, just useful till you learn shortcuts https://docs.microsoft.com/en-us/windows/win32/controls/create-toolbars
 	//NOTE: each menu gets its parent HMENU stored in the itemData part of the struct
-	LanguageManager::Instance().AddMenuDrawingHwnd(state.wnd);
-
-	//INFO: the top 32 bits of an HMENU are random each execution, in a way, they can actually get set to FFFFFFFF or to 00000000, so if you're gonna check two of those you better make sure you cut the top part in BOTH
 
 	HMENU menu = CreateMenu(); state.menu = menu;
 	HMENU menu_file = CreateMenu(); state.menu_file = menu_file;
 	HMENU menu_file_lang = CreateMenu(); state.menu_file_lang = menu_file_lang;
 	HMENU menu_edit = CreateMenu(); state.menu_edit = menu_edit;
-	AppendMenu(menu, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_file, (LPCWSTR)menu);
-	AMT(menu, (UINT_PTR)menu_file, LANG_MENU_FILE);
+	append_popup_to_menu(menu, menu_file, LANG_MENU_FILE);
 
-	AppendMenu(menu_file, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_SAVE, (LPCWSTR)menu_file);
-	AMT(menu_file, SHOWPASSWORDS_MENU_SAVE, LANG_MENU_SAVE);
-	SetMenuItemBitmaps(menu_file, SHOWPASSWORDS_MENU_SAVE, MF_BYCOMMAND, bmps.menu_save, bmps.menu_save);
+	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_SAVE, LANG_MENU_SAVE, bmps.menu_save, bmps.menu_save);
 
 	#ifdef _DEBUG
-	AppendMenu(menu_file, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_SAVE_V0, (LPCWSTR)menu_file);
-	AMT(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, LANG_MENU_SAVE);
-	MENUITEMINFO menu_setter{ sizeof(MENUITEMINFO) };
-	menu_setter.fMask = MIIM_STRING;
-	menu_setter.dwTypeData = (cstr*)_t("Save V0");
-	SetMenuItemInfo(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, FALSE, &menu_setter);
-	SetMenuItemBitmaps(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, MF_BYCOMMAND, bmps.menu_save, bmps.menu_save);
+	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, _t("Save V0"), bmps.menu_save, bmps.menu_save);
 	#endif
 
 	append_separator_to_menu(menu_file);
 
-	AppendMenu(menu_file, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_file_lang, (LPCWSTR)menu_file);
-	AMT(menu_file, (UINT_PTR)menu_file_lang, LANG_MENU_LANGUAGE);
-	//TODO(fran): SetMenuItemInfo only accepts UINT, not the UINT_PTR of MF_POPUP, plz dont tell me I have to redo all of it a different way (LanguageManager just does it normally not caring for the extra 32 bits)
+	append_popup_to_menu(menu_file, menu_file_lang, LANG_MENU_LANGUAGE, bmps.language, bmps.language);
 
 #define _language_appendtomenu(member,value_expr) \
 		AppendMenu(menu_file_lang, MF_STRING | MF_OWNERDRAW, Language::member, (LPCWSTR)menu_file_lang); \
@@ -515,26 +502,16 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 	_foreach_language(_language_appendtomenu)
 #undef _language_appendtomenu
 	CheckMenuItem(menu_file_lang, LanguageManager::Instance().GetCurrentLanguage(), MF_BYCOMMAND | MF_CHECKED);
-	SetMenuItemBitmaps(menu_file, (UINT)(UINT_PTR)menu_file_lang, MF_BYCOMMAND, bmps.language, bmps.language);
 
-	AppendMenu(menu_file, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, (LPCWSTR)menu_file);
-	AMT(menu_file, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, LANG_MENU_CHECK_FOR_UPDATES);
-	SetMenuItemBitmaps(menu_file, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, MF_BYCOMMAND, bmps.menu_update, bmps.menu_update);
+	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, LANG_MENU_CHECK_FOR_UPDATES, bmps.menu_update, bmps.menu_update);
 
-	AppendMenu(menu, MF_POPUP | MF_OWNERDRAW, (UINT_PTR)menu_edit, (LPCWSTR)menu);
-	AMT(menu, (UINT_PTR)menu_edit, LANG_MENU_EDIT);
+	append_popup_to_menu(menu, menu_edit, LANG_MENU_EDIT);
 
-	AppendMenu(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_UNDO, (LPCWSTR)menu_edit);
-	AMT(menu_edit, SHOWPASSWORDS_MENU_UNDO, LANG_MENU_EDIT_UNDO);
-	SetMenuItemBitmaps(menu_edit, SHOWPASSWORDS_MENU_UNDO, MF_BYCOMMAND, bmps.menu_undo, bmps.menu_undo);
+	append_item_to_menu(menu_edit, SHOWPASSWORDS_MENU_UNDO, LANG_MENU_EDIT_UNDO, bmps.menu_undo, bmps.menu_undo);
 
-	AppendMenu(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_REDO, (LPCWSTR)menu_edit);
-	AMT(menu_edit, SHOWPASSWORDS_MENU_REDO, LANG_MENU_EDIT_REDO);
-	SetMenuItemBitmaps(menu_edit, SHOWPASSWORDS_MENU_REDO, MF_BYCOMMAND, bmps.menu_redo, bmps.menu_redo);
+	append_item_to_menu(menu_edit, SHOWPASSWORDS_MENU_REDO, LANG_MENU_EDIT_REDO, bmps.menu_redo, bmps.menu_redo);
 
-	AppendMenu(menu_edit, MF_STRING | MF_OWNERDRAW, SHOWPASSWORDS_MENU_FIND, (LPCWSTR)menu_edit);
-	AMT(menu_edit, SHOWPASSWORDS_MENU_FIND, LANG_MENU_EDIT_FIND);
-	SetMenuItemBitmaps(menu_edit, SHOWPASSWORDS_MENU_FIND, MF_BYCOMMAND, bmps.menu_search, bmps.menu_search);
+	append_item_to_menu(menu_edit, SHOWPASSWORDS_MENU_FIND, LANG_MENU_EDIT_FIND, bmps.menu_search, bmps.menu_search);
 
 	nonclient::set_menu(state.nc_parent, state.menu);
 }
@@ -548,9 +525,12 @@ constexpr auto& primary_filename = _t("\\tt");
 constexpr auto& temp_filename = _t("\\temp");
 constexpr auto& last_filename = _t("\\last");
 
+// Returns an empty path if the work folder is unavailable.
 str get_save_path(str username) { 
 	constexpr auto& user_prefix = _t("\\user_");
-	str res = get_general_save_folder() + user_prefix + username;
+	str general_folder = get_general_save_folder();
+	if (general_folder.empty()) return {};
+	str res = general_folder + user_prefix + username;
 	//INFO: appending user_ saves us from the trouble of the reserved filenames that windows has, eg COM1, LPT1, ...
 	return res;
 }
@@ -559,6 +539,7 @@ str get_save_path(str username) {
 bool save_to_file_user(str username, void* content, u32 content_sz) {
 
 	str path = get_save_path(username);
+	if (path.empty()) return false;
 
 	//Create the folder where info will be stored, since windows wont do it
 	if (!CreateDirectory(path.c_str(), nil)) 
@@ -601,6 +582,7 @@ bool save_to_file_user(str username, void* content, u32 content_sz) {
 
 ReadEntireFileResult load_file_user(str username, bool load_backup = false) {
 	str path = get_save_path(username); //username functions as the folder name
+	if (path.empty()) return { .status = ReadEntireFileStatus::error };
 
 	CreateDirectory(path.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
 
@@ -871,10 +853,9 @@ u32 detect_save_version(void* data, u32 sz_bytes) {
 
 login::AttemptResult startup(State& state, const Start* start, bool start_from_backup) {
 	login::AttemptResult start_attempt;
-	bool passwords_need_save = false;
 
 	auto file_read = load_file_user(state.current_user, start_from_backup); defer{ free_file_memory(file_read.mem); };
-	if (file_read.mem) {
+	if (file_read.status == ReadEntireFileStatus::success && file_read.mem) {
 		if (start->signup) { // Can't signup, user already exists
 			start_attempt = login::AttemptResult::fail_signup_username_exists;
 		}
@@ -891,12 +872,14 @@ login::AttemptResult startup(State& state, const Start* start, bool start_from_b
 					SecureZeroMemory(key, sizeof(key));
 					twofish_decrypt(file_read.mem, file_read.sz, file_read.mem);
 
-					if (auto file_read_chars = file_read.sz / sizeof(state.current_user[0]);
-						file_read_chars >= state.current_user.size() && !wcsncmp(state.current_user.c_str(), (cstr*)file_read.mem, state.current_user.size())
-						) { //Valid password, provided username matches stored username
+					std::span decrypted((const cstr*)file_read.mem, file_read.sz / sizeof(cstr));
+					auto username_size = state.current_user.size();
+					if (decrypted.size() > username_size &&
+						!wcsncmp(state.current_user.c_str(), decrypted.data(), username_size) &&
+						std::ranges::contains(std::views::reverse(decrypted.subspan(username_size)), cstr{})) {
 						set_mode(state, Mode::transition_v0);
 
-						SetWindowText(state.controls.transition_v0.edit_passwords, ((cstr*)file_read.mem) + start->username.sz_chars);
+						SetWindowText(state.controls.transition_v0.edit_passwords, decrypted.data() + username_size);
 						SecureZeroMemory(file_read.mem, file_read.sz);
 						start_attempt = login::AttemptResult::success;
 					}
@@ -950,14 +933,12 @@ login::AttemptResult startup(State& state, const Start* start, bool start_from_b
 			}
 		}
 	}
-	else {
+	else if (file_read.status == ReadEntireFileStatus::missing) {
 		//NOTE: if the user previously created an account but didnt save then it will not count as a created account and next time they will be prompted to create the account again, this is a limitation of the fact that we dont save anything inside the user folder till the first time they save what they wrote, therefore we cannot currently do this any other way since there's no information inside the folder to allow us to check whether the second time the user input the same password as the first time
 		bool signup = start->signup;
 		start_attempt = signup ? login::AttemptResult::success : login::AttemptResult::fail_username;
-		passwords_need_save = signup;
 	}
-	if (passwords_need_save && start_attempt == login::AttemptResult::success)
-		set_passwords_need_save(state, passwords_need_save);
+	else start_attempt = login::AttemptResult::fail_corrupted;
 	return start_attempt;
 }
 
@@ -984,6 +965,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		add_controls(state);
 
 		add_menus(state);
+		LanguageManager::Instance().AddMenuCreatorHwnd(state.wnd, [](HWND hwnd) {
+			State& state = *get_state(hwnd);
+			resize_controls(state);
+			add_menus(state);
+		});
 	} break;
 	case WM_SIZE:
 	{
@@ -1026,10 +1012,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			_foreach_language(_generate_enum_cases_language)
 			{
 				LanguageManager::Instance().ChangeLanguage((Language)LOWORD(wparam));
-				resize_controls(state);
-				HMENU old_menu = GetMenu(state.nc_parent);
-				add_menus(state);
-				DestroyMenu(old_menu);
 				return 0;
 			} break;
 			case SHOWPASSWORDS_MENU_UNDO:
@@ -1093,17 +1075,26 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//We gotta keep this data to be able to save the file later, probably some more secure/intelligent ways exist
 			state.current_user = str(start->username.str, start->username.sz_chars);
 
-			auto should_try_backup = [](login::AttemptResult attempt) { return attempt != login::AttemptResult::fail_signup_username_exists; };
-			
 			bool used_backup = false;
 
 			start_attempt = startup(state, start, false);
-			if (start_attempt != login::AttemptResult::success && should_try_backup(start_attempt)) {
-				used_backup = true;
-				start_attempt = startup(state, start, true);
+			if (start_attempt == login::AttemptResult::success && start->signup) {
+				auto backup_attempt = startup(state, start, true);
+				if (backup_attempt != login::AttemptResult::success) start_attempt = backup_attempt;
+			}
+			else if (start_attempt != login::AttemptResult::success && start_attempt != login::AttemptResult::fail_signup_username_exists) {
+				auto backup_attempt = startup(state, start, true);
+				if (backup_attempt == login::AttemptResult::success) {
+					start_attempt = backup_attempt;
+					used_backup = true;
+				}
+				else if ((start_attempt == login::AttemptResult::fail_username && backup_attempt != login::AttemptResult::fail_username) ||
+					(start_attempt == login::AttemptResult::fail_corrupted && backup_attempt == login::AttemptResult::fail_newer_version))
+					start_attempt = backup_attempt;
 			}
 		
 			if (start_attempt == login::AttemptResult::success) {
+				if (start->signup) set_passwords_need_save(state, true);
 				set_app_shortcuts(state.wnd, ED_SHORTCUTS);
 				generate_salt(state.salt); // New salt to be used for all future saves during the current session
 				u32 key[8];
