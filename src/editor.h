@@ -525,9 +525,12 @@ constexpr auto& primary_filename = _t("\\tt");
 constexpr auto& temp_filename = _t("\\temp");
 constexpr auto& last_filename = _t("\\last");
 
+// Returns an empty path if the work folder is unavailable.
 str get_save_path(str username) { 
 	constexpr auto& user_prefix = _t("\\user_");
-	str res = get_general_save_folder() + user_prefix + username;
+	str general_folder = get_general_save_folder();
+	if (general_folder.empty()) return {};
+	str res = general_folder + user_prefix + username;
 	//INFO: appending user_ saves us from the trouble of the reserved filenames that windows has, eg COM1, LPT1, ...
 	return res;
 }
@@ -536,6 +539,7 @@ str get_save_path(str username) {
 bool save_to_file_user(str username, void* content, u32 content_sz) {
 
 	str path = get_save_path(username);
+	if (path.empty()) return false;
 
 	//Create the folder where info will be stored, since windows wont do it
 	if (!CreateDirectory(path.c_str(), nil)) 
@@ -578,6 +582,7 @@ bool save_to_file_user(str username, void* content, u32 content_sz) {
 
 ReadEntireFileResult load_file_user(str username, bool load_backup = false) {
 	str path = get_save_path(username); //username functions as the folder name
+	if (path.empty()) return { .status = ReadEntireFileStatus::error };
 
 	CreateDirectory(path.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
 

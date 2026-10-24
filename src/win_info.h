@@ -3,6 +3,15 @@
 #include "win_sdk.h"
 
 /**
+  * Clipboard
+  * OpenClipboard(owner_wnd) gives EmptyClipboard a window to assign ownership to.
+  * The owner is for API compliance, not delayed rendering: eager CF_UNICODETEXT
+  * data requires no WM_RENDERFORMAT or WM_RENDERALLFORMATS handling.
+  * Some Windows versions accept SetClipboardData without an owner, but skipping
+  * EmptyClipboard leaves unrelated formats from the previous clipboard contents.
+  */
+
+/**
   * Custom window state structs must be initialized to zero when created
   */
 struct State { /*...*/ };

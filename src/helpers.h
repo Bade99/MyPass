@@ -810,7 +810,7 @@ static void SetText_txt_app(HWND wnd, const TCHAR* new_txt, const TCHAR* new_app
   * char_cnt: number of characters to copy excluding the null terminator
   * Returns: number of characters copied, 0 if there was nothing to copy, -1 on failure
   **/
-static size_t copy_text_to_clipboard(const cstr* text, size_t char_cnt) {
+static size_t copy_text_to_clipboard(const cstr* text, size_t char_cnt, HWND owner_wnd) {
 	#ifdef UNICODE
 	UINT format = CF_UNICODETEXT;
 	#else
@@ -822,7 +822,7 @@ static size_t copy_text_to_clipboard(const cstr* text, size_t char_cnt) {
 
 	if (!text || !*text) return 0;
 
-	if (OpenClipboard(nil)) {
+	if (OpenClipboard(owner_wnd)) {
 		defer{ CloseClipboard(); };
 		HANDLE set_clipboard_res = nil;
 		HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, total_chars_copied * char_sz);
@@ -838,6 +838,7 @@ static size_t copy_text_to_clipboard(const cstr* text, size_t char_cnt) {
 			txt[char_cnt] = 0; //null terminate
 		}
 
+		if (!EmptyClipboard()) return failure;
 		set_clipboard_res = SetClipboardData(format, mem);
 		if (!set_clipboard_res) return failure;
 
