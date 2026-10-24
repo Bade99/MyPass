@@ -144,24 +144,29 @@ static str load_file_serialized(str folder = _t("\\unCap"), str filename = _t("\
 	return res;
 }
 
-static void save_to_file_serialized(str content, str folder, str filename = _t("\\serialized.txt")) {
+static bool save_to_file_serialized(str content, str folder, str filename = _t("\\serialized.txt")) {
 	cstr* general_folder = nil;
 	if (FAILED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &general_folder)) || !general_folder) {
 		CoTaskMemFree(general_folder);
-		return;
+		return false;
 	}
 	str dir = general_folder + folder;
 	str path = general_folder + folder + filename;
 	CoTaskMemFree(general_folder);
 
-	CreateDirectory(dir.c_str(), 0);//Create the folder where info will be stored, since windows wont do it
+	if (!CreateDirectory(dir.c_str(), 0) && GetLastError() != ERROR_ALREADY_EXISTS) return false;
+	if (content.size() > U32MAX / sizeof(cstr)) return false;
 
-	HANDLE file_handle = CreateFile(path.c_str(), GENERIC_WRITE, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if (file_handle != INVALID_HANDLE_VALUE) {
-		DWORD bytes_written;
-		BOOL write_res = WriteFile(file_handle, (TCHAR*)content.c_str(), (DWORD)content.size() * sizeof(TCHAR), &bytes_written, NULL);
-		CloseHandle(file_handle);
+	cstr temp_path[MAX_PATH];
+	if (!GetTempFileName(dir.c_str(), _t("cfg"), 0, temp_path)) return false;
+	if (!write_entire_file(temp_path, content.data(), (u32)(content.size() * sizeof(cstr)), true)) {
+		DeleteFile(temp_path);
+		return false;
 	}
+
+	if (file_exists(path.c_str()))
+		return ReplaceFile(path.c_str(), temp_path, nil, REPLACEFILE_IGNORE_MERGE_ERRORS, 0, 0);
+	return MoveFileEx(temp_path, path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
 }
 
 //Sending everyone into a namespace avoids having to include a multitude of files in the soon to be serialization.h since you can re-open the namespace from other files

@@ -241,6 +241,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 					return 0;
 				}
 
+				secure_zero_free(state.results->password);
+				secure_zero_free(state.results->username);
+
 				if (sizeof(*username_buf) == 1) {//we got ascii data, we always want utf16 otherwise the key would stop working when switching from ascii to unicode controls
 					defer{ secure_zero_free(username_buf, username_len * sizeof(*username_buf)); secure_zero_free(password_buf, password_len * sizeof(*password_buf)); };
 					int username_sz_char = MultiByteToWideChar(CP_ACP, 0, (LPCCH)username_buf, username_sz, 0, 0);
@@ -251,8 +254,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 						if (username_mem && password_mem) {
 							MultiByteToWideChar(CP_ACP, 0, (LPCCH)username_buf, username_sz, (LPWSTR)username_mem, username_sz_char);
 							MultiByteToWideChar(CP_ACP, 0, (LPCCH)password_buf, password_sz, (LPWSTR)password_mem, password_sz_char);
-							if (state.results->password.str) secure_zero_free(state.results->password);//this shouldnt ever happen
-							if (state.results->username.str) secure_zero_free(state.results->username);//this shouldnt ever happen
 							state.results->password.str = (WCHAR*)password_mem;
 							state.results->password.sz_chars = password_sz_char;
 							state.results->username.str = (WCHAR*)username_mem;
