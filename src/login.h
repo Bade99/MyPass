@@ -202,6 +202,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		{
 		case BTN_LOGIN:
 		{
+			if (state.transition_pending) return 0;
 			bool success = false;
 			size_t username_len = GetWindowTextLength(state.controls.edit_username) + 1;//includes null terminator
 			size_t password_len = GetWindowTextLength(state.controls.edit_password) + 1;//includes null terminator
@@ -271,7 +272,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 					state.results->signup = state.signup_mode;
 					success = true;
 				}
-				if(success) PostMessage(0, WM_STATE_NEXT, 0, 0);//TODO(fran): maybe storing the results in WM_STATE_NEXT is better?
+				if (success) {
+					if (PostMessage(0, WM_STATE_NEXT, 0, 0)) state.transition_pending = true;
+					else {
+						secure_zero_free(state.results->password);
+						secure_zero_free(state.results->username);
+					}
+				}
 			}
 			else {
 				if(username_len==1) edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_EMPTY), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
@@ -334,6 +341,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				open_link(url);
 		} break;
 		}
+		state.transition_pending = false;
 	} break;
 	case WM_STATE_RESET:
 	{
@@ -341,6 +349,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		secure_zero_free(state.results->username);
 		SetWindowText(state.controls.edit_password, _t(""));
 		SetWindowText(state.controls.edit_username, _t(""));
+		state.transition_pending = false;
 	} break;
 	case WM_CLOSE:
 	{
