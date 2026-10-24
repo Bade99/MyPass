@@ -71,6 +71,10 @@ static LRESULT handle_wm_measureitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM l
 	return DefWindowProc(wnd, msg, wparam, lparam);
 }
 
+static void draw_menu_highlight(HDC dc, RECT bounds) {
+	if (RECTW(bounds) > 0 && RECTH(bounds) > 0) urender::draw_round_rectangle(dc, bounds, DPI(5), colors.ControlBkMouseOver);
+}
+
 static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam, HMENU top_level_menu = nil) {
 	DRAWITEMSTRUCT* item = (DRAWITEMSTRUCT*)lparam;
 	switch (item->CtlType) {
@@ -99,6 +103,15 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 		{//NOTE: we render the bitmaps inverted, cause I find it easier to edit on external programs, this may change later, not a hard change
 			// Set the appropriate foreground and background colors. 
 			HBRUSH txt_br, bk_br;
+			HBRUSH menu_bk_br = colors.CaptionBk;
+			//GetMenuInfo((HMENU)item->hwndItem, &mnfo); //We will not ask our "parent" hmenu since sometimes it decides it doesnt have the hbrush, we'll go straight to the menu bar, if there is one
+			if (top_level_menu) {
+				MENUINFO mnfo{ sizeof(mnfo) }; mnfo.fMask = MIM_BACKGROUND;
+				if (GetMenuInfo(top_level_menu, &mnfo) && mnfo.hbrBack)
+					menu_bk_br = mnfo.hbrBack;
+			}
+			bool highlighted = !(item->itemState & ODS_GRAYED) &&
+				(item->itemState & (ODS_SELECTED | ODS_HOTLIGHT));
 			if (item->itemState & ODS_GRAYED) {
 				txt_br = colors.ControlTxt_Disabled;
 				bk_br = colors.CaptionBk;
@@ -111,22 +124,17 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 			else
 			{
 				txt_br = colors.ControlTxt;
-				bk_br = colors.CaptionBk;
+				bk_br = menu_bk_br;
 				Assert((UINT)(UINT_PTR)item->hwndItem);
-				//GetMenuInfo((HMENU)item->hwndItem, &mnfo); //We will not ask our "parent" hmenu since sometimes it decides it doesnt have the hbrush, we'll go straight to the menu bar, if there is one
-				if (top_level_menu) {
-					MENUINFO mnfo{ sizeof(mnfo) }; mnfo.fMask = MIM_BACKGROUND;
-					if (GetMenuInfo(top_level_menu, &mnfo) && mnfo.hbrBack)
-						bk_br = mnfo.hbrBack;
-				}
-
 			}
 			//TODO(fran): separate menu brushes
 			auto oldtxtcol = SetTextColor(item->hDC, ColorFromBrush(txt_br)); defer{ SetTextColor(item->hDC, oldtxtcol); };
 			auto oldbkcol = SetBkColor(item->hDC, ColorFromBrush(bk_br)); defer{ SetBkColor(item->hDC, oldbkcol); };
 
-			if (item->itemAction & ODA_DRAWENTIRE || item->itemAction & ODA_SELECT) //Draw background
-				FillRect(item->hDC, &item->rcItem, bk_br);
+			if (item->itemAction & ODA_DRAWENTIRE || item->itemAction & ODA_SELECT) { //Draw background
+				FillRect(item->hDC, &item->rcItem, highlighted ? menu_bk_br : bk_br);
+				if (highlighted) draw_menu_highlight(item->hDC, item->rcItem);
+			}
 
 			// Select the font and draw the text. //TODO(fran): parametric font
 			auto oldfont = (HFONT)SelectObject(item->hDC, fonts.Menu); defer{ SelectObject(item->hDC, oldfont); };

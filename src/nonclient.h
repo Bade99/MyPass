@@ -175,6 +175,8 @@ void resize_menu_backbuffer(State& state) {
 	}
 }
 
+static HMENU current_menu = nil;
+
 void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 	auto oldbmp = SelectBitmap(state.menu_offscreen_dc, state.menu_backbuffer); defer{ SelectBitmap(state.menu_offscreen_dc, oldbmp); };
 	Assert(state.menu);
@@ -206,8 +208,16 @@ void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 		state.menubar_itemcnt = GetMenuItemCount(state.menu);//NOTE: this guy returns -1 on errors, thats why the variable is i32
 		Assert(state.menubar_itemcnt < ARRAYSIZE(state.menubar_items));
 
-		//Find out what item, if any, is on mouse over
-		i32 menubar_mouseover_idx = state.menubar_mouseover_idx_from1 - 1;
+		//Find out what item, if any, is on mouse over or has its popup open
+		i32 highlighted_idx = state.menubar_mouseover_idx_from1 - 1;
+		if (current_menu) {
+			for (int i = 0; i < state.menubar_itemcnt; i++) {
+				if (GetSubMenu(state.menu, i) == current_menu) {
+					highlighted_idx = i;
+					break;
+				}
+			}
+		}
 		SetBkMode(dc, TRANSPARENT);
 
 		//Set bk brush for drawing text
@@ -224,13 +234,11 @@ void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 				.left = menuitemrc.left, .top = menuitemrc.top,
 				.right = menuitemrc.left + txtw, .bottom = menuitemrc.bottom
 			};
-			if (i == menubar_mouseover_idx)
-				FillRect(dc, &item_rect, colors.ControlBkMouseOver);
-
 			RECT text_bounds = item_rect;
 			OffsetRect(&text_bounds, -menurc.left, -menurc.top);
 			POINT old_origin{};
 			SetViewportOrgEx(dc, 0, 0, &old_origin);
+			if (i == highlighted_idx) draw_menu_highlight(dc, text_bounds);
 			utf16_str text{ menu_str, (menu_text.size() + 1) * sizeof(utf16) };
 			urender::draw_text(dc, text_bounds, text, fonts.Menu, txtbr, urender::TextAlignment::left, 0);
 			SetViewportOrgEx(dc, old_origin.x, old_origin.y, nil);
@@ -249,7 +257,6 @@ void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 		state.menu_offscreen_dc, 0, 0, SRCCOPY);
 }
 
-static HMENU current_menu = nil;
 static POINT current_menu_pt{};
 //A little delay before allowing the user to select a new menu, this prevents problems, eg the user trying to close the menu by selecting it again in the menu bar
 constexpr auto menu_delay_ms = 50;
@@ -391,11 +398,21 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		calc_caption(state);
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
+	case WM_INITMENUPOPUP:
+	{
+		if ((HMENU)wparam == current_menu) {
+			RECT menurc = calc_menu_rc(state);
+			RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+		}
+		return DefWindowProc(hwnd, msg, wparam, lparam);
+	} break;
 	case WM_UNINITMENUPOPUP:
 	{
 		HMENU menu_destroyed = (HMENU)wparam;
 		if (menu_destroyed == current_menu) {
 			current_menu = nil;
+			RECT menurc = calc_menu_rc(state);
+			RedrawWindow(state.wnd, &menurc, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
 			//Set menu delay to stop possible reopening
 			state.menu_on_delay = true;
 			SetTimer(state.wnd, (UINT_PTR)&menudelay, menu_delay_ms, menudelay);
@@ -831,9 +848,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_INITMENU://sent before the menu becomes active, we can modify it before it is displayed <- TODO(fran)
 	case WM_MENUSELECT://the user selected a menu item
 	case WM_EXITMENULOOP://notif
-	case WM_INITMENUPOPUP://sent before a submenu/popup menu is displayed, eg when the user clicks on an item from the menu bar, TODO(fran): here we can modify the menu before it is displayed
 	case WM_ENTERIDLE://menu has no more msgs to process in its queue
-	case WM_UNINITMENUPOPUP:
 	case WM_CANCELMODE://system wants us to stop mouse tracking and similar
 	case WM_DWMCOLORIZATIONCOLORCHANGED://why opening spy++ generated this msg? what u doing spy++?
 	case WM_KEYUP://Non system key released
