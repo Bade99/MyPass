@@ -5,8 +5,6 @@
 #include "scrollbar.h"
 #include "search.h"
 
-//TODO(fran): the final goal is UNDO and REDO, after that an edit control will have most of the things richedit has except for the ease of formatting
-
 //New msgs that this wnd can handle:
 #define edit_base_msg_addr (WM_USER+200)
 #define EM_GET_MAX_VISIBLE_LINES (edit_base_msg_addr+1) /*Retrieves a count for the max number of lines that can be displayed at once in the current window. return=int*/

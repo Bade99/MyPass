@@ -317,6 +317,7 @@ bool handle_nclbuttondown(State& state, POINT mouse, i32 hittest) {
 		if (!state.menu_on_delay) {
 			if (test_pt_rc(cl_mouse, state.rc_icon)) {
 				POINT mpos{ state.rc_icon.left,state.rc_icon.bottom }; ClientToScreen(state.wnd, &mpos);
+				SetForegroundWindow(state.wnd);
 				show_rclickmenu(state, mpos);
 				//Set menu delay to stop possible reopening
 				state.menu_on_delay = true;
@@ -857,7 +858,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_KEYDOWN://here we could parse keyboard shortcuts
 	case WM_SETTINGCHANGE://also WM_WININICHANGE for older things (yes, same msg, slightly different params)
 		//Sent to all top level windows after someone changes some windows settings with SystemParametersInfo
-	case WM_IME_REQUEST://TODO(fran): looks like you can set up the ime wnd from here
+	case WM_IME_REQUEST:
 	case WM_DEVICECHANGE: //TODO(fran): I keep getting this msg and Im sure that nothing has changed, problaly I secrewed up somewhere
 	case WM_ENABLE://Sent when the enabled state is changing //TODO(fran): may be useful
 	case WM_DISPLAYCHANGE:

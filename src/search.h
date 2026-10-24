@@ -53,7 +53,7 @@ auto search(State& state, bool search_in_current_selection) {
 				range.min = 0;
 				range.max = sel;// should subtract 1
 				search_flags |= FIND_FROMEND;
-				//TODO(fran): we im going up should I set the start of the string to the end or does FindNLSStringEx do that ?
+				//TODO(fran): when im going up should I set the start of the string to the end or does FindNLSStringEx do that ?
 			}
 			else {//search from the end of the selection to the last char
 				sel = (search_in_current_selection) ? sel_start : sel_end;

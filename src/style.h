@@ -5,7 +5,7 @@
 //constexpr DWORD style_button_bmp = WS_CHILD | WS_TABSTOP | button::style::roundrect | BS_BITMAP;
 //constexpr DWORD style_button_icon = WS_CHILD | WS_TABSTOP | button::style::roundrect | BS_ICON;
 
-str GetAppFontName() {
+str get_app_fontname() {
 	//Font guidelines: https://docs.microsoft.com/en-us/windows/win32/uxguide/vis-fonts
 	//Stock fonts: https://docs.microsoft.com/en-us/windows/win32/gdi/using-a-stock-font-to-draw-text
 

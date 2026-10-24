@@ -142,7 +142,7 @@ public:
 	}
 
 	//·Updates all managed objects to the new language, all the ones added after this call will also use the new language
-	//·On success returns the new LANGID (language) //TODO(fran): should I return the previous langid? it feels more useful
+	//·On success returns the new LANGID (language)
 	//·On failure returns (LANGID)-2 if the language is invalid, (LANGID)-3 if failed to change the language
 	LANGID ChangeLanguage(Language newLang)
 	{

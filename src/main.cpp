@@ -65,7 +65,7 @@ void setup_fonts() {
 	lf.lfQuality = CLEARTYPE_QUALITY;
 	lf.lfHeight = DPI(-15);
 	//INFO: by default if I dont set faceName it uses "Modern", looks good but it lacks some charsets
-	string_copy(lf.lfFaceName, str_view(GetAppFontName()));
+	string_copy(lf.lfFaceName, str_view(get_app_fontname()));
 	fonts.General = CreateFontIndirect(&lf);
 	Assert(fonts.General);
 
