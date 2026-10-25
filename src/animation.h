@@ -37,6 +37,12 @@ struct Timeline {
 	void stop() { active = false; }
 };
 
+static u32 timer_interval_ms(HWND wnd) {
+	auto refresh_rate = refresh_rate_hz(wnd);
+	if (refresh_rate <= 1) refresh_rate = 60;
+	return maximum(1u, (u32)roundf(1000.f / refresh_rate));
+}
+
 static f32 ease_in_out_parametric_blend(f32 t /*[0.0,1.0]*/) { return squared(t) / (2.0f * (squared(t) - t) + 1.0f); }
 
 static f32 ease_in_out_smoothstep(f32 t) { return squared(t) * (3.0f - 2.0f * t); }

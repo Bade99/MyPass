@@ -258,7 +258,7 @@ void start_card_animation(State& state, CardLayout& target) {
 		return;
 	}
 	transition.timeline.start(200.f);
-	if (!SetTimer(state.wnd, card_animation_timer_id, 16, card_animation_timer_proc)) {
+	if (!SetTimer(state.wnd, card_animation_timer_id, animation::timer_interval_ms(state.wnd), card_animation_timer_proc)) {
 		stop_card_animation(state);
 		apply_card_layout(state, target, true);
 		return;

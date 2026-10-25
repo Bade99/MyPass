@@ -119,7 +119,7 @@ void start_error_message_animation(State& state, bool show) {
 	transition.to = target;
 	if (animation::enabled_by_system() && IsWindowVisible(state.wnd)) {
 		transition.timeline.start(error_message_animation_duration_ms);
-		if (SetTimer(state.wnd, error_message_animation_timer_id, 16, error_message_animation_timer_proc)) {
+		if (SetTimer(state.wnd, error_message_animation_timer_id, animation::timer_interval_ms(state.wnd), error_message_animation_timer_proc)) {
 			tick_error_message_animation(state);
 			return;
 		}
