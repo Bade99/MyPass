@@ -9,6 +9,10 @@
 
 namespace login {
 
+constexpr auto error_message_animation_timer_id = 3101;
+constexpr auto error_message_hide_timer_id = 3102;
+constexpr auto error_message_animation_duration_ms = 200.f;
+
 auto get_state(HWND wnd) { _control_create_function__get_state }
 
 void secure_zero_free(void* memory, size_t bytes) {
@@ -58,17 +62,16 @@ void resize_controls(State& state) {
 
 	prev = edit_password;
 
-	rect_i32 static_error_message;
-	if (show_error_msg) {
-		static_error_message.xy = { 0, prev.bottom() + small_pad };
-		static_error_message.wh = { edit_password.w, (i32)(edit_password.h * .75f) };
-
-		prev = static_error_message;
-	}
+	i32 error_height = (i32)(edit_password.h * .75f);
+	i32 error_slot = lerp(0, state.error_message_progress, small_pad + error_height);
+	rect_i32 static_error_message{
+		.xy = { 0, prev.bottom() + small_pad },
+		.wh = { edit_password.w, maximum(0, error_slot - small_pad) }
+	};
 
 	rect_i32 btn_login{}; Button_GetIdealSize(controls.button_login, &btn_login.wh);
 	btn_login.wh = { clamp(0, btn_login.w, edit_username.w), edit_password.h };
-	btn_login.xy = { align_center(btn_login.w, edit_password.w), prev.bottom() + h_pad };
+	btn_login.xy = { align_center(btn_login.w, edit_password.w), prev.bottom() + h_pad + error_slot };
 
 	prev = btn_login;
 	
@@ -79,6 +82,56 @@ void resize_controls(State& state) {
 	move(controls.edit_password, edit_password, false);
 	if (show_error_msg) move(controls.static_error_message, static_error_message);
 	move(controls.button_login, btn_login, false);
+}
+
+void stop_error_message_animation(State& state) {
+	KillTimer(state.wnd, error_message_animation_timer_id);
+	state.error_message_timeline.stop();
+}
+
+void tick_error_message_animation(State& state) {
+	if (!state.error_message_timeline.active) return;
+	f32 progress = state.error_message_timeline.progress();
+	state.error_message_progress = lerp(state.error_message_from, animation::ease_out_cubic(progress), state.error_message_to);
+	if (progress >= 1.f) {
+		state.error_message_progress = state.error_message_to;
+		stop_error_message_animation(state);
+		if (state.error_message_progress == 0.f) ShowWindow(state.controls.static_error_message, SW_HIDE);
+	}
+	resize_controls(state);
+	ask_window_for_repaint(state.wnd);
+}
+
+void CALLBACK error_message_animation_timer_proc(HWND wnd, UINT, UINT_PTR, DWORD) {
+	if (auto state = get_state(wnd)) tick_error_message_animation(*state);
+}
+
+void start_error_message_animation(State& state, bool show) {
+	stop_error_message_animation(state);
+	f32 target = show ? 1.f : 0.f;
+	if (state.error_message_progress == target) {
+		if (!show) ShowWindow(state.controls.static_error_message, SW_HIDE);
+		return;
+	}
+	state.error_message_from = state.error_message_progress;
+	state.error_message_to = target;
+	if (animation::enabled_by_system() && IsWindowVisible(state.wnd)) {
+		state.error_message_timeline.start(error_message_animation_duration_ms);
+		if (SetTimer(state.wnd, error_message_animation_timer_id, 16, error_message_animation_timer_proc)) {
+			tick_error_message_animation(state);
+			return;
+		}
+		stop_error_message_animation(state);
+	}
+	state.error_message_progress = target;
+	if (!show) ShowWindow(state.controls.static_error_message, SW_HIDE);
+	resize_controls(state);
+	ask_window_for_repaint(state.wnd);
+}
+
+void CALLBACK error_message_hide_timer_proc(HWND wnd, UINT, UINT_PTR, DWORD) {
+	KillTimer(wnd, error_message_hide_timer_id);
+	if (auto state = get_state(wnd)) start_error_message_animation(*state, false);
 }
 
 void set_signup_mode(State& state, bool signup_mode) {
@@ -181,6 +234,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_NCDESTROY:
 	{
+		KillTimer(state.wnd, error_message_hide_timer_id);
+		stop_error_message_animation(state);
 		save_settings(state);
 		if (&state) {
 			secure_zero_free(state.results->password);
@@ -318,21 +373,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		case AttemptResult::fail_username:
 		case AttemptResult::fail_signup_username_exists:
 		{
-			auto hide_error_text = [](HWND wnd, UINT, UINT_PTR timer_id, DWORD) {
-				KillTimer(wnd, timer_id);
-				if (auto& state = *get_state(wnd); &state) {
-					ShowWindow(state.controls.static_error_message, SW_HIDE);
-					ask_window_for_resize(wnd);
-					ask_window_for_repaint(wnd);
-				}
-			};
 			auto msg_id = start_attempt == AttemptResult::fail_username ? LANG_ERROR_USERNAME : 
 				start_attempt == AttemptResult::fail_signup_username_exists ? LANG_ERROR_USERNAME_EXISTS : LANG_ERROR_PASSWORD;
 			SetWindowText(state.controls.static_error_message, RCS(msg_id));
 			ShowWindow(state.controls.static_error_message, SW_SHOW);
-			ask_window_for_resize(state.wnd);
-			ask_window_for_repaint(state.wnd);
-			SetTimer(state.wnd, (UINT_PTR)&hide_error_text, invalid_password_message_duration_ms, hide_error_text);
+			start_error_message_animation(state, true);
+			KillTimer(state.wnd, error_message_hide_timer_id);
+			SetTimer(state.wnd, error_message_hide_timer_id, invalid_password_message_duration_ms, error_message_hide_timer_proc);
 		} break;
 		case AttemptResult::fail_newer_version:
 		{

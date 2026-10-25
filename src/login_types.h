@@ -1,5 +1,7 @@
 #pragma once
 
+#include "animation.h"
+
 namespace login {
 
 constexpr auto& wndclass = wndclass_name("login");
@@ -70,6 +72,10 @@ struct State {
 
 	bool signup_mode;
 	bool transition_pending;
+
+	animation::Timeline error_message_timeline;
+	f32 error_message_progress;
+	f32 error_message_from, error_message_to;
 };
 
 enum class AttemptResult {
