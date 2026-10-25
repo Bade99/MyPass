@@ -120,6 +120,7 @@ void add_preset_password_editor(State& state, size_t at_idx) {
 
 struct CardLayout {
 	std::vector<child_layout::MoveRequest> moves;
+	RECT backdrop_bounds{};
 	i32 page_height = 0;
 
 	void add_move(HWND wnd, rect_i32 bounds) { moves.push_back({ wnd, bounds.to_RECT() }); }
@@ -133,6 +134,7 @@ CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_p
 	i32 offset_y = 0;
 	i32 button_dimension = DPI(30);
 	i32 button_x = (width - button_dimension) / 2;
+	i32 backdrop_extent = DPI(10);
 	bool any_visible = false;
 	for (auto card : controls.password_editors)
 		if (IsWindowVisible(card)) { any_visible = true; break; }
@@ -140,6 +142,9 @@ CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_p
 	if (any_visible) {
 		i32 button_start_y = spacing - button_dimension / 2;
 		layout.add_move(controls.btn_add_start, { button_x, button_start_y, button_dimension, button_dimension });
+		layout.backdrop_bounds.left = width_padding - backdrop_extent;
+		layout.backdrop_bounds.top = button_start_y + button_dimension / 2;
+		layout.backdrop_bounds.right = width - width_padding + backdrop_extent;
 		offset_y = button_start_y + button_dimension + spacing;
 		//TODO(fran): defer descendant layout for offscreen cards during width changes, then refresh it before a card enters the viewport; preserve scrolling and keyboard focus.
 		for (auto card : controls.password_editors) {
@@ -150,10 +155,14 @@ CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_p
 			offset_y += card_height + spacing;
 		}
 		layout.add_move(controls.btn_add_end, { button_x, offset_y, button_dimension, button_dimension });
+		layout.backdrop_bounds.bottom = offset_y + button_dimension / 2;
 		offset_y += button_dimension;
 	}
 	else {
 		layout.add_move(controls.btn_add_start, { button_x, spacing, button_dimension, button_dimension });
+		i32 width_pad = width * pad_percent;
+		layout.backdrop_bounds = { width_pad, spacing - backdrop_extent,
+			width - width_pad, spacing + button_dimension + backdrop_extent };
 		offset_y = spacing + button_dimension;
 		layout.add_move(controls.btn_add_end, { (i32)DPI(-100), 0, button_dimension, button_dimension }); //HACK: hide end button without having to worry about restoring visibility states
 	}
@@ -162,6 +171,7 @@ CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_p
 }
 
 void apply_card_layout(State& state, CardLayout& layout, bool redraw_backdrop = false, bool force_page_update = true) {
+	state.backdrop_bounds = layout.backdrop_bounds;
 	RECT page_bounds; GetClientRect(state.controls.page, &page_bounds);
 	RECT viewport_bounds; GetClientRect(state.controls.page_space, &viewport_bounds);
 	i32 page_height = maximum(RECTH(viewport_bounds), layout.page_height);
@@ -188,6 +198,7 @@ void tick_card_animation(State& state) {
 		if (IsWindow(move.wnd))
 			layout.moves.push_back({ move.wnd, lerp(move.from, eased, move.to) });
 	layout.page_height = lerp(transition.from_page_height, eased, transition.to_page_height);
+	layout.backdrop_bounds = lerp(transition.from_backdrop_bounds, eased, transition.to_backdrop_bounds);
 	apply_card_layout(state, layout, true, false);
 	if (progress >= 1.f) stop_card_animation(state);
 }
@@ -201,6 +212,7 @@ void start_card_animation(State& state, CardLayout& target) {
 	RECT viewport_bounds; GetClientRect(state.controls.page_space, &viewport_bounds);
 	i32 target_page_height = maximum(RECTH(viewport_bounds), target.page_height);
 	if (transition.timeline.active && !transition.entering_card && transition.to_page_height == target_page_height &&
+		EqualRect(&transition.to_backdrop_bounds, &target.backdrop_bounds) &&
 		transition.moves.size() == target.moves.size()) {
 		bool same_target = true;
 		for (size_t index = 0; index < target.moves.size(); ++index)
@@ -212,12 +224,15 @@ void start_card_animation(State& state, CardLayout& target) {
 	RECT page_bounds; GetClientRect(state.controls.page, &page_bounds);
 	transition.from_page_height = RECTH(page_bounds);
 	transition.to_page_height = target_page_height;
+	transition.from_backdrop_bounds = state.backdrop_bounds;
+	transition.to_backdrop_bounds = target.backdrop_bounds;
 	transition.moves.clear();
 	transition.moves.reserve(target.moves.size());
 	RECT entering_bounds{};
 	for (const auto& move : target.moves)
 		if (move.wnd == transition.entering_card) { entering_bounds = move.bounds; break; }
-	bool any_change = transition.from_page_height != transition.to_page_height;
+	bool any_change = transition.from_page_height != transition.to_page_height ||
+		!EqualRect(&transition.from_backdrop_bounds, &transition.to_backdrop_bounds);
 	for (const auto& move : target.moves) {
 		RECT from = get_window_rect_at(move.wnd, state.controls.page);
 		if (move.wnd == transition.entering_card) {
@@ -1320,34 +1335,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		auto clip = get_window_rect_at(state.controls.page_space, state.wnd);
 		IntersectClipRect(dc, clip.left, clip.top, clip.right, clip.bottom); defer{ SelectClipRgn(dc, old_rgn); };
 
-		HWND first_visible_pw_ed = nil; 
-		for (auto p : state.controls.password_editors) if (IsWindowVisible(p)) { first_visible_pw_ed = p; break; }
-
-		if (first_visible_pw_ed) {
-			RECT btn_add_start = get_window_rect_at(state.controls.btn_add_start, state.wnd);
-			RECT btn_add_end = get_window_rect_at(state.controls.btn_add_end, state.wnd);
-			RECT first = get_window_rect_at(first_visible_pw_ed, state.wnd);
-			card = first;
-			card.top = btn_add_start.top + RECTH(btn_add_start) / 2;
-			card.bottom = btn_add_end.top + RECTH(btn_add_end) / 2;
-			InflateRect(&card, card_extent, 0);
-		}
-		else {
-			RECT btn_add_start = get_window_rect_at(state.controls.btn_add_start, state.wnd);
-			i32 w = RECTW(r), offset_x = 0, w_pad = 0;
-			auto spacing = DPI(10);
-			if (state.mode == Mode::transition_v0) {
-				offset_x = w / 2;
-				w -= offset_x;
-			}
-			w_pad = w * pad_percent;
-
-			card.left = offset_x + w_pad;
-			card.top = btn_add_start.top - spacing;
-			card.right = offset_x + w - w_pad;
-			card.bottom = btn_add_start.bottom + spacing;
-			//TODO: improve this so it properly matches how it looks like when there are items inside
-		}
+		card = state.backdrop_bounds;
+		RECT page_position = get_window_rect_at(state.controls.page, state.wnd);
+		OffsetRect(&card, page_position.left, page_position.top);
 		urender::draw_round_rectangle(dc, card, card_extent, colors.Card_Bk_Soft);
 		return 1;
 	} break;

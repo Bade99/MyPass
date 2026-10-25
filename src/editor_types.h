@@ -90,6 +90,7 @@ struct CardLayoutMove {
 struct CardLayoutAnimation {
 	std::vector<CardLayoutMove> moves;
 	animation::Timeline timeline;
+	RECT from_backdrop_bounds{}, to_backdrop_bounds{};
 	i32 from_page_height = 0, to_page_height = 0;
 	i32 client_width = 0, client_height = 0;
 	HWND entering_card = nil;
@@ -148,6 +149,7 @@ struct State {
 	Mode mode;
 
 	CardLayoutAnimation card_animation;
+	RECT backdrop_bounds{};
 	std::vector<HWND> search_pending_reveals;
 	bool search_reflow_pending = false;
 };
