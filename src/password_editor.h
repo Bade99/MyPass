@@ -137,8 +137,10 @@ void on_internal_state_change(State& state) {
 
 	bool pin = button::get_state(controls.btn_pin)->selected;
 
-	for (const auto& c : _password_editor_tool_list(controls.tbl_values))
-		ShowWindow(c, state.is_open || (pin && c == controls.btn_pin) ? SW_SHOW : SW_HIDE);
+	for (const auto& c : _password_editor_tool_list(controls.tbl_values)) {
+		bool show = state.is_open ? !state.reveal_open_controls_on_resize : pin && c == controls.btn_pin;
+		ShowWindow(c, show ? SW_SHOW : SW_HIDE);
+	}
 
 	EnableWindow(controls.btn_pin, state.is_open);
 
@@ -161,6 +163,7 @@ void on_internal_state_change(State& state) {
 void set_is_open(State& state, bool is_open) {
 	if (state.is_open != is_open) {
 		state.is_open = is_open;
+		state.reveal_open_controls_on_resize = is_open;
 		if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
 		on_internal_state_change(state);
 		if (is_open) ask_window_for_repaint(state.controls.tbl_values);
@@ -539,6 +542,12 @@ LRESULT CALLBACK proc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		render_diagnostics::record_count(render_diagnostics::Event::card_size_message);
 		LRESULT res = DefWindowProc(wnd, msg, wparam, lparam);
 		resize_controls(state);
+		if (state.reveal_open_controls_on_resize) {
+			state.reveal_open_controls_on_resize = false;
+			auto& controls = state.controls;
+			for (const auto& control : _password_editor_tool_list(controls.tbl_values))
+				ShowWindow(control, SW_SHOW);
+		}
 		return res;
 	} break;
 	default:

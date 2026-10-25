@@ -69,6 +69,7 @@ namespace password_editor {
 
 		bool is_open;
 		bool is_editing;
+		bool reveal_open_controls_on_resize;
 
 		void* user_data;
 	};
