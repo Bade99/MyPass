@@ -39,6 +39,18 @@ union rect_i32 {
 	rect_i32 cut_center(i32 dim) {
 		return this->cut_center(dim, dim);
 	}
+	void apply_padding(i32 left_padding, i32 top_padding, i32 right_padding, i32 bottom_padding) {
+		x += left_padding;
+		y += top_padding;
+		w -= left_padding + right_padding;
+		h -= top_padding + bottom_padding;
+	}
+	void apply_padding(i32 horizontal_padding, i32 vertical_padding) {
+		apply_padding(horizontal_padding, vertical_padding, horizontal_padding, vertical_padding);
+	}
+	void apply_padding(i32 padding) {
+		apply_padding(padding, padding, padding, padding);
+	}
 
 	RECT to_RECT() {
 		RECT res;

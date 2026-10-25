@@ -1,5 +1,7 @@
 #pragma once
 
+#include "animation.h"
+
 namespace login {
 
 constexpr auto& wndclass = wndclass_name("login");
@@ -50,6 +52,12 @@ struct Data { //a pointer to this struct is to be sent on CreateWindow, struct M
 	Results* results;
 };
 
+struct ErrorMessageAnimation {
+	animation::Timeline timeline;
+	f32 progress = 0.f;
+	f32 from = 0.f, to = 0.f;
+};
+
 struct State {
 	HWND wnd;
 	HWND nc_parent;
@@ -70,6 +78,8 @@ struct State {
 
 	bool signup_mode;
 	bool transition_pending;
+
+	ErrorMessageAnimation error_message_animation;
 };
 
 enum class AttemptResult {

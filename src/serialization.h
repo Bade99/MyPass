@@ -50,7 +50,8 @@
 
 //NOTE: I'm using str because of the ease of use around the macros, but actually every separator-like macro MUST be only 1 character long, not all functions were made with more than 1 character in mind, though most are
 
-extern i32 n_tabs;//TODO(fran): use n_tabs for deserialization also, it would help to know how many tabs should be before an identifier to do further filtering //NOTE:in a big project this variable will need to be declared as extern
+// inline keeps one shared header-defined variable across translation units; static inline would give each translation unit its own copy.
+inline i32 n_tabs = 0;//TODO(fran): use n_tabs for deserialization also, it would help to know how many tabs should be before an identifier to do further filtering
 
 #define _BeginSerialize() n_tabs=0
 #define _BeginDeserialize() n_tabs=0

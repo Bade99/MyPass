@@ -2,25 +2,7 @@
 #include "platform.h"
 #include "vector.h"
 #include "rect.h"
-
-//i32
-
-static i32 roundNup(i32 multiple, i32 value) {
-	Assert(multiple > 0);
-	i64 rounded = ((i64)value + (value >= 0 ? (i64)multiple - 1 : 0)) / multiple * multiple;
-	return rounded > I32MAX ? I32MAX : (i32)rounded;
-}
-
-static i32 round2up(i32 value) {
-	return roundNup(2, value);
-}
-
-static i32 roundNdown(i32 multiple, i32 value) {
-	Assert(multiple > 0);
-	i64 rounded = ((i64)value - (value < 0 ? (i64)multiple - 1 : 0)) / multiple * multiple;
-	return rounded < I32MIN ? I32MIN : (i32)rounded;
-}
-
+#include <cmath>
 
 //f32
 
@@ -40,22 +22,24 @@ static f32 length(v2 v) {
 	return res;
 }
 
-static f32 lerp(f32 n1, f32 t, f32 n2) {
-	//NOTE: interesting that https://en.wikipedia.org/wiki/Linear_interpolation mentions this is the Precise method
-	return (1.f - t) * n1 + t * n2;
+
+//i32
+
+static i32 roundNup(i32 multiple, i32 value) {
+	Assert(multiple > 0);
+	i64 rounded = ((i64)value + (value >= 0 ? (i64)multiple - 1 : 0)) / multiple * multiple;
+	return rounded > I32MAX ? I32MAX : (i32)rounded;
 }
 
-// Ease in & out
-static f32 ParametricBlend(f32 t /*[0.0,1.0]*/) {
-	f32 sqt = t * t;
-	return sqt / (2.0f * (sqt - t) + 1.0f);
+static i32 round2up(i32 value) {
+	return roundNup(2, value);
 }
 
-// Ease in & out
-static f32 smoothstep(f32 t) {
-	return t * t * (3.0f - 2.0f * t);
+static i32 roundNdown(i32 multiple, i32 value) {
+	Assert(multiple > 0);
+	i64 rounded = ((i64)value - (value < 0 ? (i64)multiple - 1 : 0)) / multiple * multiple;
+	return rounded < I32MIN ? I32MIN : (i32)rounded;
 }
-
 
 //u32
 
@@ -66,6 +50,23 @@ static u32 safe_u64_to_u32(u64 n) {
 
 
 //templates
+
+template <typename T>
+requires (std::is_arithmetic_v<T> && !std::same_as<T, bool>)
+static T lerp(T from, f32 t, T to) {
+	if constexpr (std::floating_point<T>) {
+		//NOTE: interesting that https://en.wikipedia.org/wiki/Linear_interpolation mentions this is the Precise method
+		return (T(1) - T(t)) * from + T(t) * to;
+	}
+	else {
+		using Float = std::conditional_t<(sizeof(T) <= sizeof(i32)), f32, f64>;
+		return (T)std::round(lerp((Float)from, t, (Float)to));
+	}
+}
+
+static RECT lerp(RECT from, f32 t, RECT to) {
+	return { lerp(from.left, t, to.left), lerp(from.top, t, to.top), lerp(from.right, t, to.right), lerp(from.bottom, t, to.bottom) };
+}
 
 template <typename T, std::convertible_to<T> U>
 static T minimum(T a, U b) {
@@ -141,5 +142,17 @@ static T distance(T a, T b) {
 	T res;
 	if constexpr (std::is_signed_v<T>) res = abs(a - b);
 	else res = (a > b) ? a - b : b - a;
+	return res;
+}
+
+template <typename T>
+static T squared(T a) {
+	T res = a * a;
+	return res;
+}
+
+template <typename T>
+static T cubed(T a) {
+	T res = a * a * a;
 	return res;
 }

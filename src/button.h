@@ -194,12 +194,13 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 	} break;
 	case WM_LBUTTONUP:
 	{
+		bool clicked = state.OnMouseTracking && state.onMouseOver;
 		if (state.OnMouseTracking) {
-			if (state.onMouseOver) notify_on_click(state);
 			ReleaseCapture();
 			state.OnMouseTracking = false;
 		}
 		state.onLMouseClick = false;
+		if (clicked) notify_on_click(state);
 
 		return 0;
 	} break;

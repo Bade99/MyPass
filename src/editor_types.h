@@ -1,4 +1,5 @@
 #pragma once
+#include "animation.h"
 
 namespace editor {
 
@@ -81,6 +82,28 @@ namespace custom_message {
 	};
 };
 
+struct CardLayoutMove {
+	HWND wnd;
+	RECT from, to;
+};
+
+struct CardLayoutAnimation {
+	std::vector<CardLayoutMove> moves;
+	animation::Timeline timeline;
+	RECT from_backdrop_bounds{}, to_backdrop_bounds{};
+	i32 from_page_height = 0, to_page_height = 0;
+	i32 client_width = 0, client_height = 0;
+	HWND entering_card = nil;
+	bool requested = false;
+};
+
+struct CardLayoutState {
+	CardLayoutAnimation animation;
+	RECT backdrop_bounds{};
+	std::vector<HWND> search_pending_reveals;
+	bool search_reflow_pending = false;
+};
+
 struct Controls {
 	using type = HWND;
 	union {
@@ -132,14 +155,6 @@ struct State {
 
 	Mode mode;
 
-	void init() {
-		controls.password_editors = decltype(controls.password_editors)();
-		current_user = decltype(current_user)();
-	}
-
-	void uninit() {
-		controls.password_editors.~vector();
-		current_user.~basic_string();
-	}
+	CardLayoutState card_layout;
 };
 }

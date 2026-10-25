@@ -137,8 +137,10 @@ void on_internal_state_change(State& state) {
 
 	bool pin = button::get_state(controls.btn_pin)->selected;
 
-	for (const auto& c : _password_editor_tool_list(controls.tbl_values))
-		ShowWindow(c, state.is_open || (pin && c == controls.btn_pin) ? SW_SHOW : SW_HIDE);
+	for (const auto& c : _password_editor_tool_list(controls.tbl_values)) {
+		bool show = state.is_open ? !state.reveal_open_controls_on_resize : pin && c == controls.btn_pin;
+		ShowWindow(c, show ? SW_SHOW : SW_HIDE);
+	}
 
 	EnableWindow(controls.btn_pin, state.is_open);
 
@@ -161,6 +163,8 @@ void on_internal_state_change(State& state) {
 void set_is_open(State& state, bool is_open) {
 	if (state.is_open != is_open) {
 		state.is_open = is_open;
+		state.reveal_open_controls_on_resize = is_open;
+		if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
 		on_internal_state_change(state);
 		if (is_open) ask_window_for_repaint(state.controls.tbl_values);
 	}
@@ -199,7 +203,20 @@ void table_add_row(State& state, DescriptionCell* description, ValueCell* value)
 	if (!description->on_change) description->on_change = state.stateful_functions.on_change;
 	if (!value->on_change) value->on_change = state.stateful_functions.on_change;
 	table::add_row(tbl, description, value);
+	RECT table_bounds; GetClientRect(tbl.wnd, &table_bounds);
+	if (RECTW(table_bounds) > 0) table::resize_controls(tbl);
 	set_row_editing_enabled(tbl.rows.back(), state.is_open && state.is_editing);
+	if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
+}
+
+void table_delete_row(State& state, HWND containing_wnd) {
+	auto& tbl = *table::get_state(state.controls.tbl_values);
+	auto old_row_count = tbl.rows.size();
+	table::delete_row(tbl, containing_wnd);
+	if (tbl.rows.size() == old_row_count) return;
+	RECT table_bounds; GetClientRect(tbl.wnd, &table_bounds);
+	if (RECTW(table_bounds) > 0) table::resize_controls(tbl);
+	if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
 }
 
 void create_controls(State& state) {
@@ -370,9 +387,11 @@ void create_controls(State& state) {
 					button::set_functions(controls.btn_del, {
 						.on_click = [](void* data, HWND wnd) {
 							value_cell::State& state = *(value_cell::State*)data;
-							auto& tbl_state = *table::get_state(state.parent);
+							HWND card_wnd = get_parent_of_class(state.wnd, password_editor::wndclass);
+							Assert(card_wnd);
+							auto& card_state = *get_window_state<State>(card_wnd);
 							state.cell_data.on_change(state.controls.btn_del);
-							table::delete_row(tbl_state, state.wnd);
+							table_delete_row(card_state, state.wnd);
 						}
 					});
 
@@ -523,6 +542,12 @@ LRESULT CALLBACK proc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		render_diagnostics::record_count(render_diagnostics::Event::card_size_message);
 		LRESULT res = DefWindowProc(wnd, msg, wparam, lparam);
 		resize_controls(state);
+		if (state.reveal_open_controls_on_resize) {
+			state.reveal_open_controls_on_resize = false;
+			auto& controls = state.controls;
+			for (const auto& control : _password_editor_tool_list(controls.tbl_values))
+				ShowWindow(control, SW_SHOW);
+		}
 		return res;
 	} break;
 	default:
