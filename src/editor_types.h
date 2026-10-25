@@ -1,4 +1,5 @@
 #pragma once
+#include "animation.h"
 
 namespace editor {
 
@@ -81,6 +82,20 @@ namespace custom_message {
 	};
 };
 
+struct CardLayoutMove {
+	HWND wnd;
+	RECT from, to;
+};
+
+struct CardLayoutAnimation {
+	std::vector<CardLayoutMove> moves;
+	animation::Timeline timeline;
+	i32 from_page_height = 0, to_page_height = 0;
+	i32 client_width = 0, client_height = 0;
+	HWND entering_card = nil;
+	bool requested = false;
+};
+
 struct Controls {
 	using type = HWND;
 	union {
@@ -131,15 +146,6 @@ struct State {
 	SortOption sorting;
 
 	Mode mode;
-
-	void init() {
-		controls.password_editors = decltype(controls.password_editors)();
-		current_user = decltype(current_user)();
-	}
-
-	void uninit() {
-		controls.password_editors.~vector();
-		current_user.~basic_string();
-	}
+	CardLayoutAnimation card_animation;
 };
 }

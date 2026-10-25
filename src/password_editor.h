@@ -161,6 +161,7 @@ void on_internal_state_change(State& state) {
 void set_is_open(State& state, bool is_open) {
 	if (state.is_open != is_open) {
 		state.is_open = is_open;
+		if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
 		on_internal_state_change(state);
 		if (is_open) ask_window_for_repaint(state.controls.tbl_values);
 	}

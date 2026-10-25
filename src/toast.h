@@ -36,9 +36,9 @@ namespace toast {
 		const f32 a = transition_duration / total_duration;
 		const f32 b = (total_duration - transition_duration) / total_duration;
 
-		if (t < a) return lerp(low, smoothstep(t / a), high);
+		if (t < a) return lerp(low, animation::ease_in_out_smoothstep(t / a), high);
 		elif (t <= b) return high;
-		else return lerp(high, smoothstep((t - b) / (1.f - b)), low);
+		else return lerp(high, animation::ease_in_out_smoothstep((t - b) / (1.f - b)), low);
 	}
 
 	void animate_wndpos(State& state) {

@@ -113,19 +113,22 @@ static bool flush_existing_file(const cstr* filename) {
   */
 
 static f64 GetPCFrequency() {
-	LARGE_INTEGER li;
-	QueryPerformanceFrequency(&li);
-	return f64(li.QuadPart) / 1000.0; //milliseconds
+	static const f64 frequency = [] {
+		LARGE_INTEGER li;
+		QueryPerformanceFrequency(&li);
+		return f64(li.QuadPart) / 1000.0; //milliseconds
+	}();
+	return frequency;
 }
 static i64 StartCounter() {
 	LARGE_INTEGER li;
 	QueryPerformanceCounter(&li);
 	return li.QuadPart;
 }
-static f64 EndCounter(i64 CounterStart, f64 PCFreq = GetPCFrequency()) {
+static f64 EndCounter(i64 CounterStart) {
 	LARGE_INTEGER li;
 	QueryPerformanceCounter(&li);
-	return double(li.QuadPart - CounterStart) / PCFreq;
+	return double(li.QuadPart - CounterStart) / GetPCFrequency();
 }
 
 

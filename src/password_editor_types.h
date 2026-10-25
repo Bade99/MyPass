@@ -44,8 +44,9 @@ namespace password_editor {
 	union StatefulFunctions {
 		struct {
 			StatefulFunction<func_onchange> on_change;
+			StatefulFunction<> on_layout_change;
 		};
-		StatefulFunction<> all[1]{ 0 };
+		StatefulFunction<> all[2]{ 0 };
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 	};
 
