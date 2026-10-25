@@ -1,6 +1,9 @@
 #pragma once
 #include "win_sdk.h"
 #include "helpers.h"
+#include "animation.h"
+#include <cmath>
+#include <cwchar>
 
 #ifdef _DEBUG
 namespace debug {
@@ -11,6 +14,8 @@ namespace debug {
 
 	struct Controls {
 		HWND color_buttons[ARRAYSIZE(colors.brushes)];
+		HWND static_speed_wnd;
+		HWND edit_speed_wnd;
 		HWND static_focus_wnd;
 	};
 
@@ -50,6 +55,26 @@ namespace debug {
 				add_mouseover_tooltip(b, (u64)(void*)msg.c_str(), {.multiline = true, .delay_ms = 100});
 			}
 
+			controls.static_speed_wnd = create_window(wnd, edit_oneline::wndclass, _t("Animation speed (x)"), WS_VISIBLE | WS_CHILD | WS_DISABLED);
+			edit_oneline::set_theme(controls.static_speed_wnd, static_theme);
+			auto speed_text = std::format(_t("{}"), animation::Timeline::debug_speed_multiplier);
+			controls.edit_speed_wnd = create_window(wnd, edit_oneline::wndclass, speed_text.c_str(), WS_VISIBLE | WS_CHILD | WS_TABSTOP);
+			auto speed_theme = themes.base_editoneline;
+			speed_theme.font = fonts.General;
+			edit_oneline::set_theme(controls.edit_speed_wnd, speed_theme);
+			edit_oneline::set_functions(controls.edit_speed_wnd, {
+				.on_change = [](void*, HWND edit_wnd) {
+					cstr text[32];
+					i32 length = GetWindowTextLength(edit_wnd);
+					if (length <= 0 || length >= ARRAYSIZE(text)) return;
+					GetWindowText(edit_wnd, text, ARRAYSIZE(text));
+					cstr* end = nil;
+					f32 speed = std::wcstof(text, &end);
+					if (end != text && !*end && std::isfinite(speed) && speed > 0.f)
+						animation::Timeline::debug_speed_multiplier = speed;
+				}
+			});
+
 			controls.static_focus_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
 			edit_oneline::set_theme(controls.static_focus_wnd, static_theme);
 		}
@@ -64,6 +89,10 @@ namespace debug {
 			rect_i32 bounds{}; bounds.wh = { w, h };
 
 			rect_i32 static_focus_wnd = bounds.cut_bottom(DPI(30));
+			rect_i32 speed_label = bounds.cut_bottom(DPI(30));
+			speed_label.apply_padding(pad, 0);
+			rect_i32 speed_edit = speed_label.cut_right(DPI(80));
+			speed_edit.apply_padding(pad, 0, 0, 0);
 
 			auto [rows, cols, dim] = pack_squares(bounds.w, bounds.h, ARRAYSIZE(controls.color_buttons), pad);
 
@@ -80,6 +109,8 @@ namespace debug {
 				offset_x = start_offset_x;
 			}
 
+			MoveWindow(controls.static_speed_wnd, speed_label);
+			MoveWindow(controls.edit_speed_wnd, speed_edit);
 			MoveWindow(controls.static_focus_wnd, static_focus_wnd);
 		}
 

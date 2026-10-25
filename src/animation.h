@@ -4,11 +4,35 @@
 namespace animation {
 
 struct Timeline {
+#ifdef _DEBUG
+	static inline f32 debug_speed_multiplier = 1.f;
+	i64 last_counter = 0;
+	f64 elapsed_ms = 0;
+#endif
+
 	i64 start_counter = 0; f32 duration_ms = 0; bool active = false;
 
-	void start(f32 duration /*ms*/) { start_counter = StartCounter(); duration_ms = duration; active = true; }
+	void start(f32 duration /*ms*/) {
+		start_counter = StartCounter();
+		duration_ms = duration;
+#ifdef _DEBUG
+		last_counter = start_counter;
+		elapsed_ms = 0;
+#endif
+		active = true;
+	}
 
-	f32 progress() const { return active ? clamp01((f32)(EndCounter(start_counter) / duration_ms)) : 1.f; }
+	f32 progress() {
+		if (!active) return 1.f;
+#ifdef _DEBUG
+		i64 counter = StartCounter();
+		elapsed_ms += f64(counter - last_counter) / GetPCFrequency() * debug_speed_multiplier;
+		last_counter = counter;
+		return clamp01((f32)(elapsed_ms / duration_ms));
+#else
+		return clamp01((f32)(EndCounter(start_counter) / duration_ms));
+#endif
+	}
 
 	void stop() { active = false; }
 };

@@ -1837,6 +1837,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		SendMessage(state.controls.tooltip, TTM_SETTIPTEXTCOLOR, ColorFromBrush(colors.ControlTxt), 0);
 		SendMessage(state.controls.tooltip, TTM_SETTIPBKCOLOR, ColorFromBrush(colors.ControlBk), 0);
 
+		const auto initial_text = ((CREATESTRUCT*)lparam)->lpszName;
+		if (initial_text && *initial_text) {
+			state.char_text = initial_text;
+			recalculate_line_breaks(state);
+			recalculate_text_layout(state);
+		}
+
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	case WM_SIZE: {

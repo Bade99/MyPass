@@ -7,8 +7,6 @@ static FILE* console_file_handle;
 
 constexpr auto& serialization_folder = L"\\MyPass";
 
-static i32 n_tabs = 0; //Needed for serialization
-
 union KnownColors {
 	struct {
 #define foreach_color(op) \
