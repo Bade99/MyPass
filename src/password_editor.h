@@ -200,7 +200,20 @@ void table_add_row(State& state, DescriptionCell* description, ValueCell* value)
 	if (!description->on_change) description->on_change = state.stateful_functions.on_change;
 	if (!value->on_change) value->on_change = state.stateful_functions.on_change;
 	table::add_row(tbl, description, value);
+	RECT table_bounds; GetClientRect(tbl.wnd, &table_bounds);
+	if (RECTW(table_bounds) > 0) table::resize_controls(tbl);
 	set_row_editing_enabled(tbl.rows.back(), state.is_open && state.is_editing);
+	if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
+}
+
+void table_delete_row(State& state, HWND containing_wnd) {
+	auto& tbl = *table::get_state(state.controls.tbl_values);
+	auto old_row_count = tbl.rows.size();
+	table::delete_row(tbl, containing_wnd);
+	if (tbl.rows.size() == old_row_count) return;
+	RECT table_bounds; GetClientRect(tbl.wnd, &table_bounds);
+	if (RECTW(table_bounds) > 0) table::resize_controls(tbl);
+	if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
 }
 
 void create_controls(State& state) {
@@ -371,9 +384,11 @@ void create_controls(State& state) {
 					button::set_functions(controls.btn_del, {
 						.on_click = [](void* data, HWND wnd) {
 							value_cell::State& state = *(value_cell::State*)data;
-							auto& tbl_state = *table::get_state(state.parent);
+							HWND card_wnd = get_parent_of_class(state.wnd, password_editor::wndclass);
+							Assert(card_wnd);
+							auto& card_state = *get_window_state<State>(card_wnd);
 							state.cell_data.on_change(state.controls.btn_del);
-							table::delete_row(tbl_state, state.wnd);
+							table_delete_row(card_state, state.wnd);
 						}
 					});
 

@@ -146,6 +146,9 @@ struct State {
 	SortOption sorting;
 
 	Mode mode;
+
 	CardLayoutAnimation card_animation;
+	std::vector<HWND> search_pending_reveals;
+	bool search_reflow_pending = false;
 };
 }

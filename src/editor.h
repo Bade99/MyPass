@@ -12,6 +12,8 @@
 namespace editor {
 
 constexpr auto card_animation_timer_id = 3101;
+constexpr auto search_reflow_timer_id = 3102;
+constexpr auto search_reflow_delay_ms = 120;
 
 void stop_card_animation(State& state) {
 	KillTimer(state.wnd, card_animation_timer_id);
@@ -73,9 +75,11 @@ password_editor::State& add_password_editor(State& state, const Props& propertie
 			for (const auto& [i, c] : vec | std::views::enumerate)
 				if (c == pwd_ed) {
 					on_password_editor_change(&state, password_editor::get_state(c)->controls.btn_del); //TODO(fran): small bug, we should actually check if the data in this editor was saved, if not then it shouldnt set need_save to true
+					std::erase(state.search_pending_reveals, c);
 					DestroyWindow(c);
 					vec.erase(vec.begin() + i);
 					on_password_editors_cnt_changed(state);
+					state.card_animation.requested = true;
 					ask_window_for_resize(state.wnd);
 					ask_window_for_repaint(state.wnd);
 					break;
@@ -220,12 +224,16 @@ void start_card_animation(State& state, CardLayout& target) {
 			from = move.bounds;
 			from.bottom = from.top + 1;
 		}
+		else if (std::ranges::contains(state.search_pending_reveals, move.wnd))
+			from = move.bounds;
 		else if (transition.entering_card && entering_bounds.right > entering_bounds.left &&
 			move.wnd == state.controls.btn_add_end && from.left < 0) {
 			from = move.bounds;
 			from.top = entering_bounds.top + 1 + DPI(15);
 			from.bottom = from.top + RECTH(move.bounds);
 		}
+		else if (move.wnd == state.controls.btn_add_end && (from.left < 0 || move.bounds.left < 0))
+			from = move.bounds;
 		any_change |= !EqualRect(&from, &move.bounds);
 		transition.moves.push_back({ move.wnd, from, move.bounds });
 	}
@@ -319,10 +327,28 @@ void resize_controls(State& state, bool animate_cards = false) {
 	state.card_animation.client_height = RECTH(client_bounds);
 }
 
+void finish_search_reflow(State& state) {
+	KillTimer(state.wnd, search_reflow_timer_id);
+	state.search_reflow_pending = false;
+	for (auto card : state.search_pending_reveals)
+		if (IsWindow(card)) ShowWindow(card, SW_SHOW);
+	RECT client_bounds; GetClientRect(state.wnd, &client_bounds);
+	auto& transition = state.card_animation;
+	bool same_size = transition.client_width == RECTW(client_bounds) && transition.client_height == RECTH(client_bounds);
+	bool animate = same_size && IsWindowVisible(state.wnd) && animation::enabled_by_system();
+	resize_controls(state, animate);
+	state.search_pending_reveals.clear();
+}
+
+void CALLBACK search_reflow_timer_proc(HWND wnd, UINT, UINT_PTR, DWORD) {
+	if (auto state = get_state(wnd)) finish_search_reflow(*state);
+}
+
 void add_controls_transition_v0(State& state); //forward declaration to solve circular dependency with set_mode
 
 void set_mode(State& state, Mode new_mode) {
 	if (new_mode != state.mode) {
+		stop_card_animation(state);
 		auto old_mode = state.mode;
 		state.mode = new_mode;
 
@@ -361,24 +387,40 @@ void add_controls(State& state) {
 	search::set_functions(controls.search, {
 		.on_search = [](utf16* match, i32 match_len, multiflag<search::Flag> search_flags, bool search_in_current_selection, void* user_data) {
 			auto& state = *(State*)user_data;
+			bool visibility_changed = false;
+			state.search_pending_reveals.clear();
+			auto update_visibility = [&](HWND card, bool visible) {
+				bool currently_visible = IsWindowVisible(card);
+				if (currently_visible == visible) return;
+				visibility_changed = true;
+				if (visible) state.search_pending_reveals.push_back(card);
+				else ShowWindow(card, SW_HIDE);
+			};
 			if (!match_len || !match || !*match) // search bar has been cleared, show everything
-				for (auto p : state.controls.password_editors) 
-					ShowWindow(p, SW_SHOW);
+				for (auto p : state.controls.password_editors)
+					update_visibility(p, true);
 			else
 				for (auto p : state.controls.password_editors) {
 					auto& pw_ed = *password_editor::get_state(p);
 					utf16 title[64];
 					i32 title_len = GetWindowText(pw_ed.controls.edo_title, title, ARRAYSIZE(title));
 
-					if (!title_len) { ShowWindow(p, SW_SHOW); continue; } //always keep ones that are still being edited
+					if (!title_len) { update_visibility(p, true); continue; } //always keep ones that are still being edited
 				
 					DWORD search_flags = LINGUISTIC_IGNOREDIACRITIC | LINGUISTIC_IGNORECASE | FIND_FROMSTART;
 					bool found = FindNLSStringEx(LOCALE_NAME_USER_DEFAULT, search_flags, title, title_len, match, match_len, nil, nil, nil, 0) != -1;
-					ShowWindow(p, found ? SW_SHOW : SW_HIDE);
+					update_visibility(p, found);
 				}
 			//TODO(fran): decide whether we want to hide the items that dont match, or just move them to the bottom of the list to be shown as less priority, could even be rendered in semi transparent or something to indicate that they dont match, kinda pointless though, if I do that I have to block input to them too since editing something while it's semi invisible is not good ux
-			ask_window_for_resize(state.wnd);
-			ask_window_for_repaint(state.wnd);
+			if (!visibility_changed && !state.search_reflow_pending) return;
+			stop_card_animation(state);
+			KillTimer(state.wnd, search_reflow_timer_id);
+			if (IsWindowVisible(state.wnd) && animation::enabled_by_system() &&
+				SetTimer(state.wnd, search_reflow_timer_id, search_reflow_delay_ms, search_reflow_timer_proc))
+				state.search_reflow_pending = true;
+			else
+				finish_search_reflow(state);
+			if (visibility_changed) ask_window_for_repaint(state.wnd);
 }
 	});
 	//AWDYN(controls.search, WM_SIZE); // Make sure that the language strings for search fit in the search button, I dont need this since I do use any of the buttons with text, but could be useful in other situations
@@ -1082,7 +1124,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		auto& transition = state.card_animation;
 		bool same_size = transition.client_width == RECTW(client_bounds) && transition.client_height == RECTH(client_bounds);
 		bool animate = same_size && (transition.requested || transition.timeline.active) &&
-			state.mode == Mode::normal && IsWindowVisible(hwnd) && animation::enabled_by_system();
+			IsWindowVisible(hwnd) && animation::enabled_by_system();
 		resize_controls(state, animate);
 		return res;
 	} break;
@@ -1245,6 +1287,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_NCDESTROY:
 	{
+		KillTimer(state.wnd, search_reflow_timer_id);
 		stop_card_animation(state);
 		save_settings(state);
 		if (&state) {
