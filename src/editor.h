@@ -17,10 +17,10 @@ constexpr auto search_reflow_delay_ms = 120;
 
 void stop_card_animation(State& state) {
 	KillTimer(state.wnd, card_animation_timer_id);
-	state.card_animation.timeline.stop();
-	state.card_animation.moves.clear();
-	state.card_animation.requested = false;
-	state.card_animation.entering_card = nil;
+	state.card_layout.animation.timeline.stop();
+	state.card_layout.animation.moves.clear();
+	state.card_layout.animation.requested = false;
+	state.card_layout.animation.entering_card = nil;
 }
 
 auto get_state(HWND wnd) { return get_window_state<State>(wnd); }
@@ -64,7 +64,7 @@ password_editor::State& add_password_editor(State& state, const Props& propertie
 		.on_change = { .state = &state, .function = on_password_editor_change  },
 		.on_layout_change = { .state = &state, .function = [](void* data) {
 			auto& state = *(State*)data;
-			state.card_animation.requested = true;
+			state.card_layout.animation.requested = true;
 		} }
 	});
 	password_editor::set_functions(wnd, {
@@ -75,11 +75,11 @@ password_editor::State& add_password_editor(State& state, const Props& propertie
 			for (const auto& [i, c] : vec | std::views::enumerate)
 				if (c == pwd_ed) {
 					on_password_editor_change(&state, password_editor::get_state(c)->controls.btn_del); //TODO(fran): small bug, we should actually check if the data in this editor was saved, if not then it shouldnt set need_save to true
-					std::erase(state.search_pending_reveals, c);
+					std::erase(state.card_layout.search_pending_reveals, c);
 					DestroyWindow(c);
 					vec.erase(vec.begin() + i);
 					on_password_editors_cnt_changed(state);
-					state.card_animation.requested = true;
+					state.card_layout.animation.requested = true;
 					ask_window_for_resize(state.wnd);
 					ask_window_for_repaint(state.wnd);
 					break;
@@ -112,8 +112,8 @@ void add_preset_password_editor(State& state, size_t at_idx) {
 	password_editor::table_add_row(password_editor, &pwd, &val);
 	password_editor::set_is_open(password_editor, true);
 	password_editor::set_is_editing(password_editor, true);
-	state.card_animation.entering_card = password_editor.wnd;
-	state.card_animation.requested = true;
+	state.card_layout.animation.entering_card = password_editor.wnd;
+	state.card_layout.animation.requested = true;
 	ask_window_for_resize(state.wnd);
 	ask_window_for_repaint(state.wnd);
 }
@@ -171,7 +171,7 @@ CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_p
 }
 
 void apply_card_layout(State& state, CardLayout& layout, bool redraw_backdrop = false, bool force_page_update = true) {
-	state.backdrop_bounds = layout.backdrop_bounds;
+	state.card_layout.backdrop_bounds = layout.backdrop_bounds;
 	RECT page_bounds; GetClientRect(state.controls.page, &page_bounds);
 	RECT viewport_bounds; GetClientRect(state.controls.page_space, &viewport_bounds);
 	i32 page_height = maximum(RECTH(viewport_bounds), layout.page_height);
@@ -188,7 +188,7 @@ void apply_card_layout(State& state, CardLayout& layout, bool redraw_backdrop = 
 }
 
 void tick_card_animation(State& state) {
-	auto& transition = state.card_animation;
+	auto& transition = state.card_layout.animation;
 	if (!transition.timeline.active) return;
 	f32 progress = transition.timeline.progress();
 	f32 eased = animation::ease_out_cubic(progress);
@@ -208,7 +208,7 @@ void CALLBACK card_animation_timer_proc(HWND wnd, UINT, UINT_PTR, DWORD) {
 }
 
 void start_card_animation(State& state, CardLayout& target) {
-	auto& transition = state.card_animation;
+	auto& transition = state.card_layout.animation;
 	RECT viewport_bounds; GetClientRect(state.controls.page_space, &viewport_bounds);
 	i32 target_page_height = maximum(RECTH(viewport_bounds), target.page_height);
 	if (transition.timeline.active && !transition.entering_card && transition.to_page_height == target_page_height &&
@@ -224,7 +224,7 @@ void start_card_animation(State& state, CardLayout& target) {
 	RECT page_bounds; GetClientRect(state.controls.page, &page_bounds);
 	transition.from_page_height = RECTH(page_bounds);
 	transition.to_page_height = target_page_height;
-	transition.from_backdrop_bounds = state.backdrop_bounds;
+	transition.from_backdrop_bounds = state.card_layout.backdrop_bounds;
 	transition.to_backdrop_bounds = target.backdrop_bounds;
 	transition.moves.clear();
 	transition.moves.reserve(target.moves.size());
@@ -239,7 +239,7 @@ void start_card_animation(State& state, CardLayout& target) {
 			from = move.bounds;
 			from.bottom = from.top + 1;
 		}
-		else if (std::ranges::contains(state.search_pending_reveals, move.wnd))
+		else if (std::ranges::contains(state.card_layout.search_pending_reveals, move.wnd))
 			from = move.bounds;
 		else if (transition.entering_card && entering_bounds.right > entering_bounds.left &&
 			move.wnd == state.controls.btn_add_end && from.left < 0) {
@@ -335,24 +335,24 @@ void resize_controls(State& state, bool animate_cards = false) {
 		stop_card_animation(state);
 		apply_card_layout(state, target);
 	}
-	state.card_animation.requested = false;
-	state.card_animation.entering_card = nil;
+	state.card_layout.animation.requested = false;
+	state.card_layout.animation.entering_card = nil;
 	RECT client_bounds; GetClientRect(state.wnd, &client_bounds);
-	state.card_animation.client_width = RECTW(client_bounds);
-	state.card_animation.client_height = RECTH(client_bounds);
+	state.card_layout.animation.client_width = RECTW(client_bounds);
+	state.card_layout.animation.client_height = RECTH(client_bounds);
 }
 
 void finish_search_reflow(State& state) {
 	KillTimer(state.wnd, search_reflow_timer_id);
-	state.search_reflow_pending = false;
-	for (auto card : state.search_pending_reveals)
+	state.card_layout.search_reflow_pending = false;
+	for (auto card : state.card_layout.search_pending_reveals)
 		if (IsWindow(card)) ShowWindow(card, SW_SHOW);
 	RECT client_bounds; GetClientRect(state.wnd, &client_bounds);
-	auto& transition = state.card_animation;
+	auto& transition = state.card_layout.animation;
 	bool same_size = transition.client_width == RECTW(client_bounds) && transition.client_height == RECTH(client_bounds);
 	bool animate = same_size && IsWindowVisible(state.wnd) && animation::enabled_by_system();
 	resize_controls(state, animate);
-	state.search_pending_reveals.clear();
+	state.card_layout.search_pending_reveals.clear();
 }
 
 void CALLBACK search_reflow_timer_proc(HWND wnd, UINT, UINT_PTR, DWORD) {
@@ -403,12 +403,12 @@ void add_controls(State& state) {
 		.on_search = [](utf16* match, i32 match_len, multiflag<search::Flag> search_flags, bool search_in_current_selection, void* user_data) {
 			auto& state = *(State*)user_data;
 			bool visibility_changed = false;
-			state.search_pending_reveals.clear();
+			state.card_layout.search_pending_reveals.clear();
 			auto update_visibility = [&](HWND card, bool visible) {
 				bool currently_visible = IsWindowVisible(card);
 				if (currently_visible == visible) return;
 				visibility_changed = true;
-				if (visible) state.search_pending_reveals.push_back(card);
+				if (visible) state.card_layout.search_pending_reveals.push_back(card);
 				else ShowWindow(card, SW_HIDE);
 			};
 			if (!match_len || !match || !*match) // search bar has been cleared, show everything
@@ -427,12 +427,12 @@ void add_controls(State& state) {
 					update_visibility(p, found);
 				}
 			//TODO(fran): decide whether we want to hide the items that dont match, or just move them to the bottom of the list to be shown as less priority, could even be rendered in semi transparent or something to indicate that they dont match, kinda pointless though, if I do that I have to block input to them too since editing something while it's semi invisible is not good ux
-			if (!visibility_changed && !state.search_reflow_pending) return;
+			if (!visibility_changed && !state.card_layout.search_reflow_pending) return;
 			stop_card_animation(state);
 			KillTimer(state.wnd, search_reflow_timer_id);
 			if (IsWindowVisible(state.wnd) && animation::enabled_by_system() &&
 				SetTimer(state.wnd, search_reflow_timer_id, search_reflow_delay_ms, search_reflow_timer_proc))
-				state.search_reflow_pending = true;
+				state.card_layout.search_reflow_pending = true;
 			else
 				finish_search_reflow(state);
 			if (visibility_changed) ask_window_for_repaint(state.wnd);
@@ -546,7 +546,7 @@ void add_controls(State& state) {
 		} break;
 		default: Assert(0);
 		}
-		state.card_animation.requested = true;
+		state.card_layout.animation.requested = true;
 		ask_window_for_resize(state.wnd);
 	});
 	combobox::set_function_render_combobox(controls.combo_sort, [](HDC dc, rect_i32 r, combobox::RenderFlags flags, void* element, void* user_extra) {
@@ -1136,7 +1136,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		LRESULT res = DefWindowProc(hwnd, msg, wparam, lparam);
 		RECT client_bounds; GetClientRect(hwnd, &client_bounds);
-		auto& transition = state.card_animation;
+		auto& transition = state.card_layout.animation;
 		bool same_size = transition.client_width == RECTW(client_bounds) && transition.client_height == RECTH(client_bounds);
 		bool animate = same_size && (transition.requested || transition.timeline.active) &&
 			IsWindowVisible(hwnd) && animation::enabled_by_system();
@@ -1335,7 +1335,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		auto clip = get_window_rect_at(state.controls.page_space, state.wnd);
 		IntersectClipRect(dc, clip.left, clip.top, clip.right, clip.bottom); defer{ SelectClipRgn(dc, old_rgn); };
 
-		card = state.backdrop_bounds;
+		card = state.card_layout.backdrop_bounds;
 		RECT page_position = get_window_rect_at(state.controls.page, state.wnd);
 		OffsetRect(&card, page_position.left, page_position.top);
 		urender::draw_round_rectangle(dc, card, card_extent, colors.Card_Bk_Soft);

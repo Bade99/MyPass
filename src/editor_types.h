@@ -97,6 +97,13 @@ struct CardLayoutAnimation {
 	bool requested = false;
 };
 
+struct CardLayoutState {
+	CardLayoutAnimation animation;
+	RECT backdrop_bounds{};
+	std::vector<HWND> search_pending_reveals;
+	bool search_reflow_pending = false;
+};
+
 struct Controls {
 	using type = HWND;
 	union {
@@ -148,9 +155,6 @@ struct State {
 
 	Mode mode;
 
-	CardLayoutAnimation card_animation;
-	RECT backdrop_bounds{};
-	std::vector<HWND> search_pending_reveals;
-	bool search_reflow_pending = false;
+	CardLayoutState card_layout;
 };
 }

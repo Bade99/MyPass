@@ -63,7 +63,7 @@ void resize_controls(State& state) {
 	prev = edit_password;
 
 	i32 error_height = (i32)(edit_password.h * .75f);
-	i32 error_slot = lerp(0, state.error_message_progress, small_pad + error_height);
+	i32 error_slot = lerp(0, state.error_message_animation.progress, small_pad + error_height);
 	rect_i32 static_error_message{
 		.xy = { 0, prev.bottom() + small_pad },
 		.wh = { edit_password.w, maximum(0, error_slot - small_pad) }
@@ -86,17 +86,18 @@ void resize_controls(State& state) {
 
 void stop_error_message_animation(State& state) {
 	KillTimer(state.wnd, error_message_animation_timer_id);
-	state.error_message_timeline.stop();
+	state.error_message_animation.timeline.stop();
 }
 
 void tick_error_message_animation(State& state) {
-	if (!state.error_message_timeline.active) return;
-	f32 progress = state.error_message_timeline.progress();
-	state.error_message_progress = lerp(state.error_message_from, animation::ease_out_cubic(progress), state.error_message_to);
+	auto& transition = state.error_message_animation;
+	if (!transition.timeline.active) return;
+	f32 progress = transition.timeline.progress();
+	transition.progress = lerp(transition.from, animation::ease_out_cubic(progress), transition.to);
 	if (progress >= 1.f) {
-		state.error_message_progress = state.error_message_to;
+		transition.progress = transition.to;
 		stop_error_message_animation(state);
-		if (state.error_message_progress == 0.f) ShowWindow(state.controls.static_error_message, SW_HIDE);
+		if (transition.progress == 0.f) ShowWindow(state.controls.static_error_message, SW_HIDE);
 	}
 	resize_controls(state);
 	ask_window_for_repaint(state.wnd);
@@ -108,22 +109,23 @@ void CALLBACK error_message_animation_timer_proc(HWND wnd, UINT, UINT_PTR, DWORD
 
 void start_error_message_animation(State& state, bool show) {
 	stop_error_message_animation(state);
+	auto& transition = state.error_message_animation;
 	f32 target = show ? 1.f : 0.f;
-	if (state.error_message_progress == target) {
+	if (transition.progress == target) {
 		if (!show) ShowWindow(state.controls.static_error_message, SW_HIDE);
 		return;
 	}
-	state.error_message_from = state.error_message_progress;
-	state.error_message_to = target;
+	transition.from = transition.progress;
+	transition.to = target;
 	if (animation::enabled_by_system() && IsWindowVisible(state.wnd)) {
-		state.error_message_timeline.start(error_message_animation_duration_ms);
+		transition.timeline.start(error_message_animation_duration_ms);
 		if (SetTimer(state.wnd, error_message_animation_timer_id, 16, error_message_animation_timer_proc)) {
 			tick_error_message_animation(state);
 			return;
 		}
 		stop_error_message_animation(state);
 	}
-	state.error_message_progress = target;
+	transition.progress = target;
 	if (!show) ShowWindow(state.controls.static_error_message, SW_HIDE);
 	resize_controls(state);
 	ask_window_for_repaint(state.wnd);
