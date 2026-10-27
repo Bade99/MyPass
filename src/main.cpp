@@ -76,7 +76,7 @@ void setup_fonts() {
 	lf.lfWeight = default_weight;
 
 
-	lf.lfHeight = (LONG)((float)GetSystemMetrics(SM_CYMENU) * .85f);
+	lf.lfHeight = (LONG)((float)GetSystemMetricsForDpi(SM_CYMENU, get_effective_dpi()) * .85f);
 	fonts.Menu = CreateFontIndirect(&lf);
 	Assert(fonts.Menu);
 

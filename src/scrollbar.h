@@ -126,7 +126,7 @@ RECT calc_scrollbar(State& state) {
 	f32 work_extent = vertical ? RECTH(work_rc) : RECTW(work_rc);
 	f32 sb_lenght = sb_sz * work_extent;
 
-	f32 cursor_height = DPI(GetSystemMetrics(SM_CYCURSOR));
+	f32 cursor_height = GetSystemMetricsForDpi(SM_CYCURSOR, get_effective_dpi(state.wnd));
 	if (sb_sz != 0) sb_lenght = maximum(sb_lenght, cursor_height);
 
 	RECT sb_rc;
@@ -500,7 +500,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case custom_message::AUTORESIZE:
 	{
-		int scrollbar_thickness = DPI(maximum(GetSystemMetrics(SM_CXVSCROLL) * .8f, 5));
+		int scrollbar_thickness = maximum(GetSystemMetricsForDpi(SM_CXVSCROLL, get_effective_dpi(state.wnd)) * .8f, DPI(5));
 		resize_wnd(state, scrollbar_thickness);
 		update_window_visibility(state);
 	} break;

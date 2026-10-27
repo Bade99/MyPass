@@ -54,7 +54,7 @@ RECT calc_menu_rc(State& state) {
 		rc.left = r.left;
 		rc.top = RECTH(state.rc_caption);
 		rc.right = r.right;
-		rc.bottom = rc.top + GetSystemMetrics(SM_CYMENU);
+		rc.bottom = rc.top + GetSystemMetricsForDpi(SM_CYMENU, get_effective_dpi(state.wnd));
 	}
 	return rc;
 }
