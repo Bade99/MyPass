@@ -576,18 +576,21 @@ static BOOL SetMenuItemString(HMENU hmenu, UINT item, BOOL fByPositon, const TCH
   * DPI
   */
 
+template<bool use_debug_override = true>
 static u32 get_effective_dpi(HWND wnd = nil) {
 #ifdef _DEBUG
 	constexpr f32 debug_dpi_scale = 1.75;
-	if constexpr (debug_dpi_scale > 0.f) return (u32)(96.f * debug_dpi_scale + .5f);
+	if constexpr (use_debug_override && debug_dpi_scale > 0.f) return (u32)(96.f * debug_dpi_scale + .5f);
 #endif
 	return wnd ? GetDpiForWindow(wnd) : GetDpiForSystem();
 }
 
+template<bool use_debug_override = true>
 static f32 dpi_scale(f32 val) {
-	return val * (get_effective_dpi() / 96.f/*default dpi*/);
+	return val * (get_effective_dpi<use_debug_override>() / 96.f/*default dpi*/);
 }
-static f32 DPI(f32 val) { return dpi_scale(val); }
+template<bool use_debug_override = true>
+static f32 DPI(f32 val) { return dpi_scale<use_debug_override>(val); }
 
 
 struct UINumber {
