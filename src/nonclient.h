@@ -457,7 +457,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			TEXTMETRIC tm; GetTextMetrics(dc, &tm);
 
 			auto offset_y = IsMaximized(state.wnd) ? maximized_offset_y : 0;
-			HICON icon = (HICON)GetClassLongPtr(state.wnd, GCLP_HICONSM);
+			HICON icon = state.caption_icon;
 			int icon_height = (int)((float)tm.tmHeight * 1.5f);
 			int icon_width = icon_height;
 			int icon_align_height = (RECTH(state.rc_caption) - icon_height) / 2;
@@ -492,6 +492,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 #endif
 		state.caption_font = create_caption_font(get_effective_dpi(state.wnd));
 		Assert(state.caption_font);
+		i32 icon_size = GetSystemMetricsForDpi(SM_CXICON, get_effective_dpi(state.wnd));
+		state.caption_icon = (HICON)LoadImage(GetModuleHandle(nil), MAKEINTRESOURCE(ICO_LOGO), IMAGE_ICON, icon_size, icon_size, 0);
+		Assert(state.caption_icon);
 
 		CREATESTRUCT* createnfo = (CREATESTRUCT*)lparam;
 
@@ -656,6 +659,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			if (state.caption_font) {
 				DeleteObject(state.caption_font);
 				state.caption_font = nil;
+			}
+			if (state.caption_icon) {
+				DestroyIcon(state.caption_icon);
+				state.caption_icon = nil;
 			}
 			if (state.menu) {
 				DestroyMenu(state.menu);
@@ -935,7 +942,7 @@ void init_wndclass(HINSTANCE inst) {
 	wcex.hIcon = icon;
 	wcex.hCursor = LoadCursor(nil, IDC_ARROW);
 	wcex.lpszClassName = wndclass;
-	wcex.hIconSm = icon;
+	wcex.hIconSm = nil;
 
 	ATOM class_atom = RegisterClassEx(&wcex); Assert(class_atom);
 	wndclass_atom = class_atom;

@@ -35,6 +35,7 @@ namespace nonclient {
 		RECT rc_caption;
 		SIZE caption_btn;
 		HFONT caption_font;
+		HICON caption_icon;
 		bool active;
 
 		RECT rc_icon;
