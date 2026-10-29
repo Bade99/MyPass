@@ -214,6 +214,7 @@
     <ClInclude Include="helpers.h" />
     <ClInclude Include="child_layout.h" />
     <ClInclude Include="animation.h" />
+    <ClInclude Include="smooth_scroll.h" />
     <ClInclude Include="math.h" />
     <ClInclude Include="platform.h" />
     <ClInclude Include="reflection.h" />

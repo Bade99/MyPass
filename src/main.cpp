@@ -76,7 +76,7 @@ void setup_fonts() {
 	lf.lfWeight = default_weight;
 
 
-	lf.lfHeight = (LONG)((float)GetSystemMetrics(SM_CYMENU) * .85f);
+	lf.lfHeight = (LONG)((float)GetSystemMetricsForDpi(SM_CYMENU, get_effective_dpi()) * .85f);
 	fonts.Menu = CreateFontIndirect(&lf);
 	Assert(fonts.Menu);
 
@@ -141,7 +141,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 	};
 	HWND debug_wnd = create_root_window(
 		hInstance,
-		nonclient::calc_nonclient_rc_from_client({ .left = 0, .top = 0, .right = 300, .bottom = 300 }, false),
+		nonclient::calc_nonclient_rc_from_client({ .left = 0, .top = 0, .right = rdpi<false>(450), .bottom = rdpi<false>(580) }, false),
 		&debug_nc_param
 	);
 	#endif

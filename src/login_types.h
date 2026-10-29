@@ -27,7 +27,7 @@ constexpr auto msgbox_placement = MBP::center | MBP::top;
 struct Settings {
 
 #define foreach_LoginSettings_member(op) \
-		op(RECT, rc,200,200,600,450 ) \
+		op(RECT, rc,rdpi(200),rdpi(200),rdpi(600),rdpi(450) ) \
 
 	foreach_LoginSettings_member(_generate_member);
 

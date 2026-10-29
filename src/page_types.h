@@ -1,4 +1,5 @@
 #pragma once
+#include "smooth_scroll.h"
 
 namespace page {
 constexpr auto& wndclass = wndclass_name("page");
@@ -42,25 +43,14 @@ struct State {
 
 	bool does_scrolling;
 
-	struct {
-		bool active; //currently performing animation
-		int current_frame; //starts at
-		f32 dt;
-		int total_frames;
-		i64 _time_between; //internal
-		f32 time_between_last_two_scroll_events; //ms
-	} scroll_anim;
-	std::deque<int> scroll_tasks;
-
-	f32 scroll;//vertical scrolling of page //@int NOTE(fran): given the limitations of MoveWindow we must interpret this value as an integer (cast), the float precision is only used for animations
-	f32 wheel_scroll_remainder;
+	SmoothScroll scroller;
 
 	void init() {
-		scroll_tasks = decltype(scroll_tasks)();
+		new (&scroller) SmoothScroll{};
 	}
 
 	void uninit() {
-		scroll_tasks.~deque();
+		scroller.~SmoothScroll();
 	}
 };
 }

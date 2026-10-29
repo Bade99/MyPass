@@ -18,7 +18,7 @@ constexpr auto msgbox_placement = MBP::center | MBP::top;
 struct Settings {
 
 #define foreach_editor_member(op) \
-		op(RECT, rc,200,200,700,800 ) \
+		op(RECT, rc,rdpi(200),rdpi(200),rdpi(700),rdpi(800) ) \
 
 	foreach_editor_member(_generate_member);
 

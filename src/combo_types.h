@@ -10,7 +10,6 @@
 //combobox::set_function_on_selection_accepted() operation to perform when the user has confirmed a new selection
 //combobox::set_function_render_listbox_element()
 //combobox::set_function_measure_combobox()
-//combobox::set_function_measure_listbox_element() //TODO(fran)
 //combobox::set_function_render_combobox()
 //combobox::set_user_extra() extra user-defined data to be sent on each function call
 

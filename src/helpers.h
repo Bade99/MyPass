@@ -576,12 +576,23 @@ static BOOL SetMenuItemString(HMENU hmenu, UINT item, BOOL fByPositon, const TCH
   * DPI
   */
 
-static f32 dpiCorrection(f32 val) {
-	static auto scale = GetDpiForSystem() / 96.f/*default dpi*/;
-	f32 res = val * scale;
-	return res;
+template<bool use_debug_override = true>
+static u32 get_effective_dpi(HWND wnd = nil) {
+#ifdef _DEBUG
+	constexpr f32 debug_dpi_scale = 1.75;
+	if constexpr (use_debug_override && debug_dpi_scale > 0.f) return (u32)(96.f * debug_dpi_scale + .5f);
+#endif
+	return wnd ? GetDpiForWindow(wnd) : GetDpiForSystem();
 }
-static f32 DPI(f32 val) { return dpiCorrection(val); }
+
+template<bool use_debug_override = true>
+static f32 dpi_scale(f32 val) {
+	return val * (get_effective_dpi<use_debug_override>() / 96.f/*default dpi*/);
+}
+template<bool use_debug_override = true>
+static f32 DPI(f32 val) { return dpi_scale<use_debug_override>(val); }
+template<bool use_debug_override = true>
+static i32 rdpi(f32 val) { return (i32)roundf(DPI<use_debug_override>(val)); }
 
 
 struct UINumber {
@@ -614,6 +625,23 @@ static SIZE avg_str_dim(HFONT font, size_t char_cnt) {
 	res.cx = (int)(tm.tmAveCharWidth * char_cnt);
 
 	return res;
+}
+
+static i32 wheel_scroll_step(WPARAM wparam, i32 viewport_height, i32 line_height, f32& remainder) {
+	UINT scroll_lines = 3;
+	SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
+	if (!scroll_lines) {
+		remainder = 0;
+		return 0;
+	}
+	if (viewport_height <= 0 || line_height <= 0) return 0;
+	i32 distance = scroll_lines == WHEEL_PAGESCROLL || scroll_lines > (UINT)(viewport_height / line_height)
+		? viewport_height : (i32)scroll_lines * line_height;
+	f32 requested_scroll = remainder +
+		(f32)GET_WHEEL_DELTA_WPARAM(wparam) * (f32)distance / (f32)WHEEL_DELTA;
+	i32 step = (i32)requested_scroll;
+	remainder = requested_scroll - step;
+	return step;
 }
 
 /**

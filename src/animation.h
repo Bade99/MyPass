@@ -1,5 +1,6 @@
 #pragma once
 #include "helpers.h"
+#include <cmath>
 
 namespace animation {
 
@@ -48,6 +49,12 @@ static f32 ease_in_out_parametric_blend(f32 t /*[0.0,1.0]*/) { return squared(t)
 static f32 ease_in_out_smoothstep(f32 t) { return squared(t) * (3.0f - 2.0f * t); }
 
 static f32 ease_out_cubic(f32 progress) { return 1.f - cubed(1.f - progress); }
+
+static f32 exponential_smoothing_factor(f64 elapsed_ms, f64 time_constant_ms) {
+	if (elapsed_ms <= 0) return 0.f;
+	if (time_constant_ms <= 0) return 1.f;
+	return 1.f - (f32)std::exp(-elapsed_ms / time_constant_ms);
+}
 
 static bool enabled_by_system() { BOOL enabled = true; return !SystemParametersInfo(SPI_GETCLIENTAREAANIMATION, 0, &enabled, 0) || enabled; }
 

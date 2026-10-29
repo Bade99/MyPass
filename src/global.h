@@ -81,48 +81,51 @@ union KnownFonts {
 	private: void _() { static_assert(sizeof(*this) == sizeof(all)); }
 } static fonts{};
 
+#define foreach_bitmap(op) \
+	op(HBITMAP, close) \
+	op(HBITMAP, minimize) \
+	op(HBITMAP, maximize) \
+	op(HBITMAP, restore) \
+	op(HBITMAP, menu_close) \
+	op(HBITMAP, menu_minimize) \
+	op(HBITMAP, menu_maximize) \
+	op(HBITMAP, menu_restore) \
+	op(HBITMAP, solid_arrow_left) \
+	op(HBITMAP, solid_arrow_right) \
+	op(HBITMAP, solid_arrow_up) \
+	op(HBITMAP, solid_arrow_down) \
+	op(HBITMAP, line_arrow_right) \
+	op(HBITMAP, pointed_line_arrow_right) \
+	op(HBITMAP, dropdown) \
+	op(HBITMAP, dropdown_up) \
+	op(HBITMAP, circle) \
+	op(HBITMAP, bin) \
+	op(HBITMAP, eye_open) \
+	op(HBITMAP, eye_closed) \
+	op(HBITMAP, add) \
+	op(HBITMAP, edit) \
+	op(HBITMAP, clipboard) \
+	op(HBITMAP, cut) \
+	op(HBITMAP, paste) \
+	op(HBITMAP, padlock) \
+	op(HBITMAP, cancel) \
+	op(HBITMAP, search) \
+	op(HBITMAP, menu_search) \
+	op(HBITMAP, calendar) \
+	op(HBITMAP, language) \
+	op(HBITMAP, pin) \
+	op(HBITMAP, menu_undo) \
+	op(HBITMAP, menu_redo) \
+	op(HBITMAP, menu_save) \
+	op(HBITMAP, menu_paste) \
+	op(HBITMAP, menu_select_all) \
+	op(HBITMAP, menu_update)
+
 union KnownBitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 	struct {
-		HBITMAP close;
-		HBITMAP minimize;
-		HBITMAP maximize;
-		HBITMAP restore;
-		HBITMAP menu_close;
-		HBITMAP menu_minimize;
-		HBITMAP menu_maximize;
-		HBITMAP menu_restore;
-		HBITMAP solid_arrow_left;
-		HBITMAP solid_arrow_right;
-		HBITMAP solid_arrow_up;
-		HBITMAP solid_arrow_down;
-		HBITMAP line_arrow_right;
-		HBITMAP pointed_line_arrow_right;
-		HBITMAP dropdown;
-		HBITMAP dropdown_up;
-		HBITMAP circle;
-		HBITMAP bin;
-		HBITMAP eye_open;
-		HBITMAP eye_closed;
-		HBITMAP add;
-		HBITMAP edit;
-		HBITMAP clipboard;
-		HBITMAP cut;
-		HBITMAP paste;
-		HBITMAP padlock;
-		HBITMAP cancel;
-		HBITMAP search;
-		HBITMAP menu_search;
-		HBITMAP calendar;
-		HBITMAP language;
-		HBITMAP pin;
-		HBITMAP menu_undo;
-		HBITMAP menu_redo;
-		HBITMAP menu_save;
-		HBITMAP menu_paste;
-		HBITMAP menu_select_all;
-		HBITMAP menu_update;
+		foreach_bitmap(_generate_member_no_default_init)
 	};
-	HBITMAP all[38];
+	HBITMAP all[0 + foreach_bitmap(_generate_count)];
 
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 } static bmps{};

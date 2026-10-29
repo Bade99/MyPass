@@ -62,14 +62,14 @@ static LRESULT handle_wm_measureitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM l
 			auto space_width = urender::measure_text(dc, fonts.Menu, L" ").cx;
 
 			//Check if we are a "top level" menu
-			item->itemWidth = text_width + ((HMENU)item->itemData == top_level_menu ? space_width * 2 : GetSystemMetrics(SM_CXMENUCHECK) + space_width);
-			item->itemHeight = GetSystemMetrics(SM_CYMENU);
+			item->itemWidth = text_width + ((HMENU)item->itemData == top_level_menu ? space_width * 2 : GetSystemMetricsForDpi(SM_CXMENUCHECK, get_effective_dpi(wnd)) + space_width);
+			item->itemHeight = GetSystemMetricsForDpi(SM_CYMENU, get_effective_dpi(wnd));
 
 			return TRUE;
 		} break;
 		case MF_SEPARATOR:
 		{
-			item->itemHeight = 3;
+			item->itemHeight = rdpi(3);
 			item->itemWidth = 1;
 			return TRUE;
 		} break;
@@ -180,7 +180,7 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 					if (hbmp) {
 						BITMAP bitmap; GetObject(hbmp, sizeof(bitmap), &bitmap);
 
-						int img_max_x = GetSystemMetrics(SM_CXMENUCHECK);
+						int img_max_x = GetSystemMetricsForDpi(SM_CXMENUCHECK, get_effective_dpi(wnd));
 						int img_max_y = RECTH(item->rcItem);
 						auto img_min_dim = minimum(img_max_x, img_max_y);
 						//HACK: instead use png + gdi+ + color matrices
@@ -205,7 +205,7 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 				}
 
 				// Determine where to draw, leave space for a check mark and the extra 1 space
-				auto text_left = item->rcItem.left + GetSystemMetrics(SM_CXMENUCHECK) + x_pad;
+				auto text_left = item->rcItem.left + GetSystemMetricsForDpi(SM_CXMENUCHECK, get_effective_dpi(wnd)) + x_pad;
 
 				TCHAR menu_str[64]; *menu_str = 0;
 				i32 menu_str_char_cnt = GetMenuString((HMENU)item->hwndItem, item->itemID, menu_str, ARRAYSIZE(menu_str), MF_BYCOMMAND);
@@ -221,7 +221,7 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 					HBITMAP mask = bmps.solid_arrow_right; //TODO(fran): parametric
 					BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo);
 					Assert(bmpnfo.bmBitsPixel == 1);
-					int img_max_x = GetSystemMetrics(SM_CXMENUCHECK);
+					int img_max_x = GetSystemMetricsForDpi(SM_CXMENUCHECK, get_effective_dpi(wnd));
 					int img_max_y = RECTH(item->rcItem);
 					int img_sz = roundNdown(bmpnfo.bmWidth, minimum(img_max_x, img_max_y));//HACK: instead use png + gdi+ + color matrices
 					if (!img_sz) img_sz = bmpnfo.bmWidth; //More HACKs
@@ -240,7 +240,7 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 		} break;
 		case MFT_SEPARATOR:
 		{
-			const int separator_x_padding = 3;
+			const int separator_x_padding = rdpi(3);
 
 			HBRUSH bk_br = colors.CaptionBk;
 			if (top_level_menu) {

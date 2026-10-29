@@ -580,10 +580,12 @@ void add_controls(State& state) {
 
 		urender::draw_text(dc, txt_rc, to_utf_str(txt), font, txt_br, urender::TextAlignment::left, 0);
 	});
-	combobox::set_function_render_listbox_element(controls.combo_sort, [](HDC dc, rect_i32 r, listbox::RenderFlags flags, void* element, void* user_extra) {
-		int w = r.w, h = r.h;
+	combobox::set_function_render_listbox_element(controls.combo_sort, [](HDC dc, rect_i32 r, listbox::RenderFlags flags, void* element, void* user_extra, listbox::ElementPass pass) -> i32 {
 		auto item = std::bit_cast<SortComboItem>(element);
 		auto txt = RS(item.label_id);
+		HFONT font = fonts.General;
+		i32 x_pad = avg_str_dim(font, 1).cx;
+		if (pass == listbox::ElementPass::measure) return urender::measure_text(dc, font, str_view{ txt }).cx + 2 * x_pad;
 
 		//Draw bk
 		HBRUSH bk_br = colors.ControlBk, txt_br = colors.ControlTxt;
@@ -594,10 +596,10 @@ void add_controls(State& state) {
 		FillRect(dc, &bk_rc, bk_br);
 
 		//Draw text
-		HFONT font = fonts.General;
 		RECT txt_rc = bk_rc;
 
-		urender::draw_text(dc, txt_rc, to_utf_str(txt), font, txt_br, urender::TextAlignment::left, avg_str_dim(font, 1).cx);
+		urender::draw_text(dc, txt_rc, to_utf_str(txt), font, txt_br, urender::TextAlignment::left, x_pad);
+		return 0;
 	});
 
 	auto scroll_area = page::create_scrollable_area(state.wnd);

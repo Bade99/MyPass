@@ -60,7 +60,19 @@ namespace listbox {
 		flags.on_selected = state.selected_element == element_index;
 		flags.on_mouseover = state.mouse_hover_element == element_index;
 
-		state.render_element(dc, elem_rc, flags, state.elements[element_index], state.user_extra);
+		state.render_element(dc, elem_rc, flags, state.elements[element_index], state.user_extra, ElementPass::paint);
+	}
+
+	i32 measure_desired_width(HWND wnd) {
+		State* state = get_state(wnd);
+		if (!state || !state->render_element) return 0;
+		HDC dc = GetDC(wnd);
+		if (!dc) return 0;
+		defer{ ReleaseDC(wnd, dc); };
+		i32 width = 0;
+		for (void* element : state->elements)
+			width = maximum(width, state->render_element(dc, { 0, 0, 0, state->element_dim.cy }, {}, element, state->user_extra, ElementPass::measure));
+		return width ? width + 2 * state->border_thickness : 0;
 	}
 
 	void render_backbuffer(State& state, bool window_enabled) {
@@ -305,6 +317,7 @@ namespace listbox {
 	}
 
 	void scroll_selection_into_view(State& state) {
+		state.scroller.cancel();
 		RECT client_rc; GetClientRect(state.wnd, &client_rc);
 		int view_height = RECTH(client_rc);
 		int content_height = state.backbuffer_dim.cy;
@@ -392,6 +405,24 @@ namespace listbox {
 		}
 	}
 
+	void apply_scroll_position(HWND wnd, f32 previous_offset, f32 offset) {
+		State& state = *get_state(wnd);
+		RECT client_rect; GetClientRect(state.wnd, &client_rect);
+		i32 max_scroll = maximum(0, state.backbuffer_dim.cy - RECTH(client_rect));
+		i32 original_scroll_y = state.scroll_y - (i32)previous_offset;
+		i32 scroll_y = clamp(0, (i32)(original_scroll_y + offset), max_scroll);
+		if (state.scroll_y == scroll_y) return;
+		state.scroll_y = scroll_y;
+		size_t old_hover = state.mouse_hover_element;
+		POINT cursor; GetCursorPos(&cursor); ScreenToClient(state.wnd, &cursor);
+		state.mouse_hover_element = mouse_element_at(state, cursor);
+		if (old_hover != state.mouse_hover_element) {
+			if (old_hover < state.elements.size()) render_backbuffer_element(state, old_hover);
+			if (state.mouse_hover_element < state.elements.size()) render_backbuffer_element(state, state.mouse_hover_element);
+		}
+		ask_window_for_repaint(state.wnd);
+	}
+
 	LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//printf("LISTBOX:%s\n",msgToString(msg));
 		State& state = *get_state(hwnd);
@@ -407,6 +438,8 @@ namespace listbox {
 			st->parent = creation_nfo->hwndParent;//NOTE: we could also be a floating wnd and parent be null
 			//Assert(st->parent == 0);//NOTE: we only handle floating listboxes for now
 			st->elements = decltype(st->elements)();
+			new (&st->scroller) SmoothScroll{};
+			st->scroller.init(hwnd, apply_scroll_position);
 
 			st->selected_element = st->mouse_hover_element = st->clicked_element = st->stored_clicked_element = no_element;
 
@@ -443,6 +476,7 @@ namespace listbox {
 		} break;
 		case WM_SHOWWINDOW:
 		{
+			if (!wparam) state.scroller.cancel();
 			return DefWindowProc(hwnd, msg, wparam, lparam);
 		} break;
 		case WM_DESTROY:
@@ -474,6 +508,7 @@ namespace listbox {
 			if (&state) {
 				if (state.backbuffer) { DeleteBitmap(state.backbuffer); state.backbuffer = 0; }
 				state.elements.~vector();
+				state.scroller.~SmoothScroll();
 				DeleteDC(state.offscreen_dc);
 				set_window_state(state.wnd, nil);
 				free(&state);
@@ -613,7 +648,13 @@ namespace listbox {
 		} break;
 		case WM_MOUSEWHEEL:
 		{
-			return DefWindowProc(hwnd, msg, wparam, lparam);//propagates the msg to the parent
+			RECT client_rect; GetClientRect(state.wnd, &client_rect);
+			i32 view_height = RECTH(client_rect);
+			i32 max_scroll = maximum(0, state.backbuffer_dim.cy - view_height);
+			if (!max_scroll || state.element_dim.cy <= 0) return DefWindowProc(hwnd, msg, wparam, lparam);
+			i32 step = wheel_scroll_step(wparam, view_height, state.element_dim.cy, state.scroller.wheel_remainder);
+			if (step) state.scroller.start(-step);
+			return 0;
 		} break;
 		case WM_GETTEXT:
 		{

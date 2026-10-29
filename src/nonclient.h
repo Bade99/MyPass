@@ -26,25 +26,50 @@ constexpr auto top_border_thickness = 1;
 constexpr bool menu_bottom_border = false;
 constexpr auto menu_bottom_border_thickness = 1;
 
-constexpr auto maximized_offset_y = 4;
-
 State* get_state(HWND wnd) { _control_create_function__get_state }
+
+i32 maximized_caption_offset_y(HWND wnd) {
+	if (!IsMaximized(wnd)) return 0;
+	POINT client_origin{};
+	MONITORINFO monitor_info{ .cbSize = sizeof(MONITORINFO) };
+	if (!ClientToScreen(wnd, &client_origin) ||
+		!GetMonitorInfo(MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST), &monitor_info)) return 0;
+	return maximum(0, monitor_info.rcWork.top - client_origin.y);
+}
+
+RECT adjust_frame_rect_for_dpi(RECT client_rc, bool has_menu, u32 dpi) {
+	RECT window_rc = client_rc;
+	bool adjusted = AdjustWindowRectExForDpi(&window_rc, WS_OVERLAPPEDWINDOW, has_menu, 0, dpi);
+	Assert(adjusted);
+	return window_rc;
+}
+
+i32 caption_height_for_dpi(u32 dpi) {
+	RECT client_rc{ 0,0,100,100 };
+	RECT window_rc = adjust_frame_rect_for_dpi(client_rc, false, dpi);
+	return distance(client_rc.top, window_rc.top);
+}
+
+HFONT create_caption_font(u32 dpi) {
+	LOGFONT lf{};
+	if (!GetObject(GetStockFont(DEFAULT_GUI_FONT), sizeof(lf), &lf)) return nil;
+	lf.lfHeight = MulDiv(lf.lfHeight, dpi, get_effective_dpi<false>());
+	lf.lfWidth = MulDiv(lf.lfWidth, dpi, get_effective_dpi<false>());
+	return CreateFontIndirect(&lf);
+}
 
 void calc_caption(State& state) {
 	GetClientRect(state.wnd, &state.rc_caption);
-
-	RECT testrc{ 0,0,100,100 }; RECT ncrc = testrc;
-	AdjustWindowRect(&ncrc, WS_OVERLAPPEDWINDOW, FALSE);//no menu
-
-	state.rc_caption.bottom = distance(testrc.top, ncrc.top);
+	state.rc_caption.bottom = caption_height_for_dpi(get_effective_dpi(state.wnd));
 
 	state.caption_btn.cy = RECTH(state.rc_caption); state.caption_btn.cx = state.caption_btn.cy * 16 / 9;
 }
 
 RECT calc_nonclient_rc_from_client(RECT client_rc, BOOL has_menu) {
-	RECT res = client_rc;
-	AdjustWindowRect(&res, WS_OVERLAPPEDWINDOW, has_menu);//TODO(fran): standardize this or some other measure
-	return res;
+	RECT actual_window_rc = adjust_frame_rect_for_dpi(client_rc, has_menu, get_effective_dpi<false>());
+	RECT effective_window_rc = adjust_frame_rect_for_dpi(client_rc, has_menu, get_effective_dpi());
+	actual_window_rc.top = effective_window_rc.top;
+	return actual_window_rc;
 }
 
 RECT calc_menu_rc(State& state) {
@@ -54,7 +79,7 @@ RECT calc_menu_rc(State& state) {
 		rc.left = r.left;
 		rc.top = RECTH(state.rc_caption);
 		rc.right = r.right;
-		rc.bottom = rc.top + GetSystemMetrics(SM_CYMENU);
+		rc.bottom = rc.top + GetSystemMetricsForDpi(SM_CYMENU, get_effective_dpi(state.wnd));
 	}
 	return rc;
 }
@@ -68,14 +93,14 @@ RECT calc_client_rc(State& state) {
 
 RECT calc_btn_min_rc(State& state) {
 	RECT r; GetClientRect(state.wnd, &r);
-	auto offset_y = IsMaximized(state.wnd) ? maximized_offset_y : 0;
+	auto offset_y = maximized_caption_offset_y(state.wnd);
 	RECT rc{ r.right - 3 * state.caption_btn.cx, r.top, r.right - 2 * state.caption_btn.cx, r.top + state.caption_btn.cy };
 	rc.top += top_border_thickness + offset_y;
 	return rc;
 }
 
 RECT calc_btn_max_rc(State& state) {
-	auto offset_y = IsMaximized(state.wnd) ? maximized_offset_y : 0;
+	auto offset_y = maximized_caption_offset_y(state.wnd);
 	RECT r; GetClientRect(state.wnd, &r);
 	RECT rc{ r.right - 2 * state.caption_btn.cx, r.top, r.right - 1 * state.caption_btn.cx, r.top + state.caption_btn.cy };
 	rc.top += top_border_thickness + offset_y;
@@ -84,7 +109,7 @@ RECT calc_btn_max_rc(State& state) {
 
 RECT calc_btn_close_rc(State& state) {
 	RECT r; GetClientRect(state.wnd, &r);
-	auto offset_y = IsMaximized(state.wnd) ? maximized_offset_y : 0;
+	auto offset_y = maximized_caption_offset_y(state.wnd);
 	RECT rc{ r.right - 1 * state.caption_btn.cx, r.top, r.right - 0 * state.caption_btn.cx, r.top + state.caption_btn.cy };
 	rc.top += top_border_thickness + offset_y;
 	return rc;
@@ -201,7 +226,7 @@ void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 		FillRect(dc, &bkrc, bkbr);
 
 		RECT menuitemrc = menurc;
-		int menu_xpad = 4;
+		int menu_xpad = rdpi(4);
 		menuitemrc.left += menu_xpad;
 
 		//Store current item count
@@ -434,18 +459,17 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			auto bk_rc = state.rc_caption; bk_rc.top += top_border_thickness;
 			FillRect(dc, &bk_rc, state.active ? colors.CaptionBk : colors.CaptionBk_Inactive);
 
-			HFONT caption_font = GetStockFont(DEFAULT_GUI_FONT);
-			SelectFont(dc, caption_font);
+			HFONT old_font = SelectFont(dc, state.caption_font); defer{ SelectFont(dc, old_font); };
 			TCHAR title[128]{}; GetWindowText(state.wnd, title, ARRAYSIZE(title));
 			TEXTMETRIC tm; GetTextMetrics(dc, &tm);
 
-			auto offset_y = IsMaximized(state.wnd) ? maximized_offset_y : 0;
-			HICON icon = (HICON)GetClassLongPtr(state.wnd, GCLP_HICONSM);
+			auto offset_y = maximized_caption_offset_y(state.wnd);
+			HICON icon = state.caption_icon;
 			int icon_height = (int)((float)tm.tmHeight * 1.5f);
 			int icon_width = icon_height;
 			int icon_align_height = (RECTH(state.rc_caption) - icon_height) / 2;
 			int icon_align_width = icon_align_height;
-			state.rc_icon = rectWH(icon_align_width, icon_align_height, icon_width, icon_height);
+			state.rc_icon = rectWH(icon_align_width, icon_align_height + offset_y, icon_width, icon_height);
 			auto iconnfo = MyGetIconInfo(icon);
 			urender::draw_icon(dc, icon_align_width, icon_align_height + offset_y, icon_width, icon_height, icon, 0, 0, iconnfo.w, iconnfo.h);
 
@@ -455,7 +479,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			title_rc.right = state.settings->can_maximize ? calc_btn_min_rc(state).left : calc_btn_max_rc(state).left;
 			title_rc.top += offset_y;
 			title_rc.bottom += offset_y;
-			urender::draw_text(dc, title_rc, to_utf_str(title), caption_font, txtbr, urender::TextAlignment::left, 0);
+			urender::draw_text(dc, title_rc, to_utf_str(title), state.caption_font, txtbr, urender::TextAlignment::left, 0);
 
 		}
 
@@ -473,6 +497,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		LONG_PTR  dwStyle = GetWindowLongPtr(state.wnd, GWL_STYLE);
 		SetWindowLongPtr(state.wnd, GWL_STYLE, dwStyle | WS_OVERLAPPEDWINDOW);
 #endif
+		state.caption_font = create_caption_font(get_effective_dpi(state.wnd));
+		Assert(state.caption_font);
+		i32 icon_size = GetSystemMetricsForDpi(SM_CXICON, get_effective_dpi(state.wnd));
+		state.caption_icon = (HICON)LoadImage(GetModuleHandle(nil), MAKEINTRESOURCE(ICO_LOGO), IMAGE_ICON, icon_size, icon_size, 0);
+		Assert(state.caption_icon);
 
 		CREATESTRUCT* createnfo = (CREATESTRUCT*)lparam;
 
@@ -531,8 +560,15 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		LRESULT res = DefWindowProc(hwnd, msg, wparam, lparam);
 		if (res == HTCLIENT) {
-			int top_margin = 8;
-			int top_side_margin = 16;
+			i32 top_margin = 0;
+			i32 top_side_margin = 0;
+			if (!IsMaximized(hwnd)) {
+				RECT resize_frame{};
+				if (AdjustWindowRectExForDpi(&resize_frame, WS_OVERLAPPEDWINDOW & ~WS_CAPTION, false, 0, get_effective_dpi<false>(hwnd))) {
+					top_margin = -resize_frame.top;
+					top_side_margin = -resize_frame.left * 2;
+				}
+			}
 			POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) }; ScreenToClient(hwnd, &mouse);
 			RECT rc; GetClientRect(hwnd, &rc);
 			RECT rc_top; rc_top.top = rc.top; rc_top.left = rc.left + top_side_margin; rc_top.bottom = rc_top.top + top_margin; rc_top.right = rc.right - top_side_margin;
@@ -554,8 +590,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_NCCALCSIZE:
 	{
 		RECT testrc{ 0,0,100,100 };
-		RECT ncrc = testrc;
-		AdjustWindowRect(&ncrc, WS_OVERLAPPEDWINDOW, FALSE); //TODO(fran): somehow link this params with calc_caption
+		RECT ncrc = adjust_frame_rect_for_dpi(testrc, false, get_effective_dpi<false>(hwnd));
 
 		calc_caption(state);//TODO(fran): find out which is the one and only magical msg where this can be put in
 
@@ -635,6 +670,14 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_NCDESTROY:
 	{
 		if (&state) {
+			if (state.caption_font) {
+				DeleteObject(state.caption_font);
+				state.caption_font = nil;
+			}
+			if (state.caption_icon) {
+				DestroyIcon(state.caption_icon);
+				state.caption_icon = nil;
+			}
 			if (state.menu) {
 				DestroyMenu(state.menu);
 				state.menu = nil;
@@ -913,7 +956,7 @@ void init_wndclass(HINSTANCE inst) {
 	wcex.hIcon = icon;
 	wcex.hCursor = LoadCursor(nil, IDC_ARROW);
 	wcex.lpszClassName = wndclass;
-	wcex.hIconSm = icon;
+	wcex.hIconSm = nil;
 
 	ATOM class_atom = RegisterClassEx(&wcex); Assert(class_atom);
 	wndclass_atom = class_atom;
