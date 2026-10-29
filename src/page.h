@@ -7,9 +7,6 @@
 
 namespace page {
 
-constexpr auto scroll_anim_timer_id = 1111;
-constexpr auto scroll_timeout_timer_id = 2222;
-
 auto get_state(HWND wnd) { _control_create_function__get_state }
 
 void set_theme(HWND wnd, const Theme& src) { _control_create_function__set_theme }
@@ -62,7 +59,7 @@ void set_wnd_size(HWND scrollable_area, i32 h) {
 			.w = page_space_w, //we dont support horizontal scrolling, so we clamp page w to page_space w
 			.h = page_height,
 		};
-		state.scroll += page_y - page_relative_to_space.top;
+		state.scroller.offset += page_y - page_relative_to_space.top;
 		MoveWindow(state.controls.content_area, page, false);
 		if (page_y != page_relative_to_space.top)
 			RedrawWindow(state.controls.content_area, nil, nil, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
@@ -72,99 +69,19 @@ void set_wnd_size(HWND scrollable_area, i32 h) {
 	}
 }
 
-void cancel_smooth_scroll(State& state) {
-	KillTimer(state.wnd, scroll_anim_timer_id);
-	KillTimer(state.wnd, scroll_timeout_timer_id);
-	state.scroll_tasks.clear();
-	state.scroll_anim.active = false;
-	state.wheel_scroll_remainder = 0;
-}
-
-void smooth_scroll(State& state, int increment) {
+void apply_scroll_position(HWND wnd, f32 previous_offset, f32 offset) {
+	State& state = *get_state(wnd);
 	AssertAll(state.controls.all);
-	//TODO(fran): the scrolling is now pretty good & responsive, only thing missing is a bit of smoothing across large distances (speeding up at the beginning and slowing down close to the end, possibly based on the frecuency of new scroll events?)
-	state.scroll_anim.time_between_last_two_scroll_events = (f32)EndCounter(state.scroll_anim._time_between); //TODO(fran): it may be good to calculate the 2nd derivative of this, aka the delta between the last two times between two scroll events
-	if (state.scroll_anim.time_between_last_two_scroll_events > .200f /*ms expressed in seconds*/)
-		state.scroll_anim.time_between_last_two_scroll_events = 0;
-	//printf("time between last two scroll events: %f ms\n", (f32)EndCounter(state.scroll_anim._time_between));
-	state.scroll_anim._time_between = StartCounter();
-
-	if (state.scroll_tasks.size() && (signum(state.scroll_tasks.back()) != signum(increment))) {
-		//IMPORTANT(fran): I think the Timer runs on the same thread, otherwise race conditions accessing & modifying scroll_tasks can crash the app
-		auto last = state.scroll_tasks.back();
-		state.scroll_tasks.clear();
-		state.scroll_tasks.push_back(last);
-	}
-	state.scroll_tasks.push_back(increment);
-
-
-	static void (*scroll_timeout)(HWND, UINT, UINT_PTR, DWORD) = [](HWND hwnd, UINT, UINT_PTR anim_id, DWORD) {
-		KillTimer(hwnd, anim_id);
-		State& state = *get_state(hwnd);
-		if (&state) {
-			if (state.scroll_tasks.size()) {
-				auto last = state.scroll_tasks.back();
-				state.scroll_tasks.clear();
-				state.scroll_tasks.push_back(last);
-			}
-		}
-	};
-
-	//If no new scroll events happen after X ms then stop scrolling, the user is no longer scrolling the mouse wheel and wants scrolling to stop
-	SetTimer(state.wnd, scroll_timeout_timer_id, 125/*ms*/, scroll_timeout);
-
-	static auto setup_scroll_anim = [](State& state, TIMERPROC scroll_animation) {
-		state.scroll_anim.active = true;
-
-		//auto anim_duration = (50.f + state.scroll_anim.time_between_last_two_scroll_events) / state.scroll_tasks.size(); //ms
-		auto anim_duration = 50.f / state.scroll_tasks.size() + state.scroll_anim.time_between_last_two_scroll_events; //ms //TODO(fran): the gradual slowdown effect works for short event chains, long ones, like the ones I can create with my free scrolling mouse still stop dead with no ease out
-		state.scroll_anim.dt = 1.f / (f32)refresh_rate_hz(state.wnd);//duration of each frame in seconds
-		state.scroll_anim.total_frames = (i32)maximum(anim_duration / (state.scroll_anim.dt * 1000.f), 1.f);
-		state.scroll_anim.current_frame = 1;
-		SetTimer(state.wnd, scroll_anim_timer_id, (u32)(state.scroll_anim.dt * 1000), scroll_animation);
-	};
-
-	static void (*scroll_anim)(HWND, UINT, UINT_PTR, DWORD) = [](HWND hwnd, UINT, UINT_PTR anim_id, DWORD) {
-		State& state = *get_state(hwnd);
-		if (&state && state.scroll_anim.active && !state.scroll_tasks.empty()) {
-
-			RECT r = get_window_rect_at(state.controls.content_area, state.wnd);
-			RECT parent_r; GetClientRect(state.wnd, &parent_r);
-			i32 parent_h = RECTH(parent_r);
-			i32 current_h = RECTH(r);
-			const i32 min_scroll_y = 0; //prevent scrolling to go above of the page boundaries
-			i32 max_scroll_y = -maximum(current_h - parent_h, 0); //prevent scrolling to go below of the page boundaries
-			i32 original_wnd_y = r.top - (i32)state.scroll;
-
-			f32 dy = (f32)state.scroll_tasks[0] / (f32)state.scroll_anim.total_frames;
-			state.scroll += dy;
-
-			i32 new_y = clamp(max_scroll_y, (i32)(original_wnd_y + state.scroll), min_scroll_y);
-
-			MoveWindow(state.controls.content_area, r.left, new_y, RECTW(r), RECTH(r), TRUE);
-
-			SendMessage(state.controls.v_scroll, scrollbar::custom_message::SET_POS, -new_y, 0);
-
-			if (state.scroll_anim.current_frame++ <= state.scroll_anim.total_frames) {
-				SetTimer(state.wnd, anim_id, (u32)(state.scroll_anim.dt * 1000), scroll_anim);
-			}
-			else {
-				state.scroll_tasks.pop_front();
-
-				if (state.scroll_tasks.empty()) {
-					state.scroll_anim.active = false;
-					KillTimer(state.wnd, anim_id);
-				}
-				else {
-					setup_scroll_anim(state, scroll_anim);
-				}
-			}
-		}
-	};
-
-	if (!state.scroll_anim.active) {
-		setup_scroll_anim(state, scroll_anim);
-	}
+	RECT r = get_window_rect_at(state.controls.content_area, state.wnd);
+	RECT parent_r; GetClientRect(state.wnd, &parent_r);
+	i32 parent_h = RECTH(parent_r);
+	i32 current_h = RECTH(r);
+	i32 max_scroll_y = -maximum(current_h - parent_h, 0);
+	i32 original_wnd_y = r.top - (i32)previous_offset;
+	i32 new_y = clamp(max_scroll_y, (i32)(original_wnd_y + offset), 0);
+	if (new_y == r.top) return;
+	MoveWindow(state.controls.content_area, r.left, new_y, RECTW(r), RECTH(r), TRUE);
+	SendMessage(state.controls.v_scroll, scrollbar::custom_message::SET_POS, -new_y, 0);
 }
 
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -181,6 +98,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		st->wnd = hwnd;
 		st->parent = creation_nfo->hwndParent;
 		st->init();
+		st->scroller.init(hwnd, apply_scroll_position);
 		return 1;
 	} break;
 	case WM_NCDESTROY:
@@ -205,23 +123,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		if (state.does_scrolling) {
 			AssertAll(state.controls.all);
-			UINT scroll_lines = 3;
-			SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
-			if (!scroll_lines) {
-				state.wheel_scroll_remainder = 0;
-				return 0;
-			}
-
-			int view_height = RECTH(get_client_rect(state.wnd));
-			if (view_height <= 0) return 0;
-			int line_height = maximum(1, avg_str_dim(fonts.General, 1).cy);
-			int scroll_distance = scroll_lines == WHEEL_PAGESCROLL || scroll_lines > (UINT)(view_height / line_height)
-				? view_height : (int)scroll_lines * line_height;
-			f32 requested_scroll = state.wheel_scroll_remainder +
-				(f32)GET_WHEEL_DELTA_WPARAM(wparam) * (f32)scroll_distance / (f32)WHEEL_DELTA;
-			int step = (int)requested_scroll;
-			state.wheel_scroll_remainder = requested_scroll - step;
-			if (step) smooth_scroll(state, step);
+			i32 step = wheel_scroll_step(wparam, RECTH(get_client_rect(state.wnd)),
+				maximum(1, avg_str_dim(fonts.General, 1).cy), state.scroller.wheel_remainder);
+			if (step) state.scroller.start(step);
 			return 0;
 		}
 		else return DefWindowProc(hwnd, msg, wparam, lparam);//propagates msg to the parent
@@ -235,7 +139,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		case SB_THUMBTRACK:
 		case SB_THUMBPOSITION: //INFO: can be used to detect the end of a SB_THUMBTRACK sequence
 		{
-			cancel_smooth_scroll(state);
+			state.scroller.cancel();
 			auto new_scroll = (HWND)lparam == state.controls.v_scroll
 				? (i32)SendMessage(state.controls.v_scroll, scrollbar::custom_message::GET_POS, 0, 0)
 				: (i32)HIWORD(wparam);
@@ -250,7 +154,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			i32 new_y = -clamp(min_scroll_y, (i32)(new_scroll), max_scroll_y);
 
 			MoveWindow(state.controls.content_area, r.left, new_y, RECTW(r), RECTH(r), TRUE);
-			state.scroll = (f32)new_y;
+			state.scroller.offset = (f32)new_y;
 		} break;
 		case SB_LINEDOWN:
 		case SB_LINEUP:
@@ -264,7 +168,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			elif(operation == SB_PAGEDOWN) step = -RECTH(get_client_rect(state.wnd));
 			elif(operation == SB_PAGEUP) step = RECTH(get_client_rect(state.wnd));
 			else Assert(0);
-			smooth_scroll(state, step);
+			state.scroller.start(step);
 			return 0;
 		} break;
 		default: Assert(0);

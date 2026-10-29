@@ -99,6 +99,9 @@
     <ClInclude Include="animation.h">
       <Filter>Header Files\Utils</Filter>
     </ClInclude>
+    <ClInclude Include="smooth_scroll.h">
+      <Filter>Header Files\Utils</Filter>
+    </ClInclude>
     <ClInclude Include="math.h">
       <Filter>Header Files\Utils</Filter>
     </ClInclude>

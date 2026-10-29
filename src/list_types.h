@@ -1,4 +1,5 @@
 #pragma once
+#include "smooth_scroll.h"
 #include <limits>
 
 namespace listbox {
@@ -40,6 +41,7 @@ struct State {
 	SIZE backbuffer_dim;
 
 	i32 scroll_y;
+	SmoothScroll scroller;
 
 	void* user_extra;
 };

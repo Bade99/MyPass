@@ -625,6 +625,23 @@ static SIZE avg_str_dim(HFONT font, size_t char_cnt) {
 	return res;
 }
 
+static i32 wheel_scroll_step(WPARAM wparam, i32 viewport_height, i32 line_height, f32& remainder) {
+	UINT scroll_lines = 3;
+	SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
+	if (!scroll_lines) {
+		remainder = 0;
+		return 0;
+	}
+	if (viewport_height <= 0 || line_height <= 0) return 0;
+	i32 distance = scroll_lines == WHEEL_PAGESCROLL || scroll_lines > (UINT)(viewport_height / line_height)
+		? viewport_height : (i32)scroll_lines * line_height;
+	f32 requested_scroll = remainder +
+		(f32)GET_WHEEL_DELTA_WPARAM(wparam) * (f32)distance / (f32)WHEEL_DELTA;
+	i32 step = (i32)requested_scroll;
+	remainder = requested_scroll - step;
+	return step;
+}
+
 /**
   * HWND
   */
