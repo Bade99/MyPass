@@ -47,6 +47,8 @@ int calc_line_height_px(State& state) {
 	return res;
 }
 
+i32 horizontal_text_padding_px() { return rdpi(3); }
+
 using text_render::release_com;
 using text_render::get_directwrite_factories;
 
@@ -509,7 +511,7 @@ void scroll_to_caret(State& state) {
 	RECT rc; GetClientRect(state.wnd, &rc);
 	auto w = RECTW(rc), h = RECTH(rc);
 	if (w <= 0 || h <= 0) return;
-	int horizontal_padding = GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_CENTER ? 3 : state.padding.x;
+	int horizontal_padding = GetWindowLongPtr(state.wnd, GWL_STYLE) & ES_CENTER ? horizontal_text_padding_px() : state.padding.x;
 	int old_scroll_x = state.scroll.x;
 	//TODO(fran): im sure this can be done branchless
 	if (int scroll = (state.caret.pos.x + state.caret.dim.cx) - (w - horizontal_padding + state.scroll.x); scroll > 0) {
@@ -548,6 +550,8 @@ void scroll_to_caret(State& state) {
 	}
 }
 
+void set_composition_pos(State& state);
+
 void reposition_caret(State& state, bool nocheck = false) {
 	POINT oldcaretp = state.caret.pos;
 	v2_i32 old_scroll = state.scroll;
@@ -560,6 +564,7 @@ void reposition_caret(State& state, bool nocheck = false) {
 		p.x -= state.scroll.x;
 		p.y -= state.scroll.y;
 		if (GetFocus() == state.wnd) SetCaretPos(p);
+		if (state.ime_composition.active && (nocheck || old_scroll.x != state.scroll.x)) set_composition_pos(state);
 	}
 	//if(GetFocus() == state.wnd) SetCaretPos(state.caret.pos); //NOTE: this introduced a bug with settext where calling settext with a null string on the focussed editbox would place the caret on the wrong place
 }
@@ -575,7 +580,7 @@ void update_char_pad(State& state) {
 		state.padding.x = (RECTW(rc) - calc_text_dim(state).cx) / 2;
 	}
 	else {
-		state.padding.x = 3; //TODO(fran): user defined and 'dpi pixels' based
+		state.padding.x = horizontal_text_padding_px(); //TODO(fran): user defined
 	}
 	state.padding.y = !state.line_breaks.size() ? (rc.bottom + rc.top - tm.tmHeight) / 2 : rc.top + (RECTH(rc) % tm.tmHeight) / 2; //TODO(fran): provide additional styles so the user can change vertical alignment
 }
@@ -830,6 +835,7 @@ bool insert_character(State& state, utf16_str s, size_t x_min, size_t x_max) {
 	const CharSel sel{ clamp((size_t)0, x_min, state.char_text.length()), clamp((size_t)0, x_max, state.char_text.length()) };
 
 	u64 text_length_after_removal = safe_subtract0(state.char_text.length(), sel.sel_width());
+	//TODO(fran): alert when text goes over the limit. Also for pastes or things like ime input we should decide between chopping off the excedent or rejecting the entire text that was sent
 	if (text_length_after_removal <= state.char_max_sz && s.cnt() <= state.char_max_sz - text_length_after_removal) {
 
 		//check for invalid characters
@@ -915,6 +921,9 @@ void begin_IME_composition(State& state) {
 	composition.document_replaced = false;
 	composition.has_result = false;
 	composition.position_x_min = state.selection.x_min();
+	composition.window_anchor = { state.caret.pos.x - state.scroll.x,
+		state.caret.pos.y - state.scroll.y + state.caret.dim.cy };
+	composition.scroll_x_at_start = state.scroll.x;
 	composition.selection_before = state.selection;
 	composition.selection_before_trailing = state.caret.trailing;
 	composition.committed_text.clear();
@@ -1247,12 +1256,12 @@ bool set_text(State& state, cstr* buf) {
 	return res;
 }
 
-void set_composition_pos(State& state)//TODO(fran): this must set the other stuff too
+void set_composition_pos(State& state)
 {
 	HIMC imc = ImmGetContext(state.wnd);
 	if (imc != NULL) {
 		defer{ ImmReleaseContext(state.wnd, imc); };
-		COMPOSITIONFORM cf;
+		COMPOSITIONFORM cf{};
 		//NOTE immgetcompositionwindow fails
 #if 0 //IME window no longer draws the unnecessary border with resizing and button, it is placed at cf.ptCurrentPos and extends down after each character
 		cf.dwStyle = CFS_POINT;
@@ -1271,11 +1280,14 @@ void set_composition_pos(State& state)//TODO(fran): this must set the other stuf
 			cf.dwStyle = CFS_RECT;
 
 			//TODO(fran): should I place the IME in line with the caret or below so the user can see what's already written in that line?
+			//TODO(fran): track the visual composition start when bidirectional or centered text changes layout without scrolling.
 			if (GetFocus() == state.wnd) {
-				cf.ptCurrentPos.x = state.caret.pos.x;
-				cf.ptCurrentPos.y = state.caret.pos.y + state.caret.dim.cy;
-				//TODO(fran): programatically set a good x axis size
-				cf.rcArea = { state.caret.pos.x , state.caret.pos.y + state.caret.dim.cy,state.caret.pos.x + 100,state.caret.pos.y + state.caret.dim.cy + 100 };
+				RECT client; GetClientRect(state.wnd, &client);
+				cf.ptCurrentPos.x = clamp(client.left,
+					state.ime_composition.window_anchor.x + state.ime_composition.scroll_x_at_start - state.scroll.x, client.right);
+				cf.ptCurrentPos.y = clamp(client.top, state.ime_composition.window_anchor.y, client.bottom);
+				cf.rcArea = rectWH(cf.ptCurrentPos.x, cf.ptCurrentPos.y,
+					maximum(1, RECTW(client)), maximum(1, RECTH(client)));
 			}
 			else {
 				cf.rcArea = { 0,0,0,0 };
@@ -1285,8 +1297,8 @@ void set_composition_pos(State& state)//TODO(fran): this must set the other stuf
 		}
 		else {
 			cf.dwStyle = CFS_RECT | CFS_FORCE_POSITION;
-			cf.ptCurrentPos.x = state.caret.pos.x;//INFO: it does _not_ respect x that goes beyond the control
-			cf.ptCurrentPos.y = state.caret.pos.y + state.caret.dim.cy;//INFO: it does _not_ respect y that goes beyond the control
+			cf.ptCurrentPos.x = state.caret.pos.x - state.scroll.x;//INFO: it does _not_ respect x that goes beyond the control
+			cf.ptCurrentPos.y = state.caret.pos.y - state.scroll.y + state.caret.dim.cy;//INFO: it does _not_ respect y that goes beyond the control
 			//TODO(fran): programatically set a good x axis size
 			cf.rcArea = rectWH(cf.ptCurrentPos.x, cf.ptCurrentPos.y, 1, 1);//INFO: it does _not_ respect w & h, if w or h is too small the window isnt shown, otherwise it's shown in one unique size
 #if 0 //this doesnt work, candidate window still shows up
@@ -2420,6 +2432,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_IME_SETCONTEXT://Sent after SetFocus to us (sent the first time on SetFocus)
 	{//TODO(fran): lots to discover here
+		//TODO(fran): render IME composition clauses, attributes, and cursor position in the text control, then suppress only ISC_SHOWUICOMPOSITIONWINDOW while keeping the candidate UI.
 		BOOL is_active = (BOOL)wparam;
 		//lparam = display options for IME window
 		u32 disp_flags = (u32)lparam;
@@ -2454,13 +2467,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		//doc:Sent immediately before the IME generates the composition string as a result of a keystroke
 		//This is a notification to an IME window to open its composition window. An application should process this message if it displays composition characters itself.
 		//If an application has created an IME window, it should pass this message to that window.The DefWindowProc function processes the message by passing it to the default IME window.
-		set_composition_pos(state);
-		set_composition_font(state);//TODO(fran): should I place this somewhere else?
 		if (state.ime_composition.active) {
 			bool en_change = end_IME_composition(state);
 			if (en_change) notify_parent(state, EN_CHANGE);
 		}
 		begin_IME_composition(state);
+		set_composition_pos(state);
+		set_composition_font(state);//TODO(fran): should I place this somewhere else?
 
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;

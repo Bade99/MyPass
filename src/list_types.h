@@ -9,7 +9,8 @@ constexpr size_t no_element = std::numeric_limits<size_t>::max();
 struct RenderFlags {
 	bool on_selected, on_clicked, on_mouseover;
 };
-typedef void(*listbox_func_renderelement)(HDC dc, rect_i32 r, RenderFlags flags, void* element, void* user_extra);
+enum class ElementPass { measure, paint };
+typedef i32(*listbox_func_renderelement)(HDC dc, rect_i32 r, RenderFlags flags, void* element, void* user_extra, ElementPass pass);
 typedef void(*listbox_func_on_click)(void* element, void* user_extra);
 
 struct State {

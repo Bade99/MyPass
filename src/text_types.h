@@ -163,6 +163,8 @@ struct ImeCompositionState {
 	bool has_result;
 
 	size_t position_x_min;
+	POINT window_anchor;
+	i32 scroll_x_at_start;
 	str removed_text, committed_text, provisional_text;
 	CharSel selection_before;
 	bool selection_before_trailing;

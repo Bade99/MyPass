@@ -141,7 +141,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 	};
 	HWND debug_wnd = create_root_window(
 		hInstance,
-		nonclient::calc_nonclient_rc_from_client({ .left = 0, .top = 0, .right = 450, .bottom = 580 }, false),
+		nonclient::calc_nonclient_rc_from_client({ .left = 0, .top = 0, .right = rdpi<false>(450), .bottom = rdpi<false>(580) }, false),
 		&debug_nc_param
 	);
 	#endif

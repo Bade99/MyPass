@@ -68,7 +68,11 @@ namespace table {
 			RECT col = row;
 			for (u32 i = 0; i < col_cnt; i++) {
 				col.right += cols_w[i];
-				RECT cell = col; InflateRect(&cell, -1, -1);
+				RECT cell = col;
+				cell.left += i == 0 ? 1 : 0;
+				cell.top += row.top == 0 ? 1 : 0;
+				--cell.right;
+				--cell.bottom;
 				cell_moves.push_back({ c[i], cell });
 				col.left = col.right;
 			}

@@ -69,7 +69,7 @@ static LRESULT handle_wm_measureitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM l
 		} break;
 		case MF_SEPARATOR:
 		{
-			item->itemHeight = 3;
+			item->itemHeight = rdpi(3);
 			item->itemWidth = 1;
 			return TRUE;
 		} break;
@@ -240,7 +240,7 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 		} break;
 		case MFT_SEPARATOR:
 		{
-			const int separator_x_padding = 3;
+			const int separator_x_padding = rdpi(3);
 
 			HBRUSH bk_br = colors.CaptionBk;
 			if (top_level_menu) {

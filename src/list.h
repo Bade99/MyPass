@@ -60,7 +60,19 @@ namespace listbox {
 		flags.on_selected = state.selected_element == element_index;
 		flags.on_mouseover = state.mouse_hover_element == element_index;
 
-		state.render_element(dc, elem_rc, flags, state.elements[element_index], state.user_extra);
+		state.render_element(dc, elem_rc, flags, state.elements[element_index], state.user_extra, ElementPass::paint);
+	}
+
+	i32 measure_desired_width(HWND wnd) {
+		State* state = get_state(wnd);
+		if (!state || !state->render_element) return 0;
+		HDC dc = GetDC(wnd);
+		if (!dc) return 0;
+		defer{ ReleaseDC(wnd, dc); };
+		i32 width = 0;
+		for (void* element : state->elements)
+			width = maximum(width, state->render_element(dc, { 0, 0, 0, state->element_dim.cy }, {}, element, state->user_extra, ElementPass::measure));
+		return width ? width + 2 * state->border_thickness : 0;
 	}
 
 	void render_backbuffer(State& state, bool window_enabled) {

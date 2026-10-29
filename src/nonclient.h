@@ -26,9 +26,16 @@ constexpr auto top_border_thickness = 1;
 constexpr bool menu_bottom_border = false;
 constexpr auto menu_bottom_border_thickness = 1;
 
-constexpr auto maximized_offset_y = 4;
-
 State* get_state(HWND wnd) { _control_create_function__get_state }
+
+i32 maximized_caption_offset_y(HWND wnd) {
+	if (!IsMaximized(wnd)) return 0;
+	POINT client_origin{};
+	MONITORINFO monitor_info{ .cbSize = sizeof(MONITORINFO) };
+	if (!ClientToScreen(wnd, &client_origin) ||
+		!GetMonitorInfo(MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST), &monitor_info)) return 0;
+	return maximum(0, monitor_info.rcWork.top - client_origin.y);
+}
 
 RECT adjust_frame_rect_for_dpi(RECT client_rc, bool has_menu, u32 dpi) {
 	RECT window_rc = client_rc;
@@ -86,14 +93,14 @@ RECT calc_client_rc(State& state) {
 
 RECT calc_btn_min_rc(State& state) {
 	RECT r; GetClientRect(state.wnd, &r);
-	auto offset_y = IsMaximized(state.wnd) ? maximized_offset_y : 0;
+	auto offset_y = maximized_caption_offset_y(state.wnd);
 	RECT rc{ r.right - 3 * state.caption_btn.cx, r.top, r.right - 2 * state.caption_btn.cx, r.top + state.caption_btn.cy };
 	rc.top += top_border_thickness + offset_y;
 	return rc;
 }
 
 RECT calc_btn_max_rc(State& state) {
-	auto offset_y = IsMaximized(state.wnd) ? maximized_offset_y : 0;
+	auto offset_y = maximized_caption_offset_y(state.wnd);
 	RECT r; GetClientRect(state.wnd, &r);
 	RECT rc{ r.right - 2 * state.caption_btn.cx, r.top, r.right - 1 * state.caption_btn.cx, r.top + state.caption_btn.cy };
 	rc.top += top_border_thickness + offset_y;
@@ -102,7 +109,7 @@ RECT calc_btn_max_rc(State& state) {
 
 RECT calc_btn_close_rc(State& state) {
 	RECT r; GetClientRect(state.wnd, &r);
-	auto offset_y = IsMaximized(state.wnd) ? maximized_offset_y : 0;
+	auto offset_y = maximized_caption_offset_y(state.wnd);
 	RECT rc{ r.right - 1 * state.caption_btn.cx, r.top, r.right - 0 * state.caption_btn.cx, r.top + state.caption_btn.cy };
 	rc.top += top_border_thickness + offset_y;
 	return rc;
@@ -219,7 +226,7 @@ void render_menu_backbuffer(State& state, HDC target_dc, const RECT menurc) {
 		FillRect(dc, &bkrc, bkbr);
 
 		RECT menuitemrc = menurc;
-		int menu_xpad = 4;
+		int menu_xpad = rdpi(4);
 		menuitemrc.left += menu_xpad;
 
 		//Store current item count
@@ -456,13 +463,13 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			TCHAR title[128]{}; GetWindowText(state.wnd, title, ARRAYSIZE(title));
 			TEXTMETRIC tm; GetTextMetrics(dc, &tm);
 
-			auto offset_y = IsMaximized(state.wnd) ? maximized_offset_y : 0;
+			auto offset_y = maximized_caption_offset_y(state.wnd);
 			HICON icon = state.caption_icon;
 			int icon_height = (int)((float)tm.tmHeight * 1.5f);
 			int icon_width = icon_height;
 			int icon_align_height = (RECTH(state.rc_caption) - icon_height) / 2;
 			int icon_align_width = icon_align_height;
-			state.rc_icon = rectWH(icon_align_width, icon_align_height, icon_width, icon_height);
+			state.rc_icon = rectWH(icon_align_width, icon_align_height + offset_y, icon_width, icon_height);
 			auto iconnfo = MyGetIconInfo(icon);
 			urender::draw_icon(dc, icon_align_width, icon_align_height + offset_y, icon_width, icon_height, icon, 0, 0, iconnfo.w, iconnfo.h);
 
@@ -553,8 +560,15 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		LRESULT res = DefWindowProc(hwnd, msg, wparam, lparam);
 		if (res == HTCLIENT) {
-			int top_margin = 8;
-			int top_side_margin = 16;
+			i32 top_margin = 0;
+			i32 top_side_margin = 0;
+			if (!IsMaximized(hwnd)) {
+				RECT resize_frame{};
+				if (AdjustWindowRectExForDpi(&resize_frame, WS_OVERLAPPEDWINDOW & ~WS_CAPTION, false, 0, get_effective_dpi<false>(hwnd))) {
+					top_margin = -resize_frame.top;
+					top_side_margin = -resize_frame.left * 2;
+				}
+			}
 			POINT mouse{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) }; ScreenToClient(hwnd, &mouse);
 			RECT rc; GetClientRect(hwnd, &rc);
 			RECT rc_top; rc_top.top = rc.top; rc_top.left = rc.left + top_side_margin; rc_top.bottom = rc_top.top + top_margin; rc_top.right = rc.right - top_side_margin;

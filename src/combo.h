@@ -153,11 +153,18 @@ LRESULT CALLBACK root_subclass_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
 void show_listbox(State& state, bool show) {
 	if (show) {
 		RECT rw;  GetWindowRect(state.wnd, &rw);
-		i32 w = RECTW(rw), h = RECTH(rw) * (i32)listbox::get_element_cnt(state.controls.listbox);
+		i32 w = maximum(RECTW(rw), listbox::measure_desired_width(state.controls.listbox));
+		i32 h = RECTH(rw) * (i32)listbox::get_element_cnt(state.controls.listbox);
+		i32 popup_x = rw.left;
 		i32 popup_y = rw.bottom;
 		MONITORINFO monitor_info{ .cbSize = sizeof(MONITORINFO) };
 		if (GetMonitorInfo(MonitorFromRect(&rw, MONITOR_DEFAULTTONEAREST), &monitor_info)) {
 			i32 screen_margin = DPI(8);
+			i32 horizontal_margin = minimum(screen_margin, maximum(0, (RECTW(monitor_info.rcWork) - 1) / 2));
+			i32 left = monitor_info.rcWork.left + horizontal_margin;
+			i32 right = monitor_info.rcWork.right - horizontal_margin;
+			w = minimum(w, right - left);
+			popup_x = clamp(left, popup_x, right - w);
 			i32 space_below = maximum(0, monitor_info.rcWork.bottom - screen_margin - rw.bottom);
 			i32 space_above = maximum(0, rw.top - monitor_info.rcWork.top - screen_margin);
 			if (h > space_below && space_above > space_below) {
@@ -171,7 +178,7 @@ void show_listbox(State& state, bool show) {
 		SetWindowPos(state.controls.listbox, HWND_NOTOPMOST, rw.left, rw.bottom, w, h, SWP_SHOWWINDOW | SWP_NOACTIVATE);
 #else
 		SetWindowPos(state.controls.listbox, HWND_NOTOPMOST/*TODO(fran): we may want HWND_TOP or HWND_TOPMOST*/, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOOWNERZORDER | SWP_NOREDRAW | SWP_NOSIZE);
-		MoveWindow(state.controls.listbox, rw.left, popup_y, w, h, TRUE);
+		MoveWindow(state.controls.listbox, popup_x, popup_y, w, h, TRUE);
 		if (state.on_listbox_opening) state.on_listbox_opening(state.wnd, state.controls.listbox, state.user_extra);
 		ShowWindow(state.controls.listbox, SW_SHOWNA);//TODO(fran): make sure it's on top of the z order, at least on top of us
 #endif

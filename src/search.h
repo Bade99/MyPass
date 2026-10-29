@@ -220,8 +220,8 @@ void resize_controls(State& state) {
 	RECT r; GetClientRect(state.wnd, &r);
 	int w = RECTW(r);
 	int h = RECTH(r);
-	int w_pad = 2;
-	int h_pad = 2;
+	int w_pad = rdpi(2);
+	int h_pad = w_pad;
 	bool is_persistent = check_trool(state.theme.styles.persistent);
 	bool btn_case_sensitive_off = check_trool(state.theme.styles.btn_case_sensitive_off);
 	bool btn_whole_word_off = check_trool(state.theme.styles.btn_whole_word_off);
@@ -260,8 +260,8 @@ void resize_controls(State& state) {
 
 		btn_wrap_x = 0;
 		btn_wrap_y = 0;
-		btn_wrap_w = 10;
-		btn_wrap_h = 10;
+		btn_wrap_w = rdpi(10);
+		btn_wrap_h = btn_wrap_w;
 
 		//"close" goes top right
 		btn_close_h = btn_case_sensitive_h / 2;

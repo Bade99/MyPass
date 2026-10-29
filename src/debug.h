@@ -55,6 +55,7 @@ namespace debug {
 			}
 			else SetWindowText(controls.static_bitmap_info, option->name);
 			ask_window_for_repaint(controls.bitmap_preview);
+			ask_window_for_repaint(wnd);
 		}
 	
 		void add_controls() {
@@ -132,13 +133,18 @@ namespace debug {
 				if (element) urender::draw_text(dc, text_bounds, to_utf_str(const_cast<cstr*>(((SelectorOption*)element)->name)),
 					fonts.General, colors.ControlTxt, urender::TextAlignment::left, 0);
 			};
-			auto render_option = [](HDC dc, rect_i32 r, listbox::RenderFlags flags, void* element, void*) {
+			auto render_option = [](HDC dc, rect_i32 r, listbox::RenderFlags flags, void* element, void*, listbox::ElementPass pass) -> i32 {
+				const cstr* name = ((SelectorOption*)element)->name;
+				i32 x_pad = avg_str_dim(fonts.General, 1).cx;
+				if (pass == listbox::ElementPass::measure) return urender::measure_text(dc, fonts.General, str_view{ name }).cx + 2 * x_pad;
 				HBRUSH background = flags.on_clicked ? colors.ControlBkPush :
-					flags.on_mouseover || flags.on_selected ? colors.ControlBkMouseOver : colors.ControlBk;
+					flags.on_mouseover || flags.on_selected ? colors.ControlBkMouseOver :
+					colors.ControlBk;
 				RECT bounds = r.to_RECT();
 				FillRect(dc, &bounds, background);
-				urender::draw_text(dc, bounds, to_utf_str(const_cast<cstr*>(((SelectorOption*)element)->name)),
-					fonts.General, colors.ControlTxt, urender::TextAlignment::left, avg_str_dim(fonts.General, 1).cx);
+				urender::draw_text(dc, bounds, to_utf_str(const_cast<cstr*>(name)),
+					fonts.General, colors.ControlTxt, urender::TextAlignment::left, x_pad);
+				return 0;
 			};
 			for (HWND selector : { controls.bitmap_selector, controls.size_selector }) {
 				combobox::set_user_extra(selector, this);

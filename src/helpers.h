@@ -591,6 +591,8 @@ static f32 dpi_scale(f32 val) {
 }
 template<bool use_debug_override = true>
 static f32 DPI(f32 val) { return dpi_scale<use_debug_override>(val); }
+template<bool use_debug_override = true>
+static i32 rdpi(f32 val) { return (i32)roundf(DPI<use_debug_override>(val)); }
 
 
 struct UINumber {

@@ -24,7 +24,7 @@ void set_stats(HWND wnd, u32 rangemax, u32 pagesz, u32 pos) {
 
 void resize_wnd(State& state, i32 scrollbar_thickness) {
 	RECT r; GetClientRect(state.parent, &r);
-	i32 spacing = 2;// A few pixels of spacing so the control doesnt feel so stuck to the corners
+	i32 spacing = rdpi(2);// A few pixels of spacing so the control doesnt feel so stuck to the corners
 
 	rect_i32 scroll;
 
