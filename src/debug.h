@@ -134,14 +134,31 @@ namespace debug {
 					fonts.General, colors.ControlTxt, urender::TextAlignment::left, 0);
 			};
 			auto render_option = [](HDC dc, rect_i32 r, listbox::RenderFlags flags, void* element, void*, listbox::ElementPass pass) -> i32 {
-				const cstr* name = ((SelectorOption*)element)->name;
+				auto option = (SelectorOption*)element;
+				const cstr* name = option->name;
 				i32 x_pad = avg_str_dim(fonts.General, 1).cx;
-				if (pass == listbox::ElementPass::measure) return urender::measure_text(dc, fonts.General, str_view{ name }).cx + 2 * x_pad;
+				i32 icon_size = option->bitmap ? maximum(0, minimum(r.h - 2 * rdpi(4), rdpi(20))) : 0;
+				i32 icon_gap = icon_size ? rdpi(6) : 0;
+				if (pass == listbox::ElementPass::measure)
+					return urender::measure_text(dc, fonts.General, str_view{ name }).cx + 2 * x_pad + icon_size + icon_gap;
 				HBRUSH background = flags.on_clicked ? colors.ControlBkPush :
 					flags.on_mouseover || flags.on_selected ? colors.ControlBkMouseOver :
 					colors.ControlBk;
 				RECT bounds = r.to_RECT();
 				FillRect(dc, &bounds, background);
+				if (icon_size) {
+					HBITMAP bitmap = *option->bitmap;
+					BITMAP info{};
+					if (bitmap && GetObject(bitmap, sizeof(info), &info)) {
+						i32 icon_y = r.y + (r.h - icon_size) / 2;
+						if (info.bmBitsPixel == 1)
+							urender::draw_mask(dc, r.x + x_pad, icon_y, icon_size, icon_size,
+								bitmap, 0, 0, info.bmWidth, info.bmHeight, colors.ControlTxt);
+						else if (info.bmBitsPixel == 8)
+							urender::draw_menu_mask8(dc, r.x + x_pad, icon_y, icon_size, icon_size, bitmap, colors.ControlTxt);
+					}
+				}
+				bounds.left += icon_size + icon_gap;
 				urender::draw_text(dc, bounds, to_utf_str(const_cast<cstr*>(name)),
 					fonts.General, colors.ControlTxt, urender::TextAlignment::left, x_pad);
 				return 0;

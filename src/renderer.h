@@ -218,9 +218,8 @@ namespace urender {
 		scaled_mask.width = destination_width;
 		scaled_mask.height = destination_height;
 		scaled_mask.bits_per_pixel = 1;
-		scaled_mask.pitch = round2up((i32)roundf(((f32)scaled_mask.width * (1.f / 8.f/*bytes per pixel*/))));//NOTE: windows expects word aligned bmps
-		int scaled_mask_sz = scaled_mask.height * scaled_mask.pitch;
-		scaled_mask.mem = (u8*)malloc(scaled_mask_sz); defer{ free(scaled_mask.mem); };
+		scaled_mask.pitch = ((scaled_mask.width + 15) / 16) * 2;
+		scaled_mask.mem = (u8*)calloc(scaled_mask.height, scaled_mask.pitch); defer{ free(scaled_mask.mem); };
 
 
 		v2 origin{ 0,0 };
