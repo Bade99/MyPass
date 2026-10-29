@@ -463,6 +463,10 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 		for (auto ctl : state.controls.all) SetWindowFont(ctl, wparam, lparam);
 		return 0;
 	} break;
+	case WM_GETFONT:
+	{
+		return (LRESULT)GetWindowFont(state.controls.edit_match);
+	} break;
 	case WM_NCHITTEST:
 	{
 		return handle_wm_nchittest(state.wnd, lparam);
