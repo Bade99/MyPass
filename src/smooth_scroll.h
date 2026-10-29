@@ -44,12 +44,12 @@ struct SmoothScroll {
 	void tick() {
 		if (!active) return;
 		i64 counter = StartCounter();
-		f64 elapsed_ms = minimum(f64(counter - last_tick) / GetPCFrequency(), 2.0 * frame_interval_ms);
+		f64 elapsed_ms = f64(counter - last_tick) / GetPCFrequency();
 		last_tick = counter;
 #ifdef _DEBUG
 		elapsed_ms *= animation::Timeline::debug_speed_multiplier;
 #endif
-		f32 distance = remaining_distance * (1.f - (f32)std::exp(-elapsed_ms / smoothing_time_ms));
+		f32 distance = remaining_distance * animation::exponential_smoothing_factor(elapsed_ms, smoothing_time_ms);
 		if (std::abs(remaining_distance - distance) <= 0.5f) distance = remaining_distance;
 		f32 previous_offset = offset;
 		offset += distance;
