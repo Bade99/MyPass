@@ -178,15 +178,9 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 						hbmp = menu_img.hbmpUnchecked;
 					}
 					if (hbmp) {
-						BITMAP bitmap; GetObject(hbmp, sizeof(bitmap), &bitmap);
-
 						int img_max_x = GetSystemMetricsForDpi(SM_CXMENUCHECK, get_effective_dpi(wnd));
 						int img_max_y = RECTH(item->rcItem);
-						auto img_min_dim = minimum(img_max_x, img_max_y);
-						//HACK: instead use png + gdi+ + color matrices
-						int img_sz = (bitmap.bmBitsPixel == 1) ?
-							roundNdown(bitmap.bmWidth, img_min_dim) : clamp(0, (i32)bitmap.bmWidth, img_min_dim);
-						if (!img_sz) img_sz = img_min_dim; //More HACKs
+						int img_sz = urender::bitmap_draw_size(img_max_x, img_max_x, img_max_y);
 						int bmp_height = img_sz;
 						int bmp_width = bmp_height;
 						int bmp_align_width = item->rcItem.left + (img_max_x + x_pad - bmp_width) / 2;
@@ -196,10 +190,7 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 
 						int saved_dc = SaveDC(item->hDC);
 						if (saved_dc) IntersectClipRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom);
-						if (bitmap.bmBitsPixel == 1)
-							urender::draw_menu_mask(item->hDC, bmp_align_width, bmp_align_height, bmp_width, bmp_height, hbmp, 0, 0, bitmap.bmWidth, bitmap.bmHeight, img_br);//TODO(fran): parametric brush
-						elif(bitmap.bmBitsPixel == 8)
-							urender::draw_menu_mask8(item->hDC, bmp_align_width, bmp_align_height, bmp_width, bmp_height, hbmp, img_br);
+						urender::draw_mask(item->hDC, bmp_align_width, bmp_align_height, bmp_width, bmp_height, hbmp, img_br);
 						if (saved_dc) RestoreDC(item->hDC, saved_dc);
 					}
 				}
@@ -219,18 +210,15 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 
 				if (menu_type.hSubMenu) { //Draw the submenu arrow
 					HBITMAP mask = bmps.solid_arrow_right; //TODO(fran): parametric
-					BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo);
-					Assert(bmpnfo.bmBitsPixel == 1);
 					int img_max_x = GetSystemMetricsForDpi(SM_CXMENUCHECK, get_effective_dpi(wnd));
 					int img_max_y = RECTH(item->rcItem);
-					int img_sz = roundNdown(bmpnfo.bmWidth, minimum(img_max_x, img_max_y));//HACK: instead use png + gdi+ + color matrices
-					if (!img_sz) img_sz = bmpnfo.bmWidth; //More HACKs
+					int img_sz = urender::bitmap_draw_size(img_max_x, img_max_x, img_max_y);
 
 					int bmp_left = item->rcItem.right - img_sz;
 					int bmp_top = item->rcItem.top + (img_max_y - img_sz) / 2;
 					int bmp_height = img_sz;
 					int bmp_width = bmp_height;
-					urender::draw_menu_mask(item->hDC, bmp_left, bmp_top, bmp_width, bmp_height, mask, 0, 0, bmpnfo.bmWidth, bmpnfo.bmHeight, colors.Img);//TODO(fran): parametric brush
+					urender::draw_mask(item->hDC, bmp_left, bmp_top, bmp_width, bmp_height, mask, colors.Img);
 
 					//Prevent windows from drawing what nobody asked it to draw
 					//Many thanks to David Sumich https://www.codeguru.com/cpp/controls/menu/miscellaneous/article.php/c13017/Owner-Drawing-the-Submenu-Arrow.htm 

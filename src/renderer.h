@@ -110,50 +110,6 @@ HRESULT WriteBitmap(HBITMAP bitmap, const cstr* pathname) {
 HRESULT WriteBitmap(HBITMAP bitmap, const cstr* pathname = _t("")) {};
 #endif
 
-struct MaskImage {
-	i32 width;
-	i32 height;
-	i32 pitch;
-	u8 bits_per_pixel;
-	void* mem;
-};
-
-struct MaskBilinearSample { u8 sample[4]; };
-MaskBilinearSample sample_bilinear_mask(MaskImage* mask, i32 x, i32 y) {
-	//NOTE: handmade 108 1:20:00 interesting, once you scale an img to half size or more you get sampling errors cause you're no longer sampling all the pixels involved, that's when you need MIPMAPPING
-
-	u8 idx = 7 - (x % 8);
-	bool has_right = x < mask->width - 1;
-	bool has_below = y < mask->height - 1;
-	u8* texel_ptr = (u8*)mask->mem + y * mask->pitch + x / 8;
-	u8 current = *texel_ptr;
-	u8 below = has_below ? texel_ptr[mask->pitch] : 0;
-	u8 next_idx = idx == 0 ? 7 : idx - 1;
-	MaskBilinearSample sample;
-	sample.sample[0] = current & (1 << idx); //NOTE: For a better blend we pick the colors around the texel, movement is much smoother
-	sample.sample[1] = has_right ? (idx == 0 ? texel_ptr[1] : current) & (1 << next_idx) : 0xFF;
-	sample.sample[2] = has_below ? below & (1 << idx) : 0xFF;
-	sample.sample[3] = has_right && has_below ? (idx == 0 ? texel_ptr[mask->pitch + 1] : below) & (1 << next_idx) : 0xFF;
-
-	return sample;
-}
-
-u8 sample_mask(MaskImage* mask, i32 x, i32 y) {
-	u8 idx = 7 - (x % 8);
-	x /= 8;
-	u8* texel_ptr = ((u8*)mask->mem + y * mask->pitch + x * 1);
-	u8 tex = (*(u8*)texel_ptr) & (1 << idx);
-	return tex;
-}
-
-//TODO: bilinear sampling, steal again from space_typers
-u8 sample_mask8(MaskImage* texture, i32 x, i32 y) {
-	constexpr auto IMG_BYTES_PER_PIXEL = 1;
-	u8* texel_ptr = ((u8*)texture->mem + y * texture->pitch + x * IMG_BYTES_PER_PIXEL);
-	u8 res = *(u8*)texel_ptr;
-	return res;
-}
-
 void GetRoundRectPath(Gdiplus::GraphicsPath* path, RECT r, float diameter) {
 	float w = RECTW(r), h = RECTH(r);
 	if (diameter > w) diameter = w;
@@ -196,134 +152,16 @@ Gdiplus::Color HbrushToGdiplusColor(HBRUSH br) {
 }
 
 namespace urender {
-	//TODO(fran): use something with alpha (png?) for rendering masks https://stackoverflow.com/questions/1505586/gdi-using-drawimage-to-draw-a-transperancy-mask-of-the-source-image
+	struct MaskImage {
+		i32 width;
+		i32 height;
+		i32 pitch;
+		u8 bits_per_pixel;
+		u8* mem;
+	};
 
-	//NOTE: the caller is in charge of handling the hbitmap, including deletion
-	//NOTE: we add an extra limitation, no offsets, we scale the entire bitmap, at least for now to make it simpler to write
-	HBITMAP scale_mask(HBITMAP mask_bmp, int destination_width, int destination_height) {
-
-		BITMAP masknfo; GetObject(mask_bmp, sizeof(masknfo), &masknfo); Assert(masknfo.bmBitsPixel == 1);
-		MaskImage mask;
-		mask.width = masknfo.bmWidth;
-		mask.height = masknfo.bmHeight;
-		mask.bits_per_pixel = 1;
-		mask.pitch = masknfo.bmWidthBytes;
-		int mask_sz = mask.height * mask.pitch;
-		mask.mem = malloc(mask_sz); defer{ free(mask.mem); };
-
-		int getbits = GetBitmapBits(mask_bmp, mask_sz, mask.mem);
-		Assert(getbits == mask_sz);
-
-		MaskImage scaled_mask;
-		scaled_mask.width = destination_width;
-		scaled_mask.height = destination_height;
-		scaled_mask.bits_per_pixel = 1;
-		scaled_mask.pitch = ((scaled_mask.width + 15) / 16) * 2;
-		scaled_mask.mem = (u8*)calloc(scaled_mask.height, scaled_mask.pitch); defer{ free(scaled_mask.mem); };
-
-
-		v2 origin{ 0,0 };
-		v2 x_axis{ (f32)scaled_mask.width,0 };
-		v2 y_axis{ 0,(f32)scaled_mask.height };
-
-		i32 width_max = scaled_mask.width - 1;
-		i32 height_max = scaled_mask.height - 1;
-
-		i32 x_min = scaled_mask.width;
-		i32 x_max = 0;
-		i32 y_min = scaled_mask.height;
-		i32 y_max = 0;
-
-		v2 points[4] = { origin,origin + x_axis,origin + y_axis,origin + x_axis + y_axis };
-		for (v2 p : points) {
-			i32 floorx = (i32)floorf(p.x);
-			i32 ceilx = (i32)ceilf(p.x);
-			i32 floory = (i32)floorf(p.y);
-			i32 ceily = (i32)ceilf(p.y);
-
-			if (x_min > floorx)x_min = floorx;
-			if (y_min > floory)y_min = floory;
-			if (x_max < ceilx)x_max = ceilx;
-			if (y_max < ceily)y_max = ceily;
-		}
-
-		if (x_min < 0)x_min = 0;
-		if (y_min < 0)y_min = 0;
-		if (x_max > scaled_mask.width) x_max = scaled_mask.width;
-		if (y_max > scaled_mask.height)y_max = scaled_mask.height;
-
-		u8* row = (u8*)scaled_mask.mem /*+(x_min *(i32)((f32)scaled_mask.bits_per_pixel/8.f))*/ + y_min * scaled_mask.pitch;
-
-		for (int y = y_min; y < y_max; y++) {//n bits high
-			u8* pixel = row;
-			u8 index = 7;
-			u8 pixels_to_write = 0;
-			for (int x = x_min; x < x_max; x++) {//n bits wide
-
-				f32 u = (f32)x / (f32)(scaled_mask.width - 1);
-				f32 v = (f32)y / (f32)(scaled_mask.height - 1);
-
-				f32 t_x = u * (f32)(mask.width - 1);
-				f32 t_y = v * (f32)(mask.height - 1);
-
-				i32 i_x = (i32)t_x;
-				i32 i_y = (i32)t_y;
-
-				f32 f_x = t_x - (f32)i_x;
-				f32 f_y = t_y - (f32)i_y;
-
-				Assert(i_x >= 0 && i_x < mask.width);
-				Assert(i_y >= 0 && i_y < mask.height);
-
-				//Bilinear filtering
-				MaskBilinearSample sample = sample_bilinear_mask(&mask, i_x, i_y);
-				v4 f_sample;
-				for (int i = 0; i < 4; i++) {
-					f_sample.comp[i] = (sample.sample[i] ? 1.f : 0.f);
-				}
-
-				u8 texel = (u8)roundf(lerp(lerp(f_sample.x, f_x, f_sample.y), f_y, lerp(f_sample.z, f_x, f_sample.w)));
-
-				pixels_to_write |= (texel << index);
-
-				index--;
-				if (index == (u8)-1 || (x + 1) == x_max) {
-					index = 7;
-					//pixels_to_write = ~pixels_to_write;
-					*pixel++ = pixels_to_write;
-					pixels_to_write = 0;
-				}
-			}
-			row += scaled_mask.pitch;
-		}
-
-		//Create bitmap
-		HBITMAP new_mask = CreateBitmap(scaled_mask.width, scaled_mask.height, 1, scaled_mask.bits_per_pixel, scaled_mask.mem);
-		return new_mask;
-	}
-
-	void draw_mask(HDC dest, int destination_x, int destination_y, int destination_width, int destination_height, HBITMAP mask, int source_x, int source_y, int source_width, int source_height, HBRUSH color_brush) {
-		{BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo); Assert(bmpnfo.bmBitsPixel == 1); }
-
-		HBITMAP scaled_mask = (destination_width != source_width || destination_height != source_height) ? scale_mask(mask, destination_width, destination_height) : mask; //NOTE: beware of applying any modification to scaled_mask, you could be modifying the original mask
-		BITMAP masknfo; GetObject(scaled_mask, sizeof(masknfo), &masknfo); Assert(masknfo.bmBitsPixel == 1);
-		MaskImage mask_img;
-		mask_img.width = masknfo.bmWidth;
-		mask_img.height = masknfo.bmHeight;
-		mask_img.bits_per_pixel = 1;
-		mask_img.pitch = masknfo.bmWidthBytes;
-		int mask_sz = mask_img.height * mask_img.pitch;
-		mask_img.mem = malloc(mask_sz); defer{ free(mask_img.mem); };
-		int getbits = GetBitmapBits(scaled_mask, mask_sz, mask_img.mem); Assert(getbits == mask_sz);
-
-		for (int y = destination_y; y < destination_y + destination_height; y++) {
-			for (int x = destination_x; x < destination_x + destination_width; x++)
-			{
-				u8 sample = sample_mask(&mask_img, x - destination_x, y - destination_y);
-				if (!sample) SetPixel(dest, x, y, ColorFromBrush(color_brush));
-			}
-		}
-		if (scaled_mask != mask) DeleteObject(scaled_mask);
+	i32 bitmap_draw_size(i32 desired, i32 available_width, i32 available_height) {
+		return maximum(0, minimum(desired, minimum(available_width, available_height)));
 	}
 
 	HBITMAP create_DIB32(int width, int height, u32** pixels) {
@@ -338,35 +176,93 @@ namespace urender {
 		return CreateDIBSection(nullptr, &bmi, DIB_RGB_COLORS, (void**)pixels, nullptr, 0);
 	}
 
-	void draw_mask8(u32* pixels, HBITMAP mask, HBRUSH br) {
-		//TODO: cache results for reuse
+	struct MaskFilterAxis {
+		i32 first;
+		i32 last;
+		f32 start;
+		f32 end;
+		f32 scale;
+	};
 
-		BITMAP masknfo; GetObject(mask, sizeof(masknfo), &masknfo); Assert(masknfo.bmBitsPixel == 8);
-		MaskImage mask_img;
-		mask_img.width = masknfo.bmWidth;
-		mask_img.height = masknfo.bmHeight;
-		mask_img.bits_per_pixel = masknfo.bmBitsPixel;
-		mask_img.pitch = masknfo.bmWidthBytes;
-		Assert(mask_img.pitch == mask_img.width);
-		int mask_sz = mask_img.height * mask_img.pitch;
-		mask_img.mem = malloc(mask_sz); defer{ free(mask_img.mem); };
-		int getbits = GetBitmapBits(mask, mask_sz, mask_img.mem); Assert(getbits == mask_sz);
+	MaskFilterAxis mask_filter_axis(i32 destination_index, i32 destination_size, i32 source_size) {
+		f32 scale = safe_ratio0((f32)source_size, (f32)destination_size);
+		if (scale > 1.f) {
+			f32 start = destination_index * scale;
+			f32 end = (destination_index + 1) * scale;
+			return { (i32)floorf(start), minimum(source_size - 1, (i32)ceilf(end) - 1), start, end, scale };
+		}
+		f32 center = (destination_index + .5f) * scale - .5f;
+		i32 first = (i32)floorf(center);
+		return { first, first + 1, center - first, 0.f, scale };
+	}
 
-		COLORREF col = ColorFromBrush(br);
-		for (int y = 0; y < 0 + mask_img.height; y++) {
-			for (int x = 0; x < 0 + mask_img.width; x++)
-			{
-				u8 alpha = sample_mask8(&mask_img, x - 0, y - 0);
-				f32 sample = (f32)alpha / 255.f;
-				u32 px =
-					(u32)((col & 0xff) * sample) |
-					(u32)(((col >> 8) & 0xff) * sample) << 8 |
-					(u32)(((col >> 16) & 0xff) * sample) << 16 |
-					(u32)(alpha) << 24;
+	f32 mask_filter_weight(const MaskFilterAxis& axis, i32 source_index) {
+		if (axis.scale > 1.f)
+			return safe_ratio0(minimum(axis.end, (f32)source_index + 1.f) - maximum(axis.start, (f32)source_index), axis.scale);
+		return source_index == axis.first ? 1.f - axis.start : axis.start;
+	}
 
-				pixels[y * mask_img.pitch + x] = px;
+	u8 mask_coverage(const MaskImage& mask, i32 x, i32 y) {
+		x = clamp(0, x, mask.width - 1);
+		y = clamp(0, y, mask.height - 1);
+		u8* row = mask.mem + y * mask.pitch;
+		if (mask.bits_per_pixel == 1)
+			return row[x / 8] & (0x80 >> (x % 8)) ? 0 : 255;
+		return row[x];
+	}
+
+	u8 filtered_mask_coverage(const MaskImage& mask, i32 x, i32 y, i32 width, i32 height) {
+		if (width == mask.width && height == mask.height) return mask_coverage(mask, x, y);
+		MaskFilterAxis x_axis = mask_filter_axis(x, width, mask.width);
+		MaskFilterAxis y_axis = mask_filter_axis(y, height, mask.height);
+		f32 coverage = 0.f;
+		for (i32 source_y = y_axis.first; source_y <= y_axis.last; ++source_y) {
+			f32 y_weight = mask_filter_weight(y_axis, source_y);
+			for (i32 source_x = x_axis.first; source_x <= x_axis.last; ++source_x)
+				coverage += y_weight * mask_filter_weight(x_axis, source_x) * mask_coverage(mask, source_x, source_y);
+		}
+		return (u8)roundf(clamp(0.f, coverage, 255.f));
+	}
+
+	void draw_mask(HDC destination_dc, i32 destination_x, i32 destination_y, i32 destination_width, i32 destination_height, HBITMAP mask, HBRUSH color_brush) {
+		if (!mask || destination_width <= 0 || destination_height <= 0) return;
+		BITMAP bitmap{};
+		if (!GetObject(mask, sizeof(bitmap), &bitmap) || (bitmap.bmBitsPixel != 1 && bitmap.bmBitsPixel != 8) ||
+			bitmap.bmWidth <= 0 || bitmap.bmHeight <= 0 || bitmap.bmWidthBytes <= 0 ||
+			bitmap.bmHeight > LONG_MAX / bitmap.bmWidthBytes ||
+			destination_width > LONG_MAX / 4 || destination_height > LONG_MAX / (destination_width * 4)) return;
+
+		MaskImage source{ bitmap.bmWidth, bitmap.bmHeight, bitmap.bmWidthBytes, (u8)bitmap.bmBitsPixel };
+		i32 byte_count = source.height * source.pitch;
+		source.mem = (u8*)malloc(byte_count);
+		if (!source.mem) return;
+		defer{ free(source.mem); };
+		if (GetBitmapBits(mask, byte_count, source.mem) != byte_count) return;
+
+		u32* pixels = nullptr;
+		HBITMAP image = create_DIB32(destination_width, destination_height, &pixels);
+		if (!image || !pixels) return;
+		defer{ DeleteObject(image); };
+		COLORREF color = ColorFromBrush(color_brush);
+		for (i32 y = 0; y < destination_height; ++y) {
+			for (i32 x = 0; x < destination_width; ++x) {
+				u8 alpha = filtered_mask_coverage(source, x, y, destination_width, destination_height);
+				u32 red = (GetRValue(color) * alpha + 127) / 255;
+				u32 green = (GetGValue(color) * alpha + 127) / 255;
+				u32 blue = (GetBValue(color) * alpha + 127) / 255;
+				pixels[y * destination_width + x] = (u32(alpha) << 24) | (red << 16) | (green << 8) | blue;
 			}
 		}
+
+		HDC memory_dc = CreateCompatibleDC(destination_dc);
+		if (!memory_dc) return;
+		defer{ DeleteDC(memory_dc); };
+		HBITMAP previous_image = (HBITMAP)SelectObject(memory_dc, image);
+		if (!previous_image) return;
+		defer{ SelectObject(memory_dc, previous_image); };
+		BLENDFUNCTION blend{ AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+		AlphaBlend(destination_dc, destination_x, destination_y, destination_width, destination_height,
+			memory_dc, 0, 0, destination_width, destination_height, blend);
 	}
 
 	void draw_icon(HDC dest, int destination_x, int destination_y, int destination_width, int destination_height, HICON icon, int source_x, int source_y, int source_width, int source_height) {
@@ -378,59 +274,6 @@ namespace urender {
 			Gdiplus::Rect(destination_x, destination_y, destination_width, destination_height),
 			source_x, source_y, source_width, source_height,
 			Gdiplus::Unit::UnitPixel);
-	}
-
-	//NOTE: specific procedure for drawing images on windows' menus, other drawing functions may fail on specific situations
-	//NOTE: this is set up to work with masks that have black as the color and white as transparency, otherwise you'll need to flip your colors, for example BitBlt(arrowDC, 0, 0, arrowW, arrowH, arrowDC, 0, 0, DSTINVERT)
-	void draw_menu_mask(HDC destination_dc, int destination_x, int destination_y, int destination_width, int destination_height, HBITMAP mask, int source_x, int source_y, int source_width, int source_height, HBRUSH color_brush)
-	{
-		{BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo); Assert(bmpnfo.bmBitsPixel == 1); }
-
-		//NOTE: I dont know if this will be final, dont really wanna depend on windows, but it's pretty good for now. see https://docs.microsoft.com/en-us/windows/win32/gdi/scaling-an-image maybe some of those stretch modes work better than HALFTONE
-
-		//Create the DCs and Bitmaps we will need
-		HDC mask_dc = CreateCompatibleDC(destination_dc);
-		HBITMAP fill_bitmap = CreateCompatibleBitmap(destination_dc, destination_width, destination_height);
-		HBITMAP previous_fill_bitmap = (HBITMAP)SelectObject(mask_dc, fill_bitmap);
-
-		//Blit the content already stored in dest onto a secondary buffer
-		BitBlt(mask_dc, 0, 0, destination_width, destination_height, destination_dc, destination_x, destination_y, SRCCOPY);
-
-		//Draw on the new buffer, this is neeeded cause draw_mask uses MaskBlt which sometimes fails on menus 
-		//Explanation: I think I know what the problem is, draw_mask doesnt fail on the first submenus because the menu window is already being shown/exists, but for submenus of those guys the window is not yet shown when we draw onto it, this problaly confuses MaskBlt in some strange way
-		urender::draw_mask(mask_dc, 0, 0, destination_width, destination_height, mask, source_x, source_y, source_width, source_height, color_brush);
-
-		//Draw back to dest with the new content
-		BitBlt(destination_dc, destination_x, destination_y, destination_width, destination_height, mask_dc, 0, 0, SRCCOPY);
-
-		//Clean up
-		SelectObject(mask_dc, previous_fill_bitmap);
-		DeleteObject(fill_bitmap);
-		DeleteDC(mask_dc);
-	}
-
-	void draw_menu_mask8(HDC destination_dc, int destination_x, int destination_y, int destination_width, int destination_height, HBITMAP mask, HBRUSH color_brush)
-	{
-		BITMAP bmpnfo; GetObject(mask, sizeof(bmpnfo), &bmpnfo); Assert(bmpnfo.bmBitsPixel == 8);
-
-		u32* pixels = nullptr;
-		HBITMAP bmp = create_DIB32(bmpnfo.bmWidth, bmpnfo.bmHeight, &pixels); defer{ DeleteObject(bmp); };
-
-		urender::draw_mask8(pixels, mask, color_brush);
-
-		HDC memdc = CreateCompatibleDC(destination_dc); defer{ DeleteDC(memdc); };
-		HBITMAP oldbmp = (HBITMAP)SelectObject(memdc, bmp); defer{ SelectObject(memdc, oldbmp); };
-		
-		BLENDFUNCTION bf = {
-			.BlendOp = AC_SRC_OVER,
-			.SourceConstantAlpha = 255,
-			.AlphaFormat = AC_SRC_ALPHA,
-		};
-
-		AlphaBlend(destination_dc, destination_x, destination_y, destination_width, destination_height,
-			memdc, 0, 0, bmpnfo.bmWidth, bmpnfo.bmHeight, bf); 
-		// We allow AlphaBlend to do the scaling 
-		// TODO: check if it scales nicely or it looks like trash and we gotta do it ourselves with bilinear sampling. Initial impressions, downscaling looks like absolute trash, we gotta do it right ourselves
 	}
 
 	void draw_round_rectangle(HDC dest, RECT r, float radius, HBRUSH color_br) {
@@ -641,14 +484,14 @@ namespace urender {
 		//TODO(fran): flicker free
 		BITMAP bitmap; GetObject(bmp, sizeof(bitmap), &bitmap);
 		Assert(bitmap.bmBitsPixel == 1);
-		int max_sz = roundNdown(bitmap.bmWidth, (int)((f32)r.h * .6f)); //HACK: instead use png + gdi+ + color matrices
-		if (!max_sz)max_sz = bitmap.bmWidth; //More HACKs
+		int max_sz = bitmap_draw_size((int)((f32)r.h * .6f), r.w - x_pad, r.h);
+		if (!max_sz) return r.left + r.w - x_pad;
 
 		int bmp_height = max_sz;
 		int bmp_width = bmp_height;
 		int bmp_align_width = r.left + r.w - bmp_width - x_pad;
 		int bmp_align_height = r.top + (r.h - bmp_height) / 2;
-		draw_mask(dc, bmp_align_width, bmp_align_height, bmp_width, bmp_height, bmp, 0, 0, bitmap.bmWidth, bitmap.bmHeight, color);
+		draw_mask(dc, bmp_align_width, bmp_align_height, bmp_width, bmp_height, bmp, color);
 
 		return bmp_align_width;
 	}

@@ -49,6 +49,7 @@ bool image_and_text(State& state, DWORD style) {
 enum class image_placement{ left, right, full};
 void draw_image(State& state, HDC dc, HBRUSH br, DWORD style, rect_i32& bounds, image_placement placement) {
 	auto min_dim = minimum(bounds.w, bounds.h);
+	if (min_dim <= 0) return;
 
 	auto calc_image_rect = [](rect_i32& bounds, i32 max_image_sz, image_placement placement) {
 		auto padding = DPI(8);
@@ -64,35 +65,14 @@ void draw_image(State& state, HDC dc, HBRUSH br, DWORD style, rect_i32& bounds, 
 		HICON icon = state.theme.icon;
 		//NOTE: we assume all icons to be squares 1:1
 		auto iconnfo = MyGetIconInfo(icon);
-		int max_sz = (int)((float)min_dim * .8f);
+		int max_sz = (int)((f32)min_dim * .8f);
 		auto img = calc_image_rect(bounds, max_sz, placement);
 		urender::draw_icon(dc, img.x, img.y, img.w, img.h, icon, 0, 0, iconnfo.w, iconnfo.h);
 	}
 	elif(style & BS_BITMAP) {
-		constexpr auto min_sz = 12; //anything below 12px is commonly just a hodgepodge of random pixels
-		BITMAP bitmap; GetObject(state.theme.bmp, sizeof(bitmap), &bitmap);
-		int max_sz = (int)((float)min_dim * .8f);
-		if (bitmap.bmBitsPixel == 1) {
-			max_sz = roundNdown(bitmap.bmWidth, max_sz); //HACK: instead use png + gdi+ + color matrices
-			if (!max_sz) {
-				if ((bitmap.bmWidth % 2) == 0) max_sz = bitmap.bmWidth / 2;
-				else max_sz = bitmap.bmWidth; //More HACKs
-			}
-			if (max_sz > bitmap.bmWidth) max_sz = bitmap.bmWidth;//TODO(fran): HACK nº 1000, for this specific program (MyPass) some if we scale some icons bigger than their original size they look terrible (specially the close button), therefore we dont allow it. Solution: stop using 1 bit images and use 8 bit grayscale
-		} elif(bitmap.bmBitsPixel == 8) {
-			if (max_sz < bitmap.bmWidth) {
-				auto test_w = bitmap.bmWidth;
-				while (test_w && test_w > max_sz) test_w /= 2;
-				max_sz = test_w;
-			}
-		}
-		max_sz = maximum(max_sz, min_sz);
+		int max_sz = urender::bitmap_draw_size((int)((f32)min_dim * .8f), bounds.w, bounds.h);
 		auto img = calc_image_rect(bounds, max_sz, placement);
-
-		if (bitmap.bmBitsPixel == 1)
-			urender::draw_mask(dc, img.x, img.y, img.w, img.h, state.theme.bmp, 0, 0, bitmap.bmWidth, bitmap.bmHeight, br);
-		elif(bitmap.bmBitsPixel == 8)
-			urender::draw_menu_mask8(dc, img.x, img.y, img.w, img.h, state.theme.bmp, br);
+		urender::draw_mask(dc, img.x, img.y, img.w, img.h, state.theme.bmp, br);
 	}
 }
 

@@ -148,14 +148,9 @@ namespace debug {
 				FillRect(dc, &bounds, background);
 				if (icon_size) {
 					HBITMAP bitmap = *option->bitmap;
-					BITMAP info{};
-					if (bitmap && GetObject(bitmap, sizeof(info), &info)) {
+					if (bitmap) {
 						i32 icon_y = r.y + (r.h - icon_size) / 2;
-						if (info.bmBitsPixel == 1)
-							urender::draw_mask(dc, r.x + x_pad, icon_y, icon_size, icon_size,
-								bitmap, 0, 0, info.bmWidth, info.bmHeight, colors.ControlTxt);
-						else if (info.bmBitsPixel == 8)
-							urender::draw_menu_mask8(dc, r.x + x_pad, icon_y, icon_size, icon_size, bitmap, colors.ControlTxt);
+						urender::draw_mask(dc, r.x + x_pad, icon_y, icon_size, icon_size, bitmap, colors.ControlTxt);
 					}
 				}
 				bounds.left += icon_size + icon_gap;
@@ -366,13 +361,7 @@ namespace debug {
 			auto selected = (SelectorOption*)listbox::get_sel_element(bitmap_listbox);
 			if (!selected) return 0;
 			HBITMAP bitmap = *selected->bitmap;
-			BITMAP info{};
-			if (!bitmap || !GetObject(bitmap, sizeof(info), &info) || state.raw_preview.w <= 0 || state.raw_preview.h <= 0) return 0;
-			if (info.bmBitsPixel == 1)
-				urender::draw_mask(dc, state.raw_preview.x, state.raw_preview.y, state.raw_preview.w, state.raw_preview.h,
-					bitmap, 0, 0, info.bmWidth, info.bmHeight, colors.ControlTxt);
-			else if (info.bmBitsPixel == 8)
-				urender::draw_menu_mask8(dc, state.raw_preview.x, state.raw_preview.y, state.raw_preview.w, state.raw_preview.h, bitmap, colors.ControlTxt);
+			urender::draw_mask(dc, state.raw_preview.x, state.raw_preview.y, state.raw_preview.w, state.raw_preview.h, bitmap, colors.ControlTxt);
 			return 0;
 		} break;
 		case WM_ERASEBKGND:
