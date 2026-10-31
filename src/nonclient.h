@@ -168,15 +168,15 @@ void show_rclickmenu(State& state, POINT mouse) {
 
 	bool is_maximized = IsMaximized(state.wnd);
 
-	append_item_to_menu(subm, menu::restore, LANG_NC_RESTORE, bmps.menu_restore, !is_maximized);
+	append_item_to_menu(subm, menu::restore, LANG_NC_RESTORE, bmps.restore, !is_maximized);
 
-	append_item_to_menu(subm, menu::minimize, LANG_NC_MINIMIZE, bmps.menu_minimize);
+	append_item_to_menu(subm, menu::minimize, LANG_NC_MINIMIZE, bmps.minimize);
 
-	append_item_to_menu(subm, menu::maximize, LANG_NC_MAXIMIZE, bmps.menu_maximize, !state.settings->can_maximize || is_maximized);
+	append_item_to_menu(subm, menu::maximize, LANG_NC_MAXIMIZE, bmps.maximize, !state.settings->can_maximize || is_maximized);
 
 	append_separator_to_menu(subm);
 
-	append_item_to_menu(subm, menu::close, LANG_NC_CLOSE, bmps.menu_close);
+	append_item_to_menu(subm, menu::close, LANG_NC_CLOSE, bmps.close);
 
 	set_menu_background_color(m, colors.CaptionBk);
 

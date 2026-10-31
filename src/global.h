@@ -19,7 +19,7 @@ union KnownColors {
 		op(HBRUSH,Scrollbar,CreateSolidBrush(RGB(148, 148, 142))) \
 		op(HBRUSH,ScrollbarMouseOver,CreateSolidBrush(RGB(188, 188, 182))) \
 		op(HBRUSH,ScrollbarBk,CreateSolidBrush(RGB(50, 51, 45))) \
-		op(HBRUSH,Img,CreateSolidBrush(RGB(228, 228, 222))) \
+		op(HBRUSH,Img,CreateSolidBrush(RGB(239, 239, 233))) \
 		op(HBRUSH,Img_Inactive,CreateSolidBrush(RGB(198, 198, 192))) \
 		op(HBRUSH,CaptionBk,CreateSolidBrush(RGB(20, 21, 15))) \
 		op(HBRUSH,CaptionBk_Inactive,CreateSolidBrush(RGB(60, 61, 65))) \
@@ -86,10 +86,6 @@ union KnownFonts {
 	op(HBITMAP, minimize) \
 	op(HBITMAP, maximize) \
 	op(HBITMAP, restore) \
-	op(HBITMAP, menu_close) \
-	op(HBITMAP, menu_minimize) \
-	op(HBITMAP, menu_maximize) \
-	op(HBITMAP, menu_restore) \
 	op(HBITMAP, solid_arrow_left) \
 	op(HBITMAP, solid_arrow_right) \
 	op(HBITMAP, solid_arrow_up) \
@@ -110,16 +106,14 @@ union KnownFonts {
 	op(HBITMAP, padlock) \
 	op(HBITMAP, cancel) \
 	op(HBITMAP, search) \
-	op(HBITMAP, menu_search) \
 	op(HBITMAP, calendar) \
 	op(HBITMAP, language) \
 	op(HBITMAP, pin) \
-	op(HBITMAP, menu_undo) \
-	op(HBITMAP, menu_redo) \
-	op(HBITMAP, menu_save) \
-	op(HBITMAP, menu_paste) \
-	op(HBITMAP, menu_select_all) \
-	op(HBITMAP, menu_update)
+	op(HBITMAP, undo) \
+	op(HBITMAP, redo) \
+	op(HBITMAP, save) \
+	op(HBITMAP, select_all) \
+	op(HBITMAP, update)
 
 union KnownBitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
 	struct {

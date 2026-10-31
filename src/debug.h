@@ -126,7 +126,7 @@ namespace debug {
 				urender::draw_background(dc, r.to_RECT(), bk_br, theme.brushes.foreground.normal, theme.dimensions);
 				i32 pad = avg_str_dim(fonts.General, 1).cx;
 				HBITMAP arrow = flags.is_listbox_open ? bmps.dropdown_up : bmps.dropdown;
-				i32 icon_x = urender::draw_bitmap_1bpp_right(arrow, dc, r, pad, theme.brushes.foreground.normal);
+				i32 icon_x = urender::draw_mask_right(arrow, dc, r, pad, theme.brushes.foreground.normal);
 				RECT text_bounds = r.to_RECT();
 				text_bounds.left += pad;
 				text_bounds.right = icon_x - pad;

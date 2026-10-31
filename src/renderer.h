@@ -480,10 +480,9 @@ namespace urender {
 		draw_text(dc, label_bounds, label, font, brush, TextAlignment::left, 0);
 	}
 
-	i32 draw_bitmap_1bpp_right(HBITMAP bmp, HDC dc, rect_i32 r, int x_pad, HBRUSH color) {
+	i32 draw_mask_right(HBITMAP bmp, HDC dc, rect_i32 r, int x_pad, HBRUSH color) {
 		//TODO(fran): flicker free
 		BITMAP bitmap; GetObject(bmp, sizeof(bitmap), &bitmap);
-		Assert(bitmap.bmBitsPixel == 1);
 		int max_sz = bitmap_draw_size((int)((f32)r.h * .6f), r.w - x_pad, r.h);
 		if (!max_sz) return r.left + r.w - x_pad;
 

@@ -1563,9 +1563,9 @@ void show_rclickmenu(State& state, POINT mouse) {
 
 	bool has_selection = state.selection.has_selection();
 
-	append_item_to_menu(subm, menu::undo, LANG_MENU_EDIT_UNDO, bmps.menu_undo, true);
+	append_item_to_menu(subm, menu::undo, LANG_MENU_EDIT_UNDO, bmps.undo, true);
 
-	append_item_to_menu(subm, menu::redo, LANG_MENU_EDIT_REDO, bmps.menu_redo, true);
+	append_item_to_menu(subm, menu::redo, LANG_MENU_EDIT_REDO, bmps.redo, true);
 
 	append_separator_to_menu(subm);
 
@@ -1573,15 +1573,15 @@ void show_rclickmenu(State& state, POINT mouse) {
 
 	append_item_to_menu(subm, menu::copy, LANG_MENU_EDIT_COPY, bmps.clipboard, !has_selection);
 
-	append_item_to_menu(subm, menu::paste, LANG_MENU_EDIT_PASTE, bmps.menu_paste, !IsClipboardFormatAvailable(clipboard_format));
+	append_item_to_menu(subm, menu::paste, LANG_MENU_EDIT_PASTE, bmps.paste, !IsClipboardFormatAvailable(clipboard_format));
 
 	append_item_to_menu(subm, menu::del, LANG_MENU_EDIT_DELETE, bmps.bin, !has_selection);
 
 	append_separator_to_menu(subm);
 
-	append_item_to_menu(subm, menu::find, LANG_MENU_EDIT_FIND, bmps.menu_search, true);
+	append_item_to_menu(subm, menu::find, LANG_MENU_EDIT_FIND, bmps.search, true);
 
-	append_item_to_menu(subm, menu::select_all, LANG_MENU_EDIT_SELECT_ALL, bmps.menu_select_all, 
+	append_item_to_menu(subm, menu::select_all, LANG_MENU_EDIT_SELECT_ALL, bmps.select_all, 
 		!state.char_text.size() || (has_selection && state.selection.sel_width() >= state.char_text.size())
 	);
 

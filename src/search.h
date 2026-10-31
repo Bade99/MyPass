@@ -323,8 +323,8 @@ void resize_controls(State& state) {
 
 		//"find next" goes left of "find prev"
 		btn_find_next_h = btn_find_prev_h;
-		SIZE _btn_find_next_sz{ 0 }; Button_GetIdealSize(state.controls.btn_find_next, &_btn_find_next_sz);
-		btn_find_next_w = _btn_find_next_sz.cx;
+		SIZE btn_find_next_sz{ 0 }; Button_GetIdealSize(state.controls.btn_find_next, &btn_find_next_sz);
+		btn_find_next_w = maximum(btn_find_next_sz.cx, btn_find_next_h);
 		btn_find_next_x = btn_find_prev_x - btn_find_next_w - w_pad;
 		btn_find_next_y = btn_case_sensitive_y;
 

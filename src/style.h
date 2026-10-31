@@ -70,48 +70,46 @@ struct Themes {
 
 void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 	auto load_bitmap8 = [](HINSTANCE instance, u32 resource_id) {
-		return (HBITMAP)LoadImage(instance, MAKEINTRESOURCE(resource_id), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION | LR_SHARED);
+		auto bmp = (HBITMAP)LoadImage(instance, MAKEINTRESOURCE(resource_id), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION | LR_SHARED);
+		Assert(bmp);
+		return bmp;
 	};
 
-	bmps.add = LoadBitmap(instance, MAKEINTRESOURCE(BMP_ADD));
-	bmps.edit = LoadBitmap(instance, MAKEINTRESOURCE(BMP_EDIT));
-	bmps.clipboard = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CLIPBOARD));
-	bmps.padlock = LoadBitmap(instance, MAKEINTRESOURCE(BMP_PADLOCK));
-	bmps.solid_arrow_right = LoadBitmap(instance, MAKEINTRESOURCE(BMP_SOLID_ARROW_RIGHT));
-	bmps.solid_arrow_left = rotate_bitmap1(bmps.solid_arrow_right, Rotation::clockwise_180);
-	bmps.solid_arrow_up = rotate_bitmap1(bmps.solid_arrow_right, Rotation::clockwise_270);
-	bmps.solid_arrow_down = rotate_bitmap1(bmps.solid_arrow_right, Rotation::clockwise_90);
-	bmps.close = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CLOSE));
-	bmps.minimize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MIN));
-	bmps.maximize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MAX));
-	bmps.restore = LoadBitmap(instance, MAKEINTRESOURCE(BMP_RESTORE));
-	bmps.menu_close = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MENU_CLOSE));
-	bmps.menu_minimize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MENU_MINIMIZE));
-	bmps.menu_maximize = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MENU_MAXIMIZE));
-	bmps.menu_restore = LoadBitmap(instance, MAKEINTRESOURCE(BMP_MENU_RESTORE));
-	bmps.calendar = LoadBitmap(instance, MAKEINTRESOURCE(BMP_CALENDAR));
-	bmps.dropdown = LoadBitmap(instance, MAKEINTRESOURCE(BMP_DROPDOWN));
-	bmps.dropdown_up = LoadBitmap(instance, MAKEINTRESOURCE(BMP_DROPDOWN_UP));
-	bmps.bin = LoadBitmap(instance, MAKEINTRESOURCE(BMP_BIN));
-	bmps.line_arrow_right = LoadBitmap(instance, MAKEINTRESOURCE(BMP_LINE_ARROW_RIGHT));
-	bmps.pointed_line_arrow_right = LoadBitmap(instance, MAKEINTRESOURCE(BMP_POINTED_LINE_ARROW_RIGHT));
+	//TODO: now i can use the full size icon, i should just add more internal margin for rendering menu icons so they look smaller there. I think actually we may want all context menus to have a bit of extra margin, bitmaps look a bit too large in menus and context/popup menus
 
+	bmps.close = load_bitmap8(instance, BMP_CLOSE);
+	bmps.maximize = load_bitmap8(instance, BMP_MAX);
+	bmps.minimize = load_bitmap8(instance, BMP_MIN);
+	bmps.restore = load_bitmap8(instance, BMP_RESTORE);
+
+	bmps.pointed_line_arrow_right = load_bitmap8(instance, BMP_POINTED_LINE_ARROW_RIGHT);
+	bmps.solid_arrow_right = load_bitmap8(instance, BMP_SOLID_ARROW);
+	bmps.solid_arrow_left = flip_bitmap(bmps.solid_arrow_right, true, false);
+	bmps.solid_arrow_up = rotate_bitmap8(bmps.solid_arrow_right, Rotation::clockwise_270);
+	bmps.solid_arrow_down = rotate_bitmap8(bmps.solid_arrow_right, Rotation::clockwise_90);
+	bmps.dropdown = load_bitmap8(instance, BMP_DROPDOWN);
+	bmps.dropdown_up = flip_bitmap(bmps.dropdown, false, true);
+	bmps.line_arrow_right = rotate_bitmap8(bmps.dropdown, Rotation::clockwise_270);
+	bmps.add = load_bitmap8(instance, BMP_ADD);
 	bmps.circle = load_bitmap8(instance, BMP_CIRCLE);
 	bmps.language = load_bitmap8(instance, BMP_LANGUAGE);
 	bmps.cancel = load_bitmap8(instance, BMP_CANCEL);
 	bmps.eye_open = load_bitmap8(instance, BMP_EYE_OPEN);
 	bmps.eye_closed = load_bitmap8(instance, BMP_EYE_CLOSED);
 	bmps.search = load_bitmap8(instance, BMP_SEARCH);
-	bmps.menu_search = load_bitmap8(instance, BMP_SEARCH);
-	bmps.menu_undo = load_bitmap8(instance, BMP_UNDO);
-	bmps.menu_redo = flip_bitmap(bmps.menu_undo, true, false);
-	bmps.menu_save = load_bitmap8(instance, BMP_SAVE);
-	bmps.menu_paste = load_bitmap8(instance, BMP_MENU_PASTE);
-	bmps.menu_select_all = load_bitmap8(instance, BMP_MENU_SELECT_ALL);
-	bmps.menu_update = load_bitmap8(instance, BMP_UPDATE);
+	bmps.undo = load_bitmap8(instance, BMP_UNDO);
+	bmps.redo = flip_bitmap(bmps.undo, true, false);
+	bmps.save = load_bitmap8(instance, BMP_SAVE);
+	bmps.select_all = load_bitmap8(instance, BMP_SELECT_ALL);
+	bmps.update = load_bitmap8(instance, BMP_UPDATE);
+	bmps.calendar = load_bitmap8(instance, BMP_CALENDAR);
+	bmps.edit = load_bitmap8(instance, BMP_EDIT);
 	bmps.pin = load_bitmap8(instance, BMP_PIN);
+	bmps.clipboard = load_bitmap8(instance, BMP_CLIPBOARD);
 	bmps.cut = load_bitmap8(instance, BMP_CUT);
 	bmps.paste = load_bitmap8(instance, BMP_PASTE);
+	bmps.padlock = load_bitmap8(instance, BMP_PADLOCK);
+	bmps.bin = load_bitmap8(instance, BMP_BIN);
 
 	atexit([]() { for (auto& bmp : bmps.all) if (bmp) { DeleteObject(bmp); bmp = nil; } });
 }

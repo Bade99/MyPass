@@ -238,17 +238,24 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="..\icons\Add16.bmp" />
+    <Image Include="..\icons\Add_A.bmp" />
     <Image Include="..\icons\Bin32.bmp" />
+    <Image Include="..\icons\Bin_A.bmp" />
     <Image Include="..\icons\bitmap2.bmp" />
     <Image Include="..\icons\Calendar32.bmp" />
+    <Image Include="..\icons\Calendar_A.bmp" />
     <Image Include="..\icons\Cancel_A.bmp" />
     <Image Include="..\icons\Circle_A.bmp" />
     <Image Include="..\icons\Clipboard32.bmp" />
+    <Image Include="..\icons\Clipboard_A.bmp" />
     <Image Include="..\icons\Close16.bmp" />
+    <Image Include="..\icons\Close_A.bmp" />
     <Image Include="..\icons\Cut_A.bmp" />
     <Image Include="..\icons\Dropdown16.bmp" />
     <Image Include="..\icons\DropdownUp16.bmp" />
+    <Image Include="..\icons\Dropdown_A.bmp" />
     <Image Include="..\icons\Edit32.bmp" />
+    <Image Include="..\icons\Edit_A.bmp" />
     <Image Include="..\icons\EyeClosed32.bmp" />
     <Image Include="..\icons\EyeClosed_A.bmp" />
     <Image Include="..\icons\EyeOpen32.bmp" />
@@ -257,6 +264,7 @@
     <Image Include="..\icons\LineArrowRight16.bmp" />
     <Image Include="..\icons\logo.ico" />
     <Image Include="..\icons\Max16.bmp" />
+    <Image Include="..\icons\Max_A.bmp" />
     <Image Include="..\icons\MenuClose16.bmp" />
     <Image Include="..\icons\MenuMax16.bmp" />
     <Image Include="..\icons\MenuMaximize16.bmp" />
@@ -266,16 +274,21 @@
     <Image Include="..\icons\MenuRestore16.bmp" />
     <Image Include="..\icons\MenuSelectAll_A.bmp" />
     <Image Include="..\icons\Min16.bmp" />
+    <Image Include="..\icons\Min_A.bmp" />
     <Image Include="..\icons\Padlock32.bmp" />
+    <Image Include="..\icons\Padlock_A.bmp" />
     <Image Include="..\icons\Paste_A.bmp" />
     <Image Include="..\icons\Pin_A.bmp" />
     <Image Include="..\icons\PointedLineArrowRight16.bmp" />
+    <Image Include="..\icons\PointedLineArrow_A.bmp" />
     <Image Include="..\icons\Restore16.bmp" />
+    <Image Include="..\icons\Restore_A.bmp" />
     <Image Include="..\icons\RightArrow16.bmp" />
     <Image Include="..\icons\Save_A.bmp" />
     <Image Include="..\icons\Search32.bmp" />
     <Image Include="..\icons\Search_A.bmp" />
     <Image Include="..\icons\SolidArrowRight16.bmp" />
+    <Image Include="..\icons\SolidArrow_A.bmp" />
     <Image Include="..\icons\Undo_A.bmp" />
     <Image Include="..\icons\Update_A.bmp" />
   </ItemGroup>
