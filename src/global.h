@@ -115,7 +115,7 @@ union KnownFonts {
 	op(HBITMAP, select_all) \
 	op(HBITMAP, update)
 
-union KnownBitmaps { //mostly 1bpp 16x16 bitmaps and other small sized bmps
+union KnownBitmaps {
 	struct {
 		foreach_bitmap(_generate_member_no_default_init)
 	};

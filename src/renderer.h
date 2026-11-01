@@ -157,7 +157,6 @@ namespace urender {
 		i32 width;
 		i32 height;
 		i32 pitch;
-		u8 bits_per_pixel;
 		u8* mem;
 	};
 
@@ -207,8 +206,6 @@ namespace urender {
 		x = clamp(0, x, mask.width - 1);
 		y = clamp(0, y, mask.height - 1);
 		u8* row = mask.mem + y * mask.pitch;
-		if (mask.bits_per_pixel == 1)
-			return row[x / 8] & (0x80 >> (x % 8)) ? 0 : 255;
 		return row[x];
 	}
 
@@ -365,11 +362,11 @@ namespace urender {
 		const std::vector<u8>* coverage = cache.find(key);
 		if (!coverage) {
 			BITMAP bitmap{};
-			if (!GetObject(mask, sizeof(bitmap), &bitmap) || (bitmap.bmBitsPixel != 1 && bitmap.bmBitsPixel != 8) ||
+			if (!GetObject(mask, sizeof(bitmap), &bitmap) || bitmap.bmBitsPixel != 8 ||
 				bitmap.bmWidth <= 0 || bitmap.bmHeight <= 0 || bitmap.bmWidthBytes <= 0 ||
 				bitmap.bmHeight > LONG_MAX / bitmap.bmWidthBytes) return;
 
-			MaskImage source{ bitmap.bmWidth, bitmap.bmHeight, bitmap.bmWidthBytes, (u8)bitmap.bmBitsPixel };
+			MaskImage source{ bitmap.bmWidth, bitmap.bmHeight, bitmap.bmWidthBytes };
 			i32 byte_count = source.height * source.pitch;
 			source.mem = (u8*)malloc(byte_count);
 			if (!source.mem) return;

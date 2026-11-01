@@ -138,22 +138,19 @@ HBITMAP flip_bitmap(HBITMAP source_bitmap, bool flip_horizontal, bool flip_verti
 
 	DIBSECTION dib{};
 	if (!GetObject(source_bitmap, sizeof(dib), &dib)) return nil;
-	if (!dib.dsBm.bmBits) return nil;
+	Assert(dib.dsBm.bmBitsPixel == 8);
+	if (!dib.dsBm.bmBits || dib.dsBm.bmBitsPixel != 8) return nil;
 
 	const int width = dib.dsBm.bmWidth;
 	const int height = dib.dsBm.bmHeight;
-	const int bits_per_pixel = dib.dsBm.bmBitsPixel;
-	Assert(bits_per_pixel == 8); // Doesnt properly support all other bpps
-
-	// Row stride aligned to 4 bytes
-	const int stride = ((width * bits_per_pixel + 31) / 32) * 4;
+	const int stride = dib.dsBm.bmWidthBytes;
 
 	BITMAPINFO bmi{};
 	bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
 	bmi.bmiHeader.biWidth = width;
 	bmi.bmiHeader.biHeight = height;
 	bmi.bmiHeader.biPlanes = 1;
-	bmi.bmiHeader.biBitCount = bits_per_pixel;
+	bmi.bmiHeader.biBitCount = 8;
 	bmi.bmiHeader.biCompression = BI_RGB;
 
 	void* destination_bits = nil;
@@ -173,18 +170,7 @@ HBITMAP flip_bitmap(HBITMAP source_bitmap, bool flip_horizontal, bool flip_verti
 
 		if (!flip_horizontal) memcpy(destination_row, source_row, stride);
 		else {
-			const int bytes_per_pixel = bits_per_pixel / 8;
-
-			// Optimized path for 8-bit
-			if (bits_per_pixel == 8) for (int x = 0; x < width; x++) destination_row[x] = source_row[width - 1 - x];
-			else {
-				// Generic path
-				for (int x = 0; x < width; x++) {
-					const int source_x = width - 1 - x;
-
-					memcpy(destination_row + x * bytes_per_pixel, source_row + source_x * bytes_per_pixel, bytes_per_pixel);
-				}
-			}
+			for (int x = 0; x < width; x++) destination_row[x] = source_row[width - 1 - x];
 		}
 	}
 
