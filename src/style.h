@@ -75,8 +75,6 @@ void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 		return bmp;
 	};
 
-	//TODO: now i can use the full size icon, i should just add more internal margin for rendering menu icons so they look smaller there. I think actually we may want all context menus to have a bit of extra margin, bitmaps look a bit too large in menus and context/popup menus
-
 	bmps.close = load_bitmap8(instance, BMP_CLOSE);
 	bmps.maximize = load_bitmap8(instance, BMP_MAX);
 	bmps.minimize = load_bitmap8(instance, BMP_MIN);
