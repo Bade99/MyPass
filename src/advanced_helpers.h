@@ -138,22 +138,19 @@ HBITMAP flip_bitmap(HBITMAP source_bitmap, bool flip_horizontal, bool flip_verti
 
 	DIBSECTION dib{};
 	if (!GetObject(source_bitmap, sizeof(dib), &dib)) return nil;
-	if (!dib.dsBm.bmBits) return nil;
+	Assert(dib.dsBm.bmBitsPixel == 8);
+	if (!dib.dsBm.bmBits || dib.dsBm.bmBitsPixel != 8) return nil;
 
 	const int width = dib.dsBm.bmWidth;
 	const int height = dib.dsBm.bmHeight;
-	const int bits_per_pixel = dib.dsBm.bmBitsPixel;
-	Assert(bits_per_pixel == 8); // Doesnt properly support all other bpps
-
-	// Row stride aligned to 4 bytes
-	const int stride = ((width * bits_per_pixel + 31) / 32) * 4;
+	const int stride = dib.dsBm.bmWidthBytes;
 
 	BITMAPINFO bmi{};
 	bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
 	bmi.bmiHeader.biWidth = width;
 	bmi.bmiHeader.biHeight = height;
 	bmi.bmiHeader.biPlanes = 1;
-	bmi.bmiHeader.biBitCount = bits_per_pixel;
+	bmi.bmiHeader.biBitCount = 8;
 	bmi.bmiHeader.biCompression = BI_RGB;
 
 	void* destination_bits = nil;
@@ -173,18 +170,7 @@ HBITMAP flip_bitmap(HBITMAP source_bitmap, bool flip_horizontal, bool flip_verti
 
 		if (!flip_horizontal) memcpy(destination_row, source_row, stride);
 		else {
-			const int bytes_per_pixel = bits_per_pixel / 8;
-
-			// Optimized path for 8-bit
-			if (bits_per_pixel == 8) for (int x = 0; x < width; x++) destination_row[x] = source_row[width - 1 - x];
-			else {
-				// Generic path
-				for (int x = 0; x < width; x++) {
-					const int source_x = width - 1 - x;
-
-					memcpy(destination_row + x * bytes_per_pixel, source_row + source_x * bytes_per_pixel, bytes_per_pixel);
-				}
-			}
+			for (int x = 0; x < width; x++) destination_row[x] = source_row[width - 1 - x];
 		}
 	}
 
@@ -192,92 +178,74 @@ HBITMAP flip_bitmap(HBITMAP source_bitmap, bool flip_horizontal, bool flip_verti
 }
 
 enum class Rotation { clockwise_90, clockwise_180, clockwise_270 };
-static HBITMAP rotate_bitmap1(HBITMAP source_bitmap, Rotation rotation) { //AI generated, unoptimized
-	auto get_bit = [](const u8* bits, int stride, int x, int y) {
-		u8 byte = bits[y * stride + (x >> 3)];
-		return (byte & (0x80 >> (x & 7))) != 0;
-	};
-
-	auto set_bit = [](u8* bits, int stride, int x, int y, bool value) {
-		u8& byte = bits[y * stride + (x >> 3)];
-
-		const u8 mask = (u8)(0x80 >> (x & 7));
-
-		if (value) byte |= mask;
-		else byte &= ~mask;
-	};
-
+static HBITMAP rotate_bitmap8(HBITMAP source_bitmap, Rotation rotation) {
 	if (!source_bitmap) return nil;
 
-	BITMAP bm{};
-	if (!GetObject(source_bitmap, sizeof(bm), &bm)) return nil;
+	DIBSECTION source{};
+	if (!GetObject(source_bitmap, sizeof(source), &source) || !source.dsBm.bmBits ||
+		source.dsBm.bmBitsPixel != 8 || source.dsBm.bmWidth <= 0 || source.dsBm.bmHeight <= 0) return nil;
 
-	Assert(bm.bmBitsPixel == 1);
-	if (bm.bmBitsPixel != 1) return nil;
-
-	const int source_width = bm.bmWidth;
-	const int source_height = bm.bmHeight;
-
-	const int source_stride = ((source_width + 15) / 16) * 2;
-
-	const u32 source_size = source_stride * source_height;
-
-	std::vector<u8> source_bits(source_size);
-
-	if (GetBitmapBits(source_bitmap, source_size, source_bits.data()) != source_size) return nil;
-
-	int destination_width, destination_height;
+	i32 source_width = source.dsBm.bmWidth;
+	i32 source_height = source.dsBm.bmHeight;
+	i32 destination_width, destination_height;
 	switch (rotation) {
 	case Rotation::clockwise_180:
 		destination_width = source_width;
 		destination_height = source_height;
 		break;
-	default:
+	case Rotation::clockwise_90:
+	case Rotation::clockwise_270:
 		destination_width = source_height;
 		destination_height = source_width;
 		break;
+	default: return nil;
 	}
 
-	const int destination_stride = ((destination_width + 15) / 16) * 2;
+	BITMAPINFOHEADER info{};
+	info.biSize = sizeof(info);
+	info.biWidth = destination_width;
+	info.biHeight = destination_height;
+	info.biPlanes = 1;
+	info.biBitCount = 8;
+	info.biCompression = BI_RGB;
 
-	const u32 destination_size = destination_stride * destination_height;
+	void* destination_bits = nil;
+	HDC screen_dc = GetDC(nil);
+	HBITMAP destination_bitmap = CreateDIBSection(screen_dc, (BITMAPINFO*)&info, DIB_RGB_COLORS, &destination_bits, nil, 0);
+	ReleaseDC(nil, screen_dc);
+	if (!destination_bitmap || !destination_bits) return nil;
 
-	std::vector<u8> destination_bits(destination_size, 0);
-
-	for (int sy = 0; sy < source_height; sy++) {
-		for (int sx = 0; sx < source_width; sx++)
-		{
-			const bool pixel = get_bit(source_bits.data(), source_stride, sx, sy);
-
-			int dx, dy;
-
-			switch (rotation) {
-			case Rotation::clockwise_90:
-				dx = source_height - 1 - sy;
-				dy = sx;
-				break;
-			case Rotation::clockwise_180:
-				dx = source_width - 1 - sx;
-				dy = source_height - 1 - sy;
-				break;
-			case Rotation::clockwise_270:
-				dx = sy;
-				dy = source_width - 1 - sx;
-				break;
-			}
-
-			set_bit(destination_bits.data(), destination_stride, dx, dy, pixel);
-		}
-	}
-
-	HBITMAP destination_bitmap = CreateBitmap(destination_width, destination_height, 1, 1, nil);
-
-	if (!destination_bitmap) return nil;
-
-	if (SetBitmapBits(destination_bitmap, destination_size, destination_bits.data()) != destination_size)
-	{
+	DIBSECTION destination{};
+	if (!GetObject(destination_bitmap, sizeof(destination), &destination)) {
 		DeleteObject(destination_bitmap);
 		return nil;
+	}
+	const u8* source_bits = (const u8*)source.dsBm.bmBits;
+	u8* destination_pixels = (u8*)destination_bits;
+	bool source_bottom_up = source.dsBmih.biHeight > 0;
+	for (i32 source_y = 0; source_y < source_height; ++source_y) {
+		i32 source_row = source_bottom_up ? source_height - 1 - source_y : source_y;
+		for (i32 source_x = 0; source_x < source_width; ++source_x) {
+			i32 destination_x, destination_y;
+			switch (rotation) {
+			case Rotation::clockwise_90:
+				destination_x = source_height - 1 - source_y;
+				destination_y = source_x;
+				break;
+			case Rotation::clockwise_180:
+				destination_x = source_width - 1 - source_x;
+				destination_y = source_height - 1 - source_y;
+				break;
+			case Rotation::clockwise_270:
+				destination_x = source_y;
+				destination_y = source_width - 1 - source_x;
+				break;
+			default: Assert(0); DeleteObject(destination_bitmap); return nil;
+			}
+			i32 destination_row = destination_height - 1 - destination_y;
+			destination_pixels[destination_row * destination.dsBm.bmWidthBytes + destination_x] =
+				source_bits[source_row * source.dsBm.bmWidthBytes + source_x];
+		}
 	}
 
 	return destination_bitmap;

@@ -393,6 +393,45 @@
     <Image Include="..\icons\Update_A.bmp">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="..\icons\Bin_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\Add_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\Calendar_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\Edit_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\Clipboard_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\Dropdown_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\Padlock_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\SolidArrow_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\PointedLineArrow_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\Close_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\Min_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\Max_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\icons\Restore_A.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
   <ItemGroup>
     <None Include="versioninfo.rc2">

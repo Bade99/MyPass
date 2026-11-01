@@ -29,6 +29,8 @@ namespace debug {
 		HWND static_bitmap_info;
 		HWND static_speed_wnd;
 		HWND edit_speed_wnd;
+		HWND static_cache_memory_wnd;
+		HWND static_cache_hits_wnd;
 		HWND static_focus_wnd;
 	};
 
@@ -37,6 +39,11 @@ namespace debug {
 
 		HWND focus_wnd;
 		rect_i32 raw_preview;
+		size_t displayed_cache_entries;
+		size_t displayed_cache_bytes;
+		u64 displayed_cache_hits;
+		u64 displayed_cache_misses;
+		bool cache_stats_initialized;
 
 		Controls controls;
 
@@ -56,6 +63,26 @@ namespace debug {
 			else SetWindowText(controls.static_bitmap_info, option->name);
 			ask_window_for_repaint(controls.bitmap_preview);
 			ask_window_for_repaint(wnd);
+		}
+
+		void update_cache_stats() {
+			auto& cache = urender::mask_coverage_cache();
+			if (!cache_stats_initialized || displayed_cache_entries != cache.entries.size() || displayed_cache_bytes != cache.used_bytes) {
+				auto memory_text = std::format(_t("Mask cache: {} entries, {} / {} KiB"),
+					cache.entries.size(), (cache.used_bytes + 1023) / 1024, cache.max_bytes / 1024);
+				SetWindowText(controls.static_cache_memory_wnd, memory_text.c_str());
+				displayed_cache_entries = cache.entries.size();
+				displayed_cache_bytes = cache.used_bytes;
+			}
+			if (!cache_stats_initialized || displayed_cache_hits != cache.hits || displayed_cache_misses != cache.misses) {
+				u64 total = cache.hits + cache.misses;
+				f32 hit_rate = total ? 100.f * (f32)cache.hits / (f32)total : 0.f;
+				auto hits_text = std::format(_t("Hits: {}  Misses: {}  ({:.1f}%)"), cache.hits, cache.misses, hit_rate);
+				SetWindowText(controls.static_cache_hits_wnd, hits_text.c_str());
+				displayed_cache_hits = cache.hits;
+				displayed_cache_misses = cache.misses;
+			}
+			cache_stats_initialized = true;
 		}
 	
 		void add_controls() {
@@ -107,6 +134,11 @@ namespace debug {
 
 			controls.static_focus_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
 			edit_oneline::set_theme(controls.static_focus_wnd, static_theme);
+			controls.static_cache_memory_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
+			controls.static_cache_hits_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
+			edit_oneline::set_theme(controls.static_cache_memory_wnd, static_theme);
+			edit_oneline::set_theme(controls.static_cache_hits_wnd, static_theme);
+			update_cache_stats();
 
 			controls.bitmap_selector = create_window(wnd, combobox::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
 			controls.size_selector = create_window(wnd, combobox::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
@@ -126,7 +158,7 @@ namespace debug {
 				urender::draw_background(dc, r.to_RECT(), bk_br, theme.brushes.foreground.normal, theme.dimensions);
 				i32 pad = avg_str_dim(fonts.General, 1).cx;
 				HBITMAP arrow = flags.is_listbox_open ? bmps.dropdown_up : bmps.dropdown;
-				i32 icon_x = urender::draw_bitmap_1bpp_right(arrow, dc, r, pad, theme.brushes.foreground.normal);
+				i32 icon_x = urender::draw_mask_right(arrow, dc, r, pad, theme.brushes.foreground.normal);
 				RECT text_bounds = r.to_RECT();
 				text_bounds.left += pad;
 				text_bounds.right = icon_x - pad;
@@ -134,14 +166,26 @@ namespace debug {
 					fonts.General, colors.ControlTxt, urender::TextAlignment::left, 0);
 			};
 			auto render_option = [](HDC dc, rect_i32 r, listbox::RenderFlags flags, void* element, void*, listbox::ElementPass pass) -> i32 {
-				const cstr* name = ((SelectorOption*)element)->name;
+				auto option = (SelectorOption*)element;
+				const cstr* name = option->name;
 				i32 x_pad = avg_str_dim(fonts.General, 1).cx;
-				if (pass == listbox::ElementPass::measure) return urender::measure_text(dc, fonts.General, str_view{ name }).cx + 2 * x_pad;
+				i32 icon_size = option->bitmap ? maximum(0, minimum(r.h - 2 * rdpi(4), rdpi(20))) : 0;
+				i32 icon_gap = icon_size ? rdpi(6) : 0;
+				if (pass == listbox::ElementPass::measure)
+					return urender::measure_text(dc, fonts.General, str_view{ name }).cx + 2 * x_pad + icon_size + icon_gap;
 				HBRUSH background = flags.on_clicked ? colors.ControlBkPush :
 					flags.on_mouseover || flags.on_selected ? colors.ControlBkMouseOver :
 					colors.ControlBk;
 				RECT bounds = r.to_RECT();
 				FillRect(dc, &bounds, background);
+				if (icon_size) {
+					HBITMAP bitmap = *option->bitmap;
+					if (bitmap) {
+						i32 icon_y = r.y + (r.h - icon_size) / 2;
+						urender::draw_mask(dc, r.x + x_pad, icon_y, icon_size, icon_size, bitmap, colors.ControlTxt);
+					}
+				}
+				bounds.left += icon_size + icon_gap;
 				urender::draw_text(dc, bounds, to_utf_str(const_cast<cstr*>(name)),
 					fonts.General, colors.ControlTxt, urender::TextAlignment::left, x_pad);
 				return 0;
@@ -182,6 +226,10 @@ namespace debug {
 			rect_i32 bounds{}; bounds.wh = { w, h };
 
 			rect_i32 static_focus_wnd = bounds.cut_bottom(DPI(30));
+			rect_i32 cache_hits = bounds.cut_bottom(DPI(26));
+			cache_hits.apply_padding(pad, 0);
+			rect_i32 cache_memory = bounds.cut_bottom(DPI(26));
+			cache_memory.apply_padding(pad, 0);
 			rect_i32 speed_label = bounds.cut_bottom(DPI(30));
 			speed_label.apply_padding(pad, 0);
 			rect_i32 speed_edit = speed_label.cut_right(DPI(80));
@@ -221,6 +269,8 @@ namespace debug {
 
 			MoveWindow(controls.static_speed_wnd, speed_label);
 			MoveWindow(controls.edit_speed_wnd, speed_edit);
+			MoveWindow(controls.static_cache_memory_wnd, cache_memory);
+			MoveWindow(controls.static_cache_hits_wnd, cache_hits);
 			MoveWindow(controls.static_focus_wnd, static_focus_wnd);
 			MoveWindow(controls.bitmap_selector, bitmap_selector);
 			MoveWindow(controls.size_selector, size_selector);
@@ -313,6 +363,12 @@ namespace debug {
 
 			SetTimer(wnd, anim_id, refresh_ms, anim_proc);
 		}
+
+		void track_cache_stats() {
+			SetTimer(wnd, 49857, 250, [](HWND wnd, UINT, UINT_PTR, DWORD) {
+				if (State* state = get_state(wnd)) state->update_cache_stats();
+			});
+		}
 	};
 
 	LRESULT CALLBACK proc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -334,6 +390,7 @@ namespace debug {
 			state.resize_controls();
 			state.follow_track_window();
 			state.track_focus_window();
+			state.track_cache_stats();
 		} break;
 		case WM_SIZE:
 		{
@@ -349,13 +406,7 @@ namespace debug {
 			auto selected = (SelectorOption*)listbox::get_sel_element(bitmap_listbox);
 			if (!selected) return 0;
 			HBITMAP bitmap = *selected->bitmap;
-			BITMAP info{};
-			if (!bitmap || !GetObject(bitmap, sizeof(info), &info) || state.raw_preview.w <= 0 || state.raw_preview.h <= 0) return 0;
-			if (info.bmBitsPixel == 1)
-				urender::draw_mask(dc, state.raw_preview.x, state.raw_preview.y, state.raw_preview.w, state.raw_preview.h,
-					bitmap, 0, 0, info.bmWidth, info.bmHeight, colors.ControlTxt);
-			else if (info.bmBitsPixel == 8)
-				urender::draw_menu_mask8(dc, state.raw_preview.x, state.raw_preview.y, state.raw_preview.w, state.raw_preview.h, bitmap, colors.ControlTxt);
+			urender::draw_mask(dc, state.raw_preview.x, state.raw_preview.y, state.raw_preview.w, state.raw_preview.h, bitmap, colors.ControlTxt);
 			return 0;
 		} break;
 		case WM_ERASEBKGND:

@@ -16,6 +16,7 @@
 #define BMP_MIN                         133
 #define LANG_MENU_FILE                  134
 #define BMP_SOLID_ARROW_RIGHT           134
+#define BMP_SOLID_ARROW                 134
 #define LANG_MENU_SAVE                  135
 #define LANG_MENU_LANGUAGE              136
 #define LANG_MENU_EDIT                  137
@@ -43,7 +44,6 @@
 #define LANG_ERROR                      149
 #define BMP_DROPDOWN                    149
 #define LANG_SEARCH_FINDPREV            150
-#define BMP_DROPDOWN_UP                 150
 #define LANG_SEARCH_FINDNEXT            151
 #define BMP_BIN                         151
 #define LANG_MENU_EDIT_FIND             152
@@ -53,16 +53,11 @@
 #define LANG_SIGNUP                     155
 #define ED_SHORTCUTS                    155
 #define LANG_CREATEACCOUNT              156
-#define BMP_LINE_ARROW_RIGHT            156
 #define LANG_ERROR_SAVEFILE             157
 #define LANG_ERROR_SAVEFILE_PASSWORDS   157
-#define BMP_MENU_CLOSE                  157
 #define LANG_PWD_ED_EDIT                158
-#define BMP_MENU_MAXIMIZE               158
 #define LANG_PWD_ED_ADD                 159
-#define BMP_MENU_MINIMIZE               159
 #define LANG_PWD_ED_DELETE              160
-#define BMP_MENU_RESTORE                160
 #define LANG_PWD_ED_TBL_SHOW            161
 #define BMP_RESTORE                     161
 #define LANG_PWD_ED_TBL_COPY            162
@@ -73,9 +68,9 @@
 #define BMP_CUT                         164
 #define LANG_PWD_ED_TBL_USER            165
 #define LANG_PWD_ED_TBL_PASSWORD        166
-#define BMP_MENU_PASTE                  166
 #define LANG_PWD_ED_TITLE               167
 #define BMP_MENU_SELECT_ALL             167
+#define BMP_SELECT_ALL                  167
 #define LANG_PWD_ED_TBL_FIELD           168
 #define BMP_POINTED_LINE_ARROW_RIGHT    168
 #define LANG_PWD_ED_TBL_VALUE           169

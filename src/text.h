@@ -1563,9 +1563,9 @@ void show_rclickmenu(State& state, POINT mouse) {
 
 	bool has_selection = state.selection.has_selection();
 
-	append_item_to_menu(subm, menu::undo, LANG_MENU_EDIT_UNDO, bmps.menu_undo, true);
+	append_item_to_menu(subm, menu::undo, LANG_MENU_EDIT_UNDO, bmps.undo, true);
 
-	append_item_to_menu(subm, menu::redo, LANG_MENU_EDIT_REDO, bmps.menu_redo, true);
+	append_item_to_menu(subm, menu::redo, LANG_MENU_EDIT_REDO, bmps.redo, true);
 
 	append_separator_to_menu(subm);
 
@@ -1573,15 +1573,15 @@ void show_rclickmenu(State& state, POINT mouse) {
 
 	append_item_to_menu(subm, menu::copy, LANG_MENU_EDIT_COPY, bmps.clipboard, !has_selection);
 
-	append_item_to_menu(subm, menu::paste, LANG_MENU_EDIT_PASTE, bmps.menu_paste, !IsClipboardFormatAvailable(clipboard_format));
+	append_item_to_menu(subm, menu::paste, LANG_MENU_EDIT_PASTE, bmps.paste, !IsClipboardFormatAvailable(clipboard_format));
 
 	append_item_to_menu(subm, menu::del, LANG_MENU_EDIT_DELETE, bmps.bin, !has_selection);
 
 	append_separator_to_menu(subm);
 
-	append_item_to_menu(subm, menu::find, LANG_MENU_EDIT_FIND, bmps.menu_search, true);
+	append_item_to_menu(subm, menu::find, LANG_MENU_EDIT_FIND, bmps.search, true);
 
-	append_item_to_menu(subm, menu::select_all, LANG_MENU_EDIT_SELECT_ALL, bmps.menu_select_all, 
+	append_item_to_menu(subm, menu::select_all, LANG_MENU_EDIT_SELECT_ALL, bmps.select_all, 
 		!state.char_text.size() || (has_selection && state.selection.sel_width() >= state.char_text.size())
 	);
 
@@ -2431,7 +2431,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
 	case WM_IME_SETCONTEXT://Sent after SetFocus to us (sent the first time on SetFocus)
-	{//TODO(fran): lots to discover here
+	{
 		//TODO(fran): render IME composition clauses, attributes, and cursor position in the text control, then suppress only ISC_SHOWUICOMPOSITIONWINDOW while keeping the candidate UI.
 		BOOL is_active = (BOOL)wparam;
 		//lparam = display options for IME window
@@ -2447,7 +2447,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			lparam = 0;//TODO(fran): after this is executed, it takes two WM_IME_SETCONTEXT from two other different controls that _do_ want IME visible for the IME window to fix itself
 		}
 #endif
-		printf("WM_IME_SETCONTEXT: lparam = 0x%x\n", (u32)lparam);
 		//If we have created an IME window, call ImmIsUIMessage. Otherwise pass this message to DefWindowProc
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	}break;

@@ -563,7 +563,7 @@ void add_controls(State& state) {
 		urender::draw_background(dc, r.to_RECT(), bk_br, border_br, theme.dimensions);
 		
 		auto bmp = flags.is_listbox_open ? bmps.dropdown_up : bmps.dropdown;
-		int icon_x = urender::draw_bitmap_1bpp_right(bmp, dc, r, x_pad, theme.brushes.foreground.normal);
+		int icon_x = urender::draw_mask_right(bmp, dc, r, x_pad, theme.brushes.foreground.normal);
 
 		str txt;
 		if (element) {
@@ -656,10 +656,10 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 	HMENU menu_edit = CreateMenu(); state.menu_edit = menu_edit;
 	append_popup_to_menu(menu, menu_file, LANG_MENU_FILE);
 
-	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_SAVE, LANG_MENU_SAVE, bmps.menu_save, bmps.menu_save);
+	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_SAVE, LANG_MENU_SAVE, bmps.save, bmps.save);
 
 	#ifdef _DEBUG
-	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, _t("Save V0"), bmps.menu_save, bmps.menu_save);
+	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, _t("Save V0"), bmps.save, bmps.save);
 	#endif
 
 	append_separator_to_menu(menu_file);
@@ -667,15 +667,15 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 	append_popup_to_menu(menu_file, menu_file_lang, LANG_MENU_LANGUAGE, bmps.language, bmps.language);
 	append_language_items_to_menu(menu_file_lang);
 
-	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, LANG_MENU_CHECK_FOR_UPDATES, bmps.menu_update, bmps.menu_update);
+	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_CHECK_FOR_UPDATES, LANG_MENU_CHECK_FOR_UPDATES, bmps.update, bmps.update);
 
 	append_popup_to_menu(menu, menu_edit, LANG_MENU_EDIT);
 
-	append_item_to_menu(menu_edit, SHOWPASSWORDS_MENU_UNDO, LANG_MENU_EDIT_UNDO, bmps.menu_undo, bmps.menu_undo);
+	append_item_to_menu(menu_edit, SHOWPASSWORDS_MENU_UNDO, LANG_MENU_EDIT_UNDO, bmps.undo, bmps.undo);
 
-	append_item_to_menu(menu_edit, SHOWPASSWORDS_MENU_REDO, LANG_MENU_EDIT_REDO, bmps.menu_redo, bmps.menu_redo);
+	append_item_to_menu(menu_edit, SHOWPASSWORDS_MENU_REDO, LANG_MENU_EDIT_REDO, bmps.redo, bmps.redo);
 
-	append_item_to_menu(menu_edit, SHOWPASSWORDS_MENU_FIND, LANG_MENU_EDIT_FIND, bmps.menu_search, bmps.menu_search);
+	append_item_to_menu(menu_edit, SHOWPASSWORDS_MENU_FIND, LANG_MENU_EDIT_FIND, bmps.search, bmps.search);
 
 	nonclient::set_menu(state.nc_parent, state.menu);
 }
