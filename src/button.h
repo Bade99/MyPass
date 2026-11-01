@@ -50,12 +50,15 @@ enum class image_placement{ left, right, full};
 void draw_image(State& state, HDC dc, HBRUSH br, DWORD style, rect_i32& bounds, image_placement placement) {
 	auto min_dim = minimum(bounds.w, bounds.h);
 	if (min_dim <= 0) return;
+	f32 image_padding = maximum(0.f, state.theme.dimensions.image_padding.to_px((u32)min_dim));
+	i32 image_size = urender::bitmap_draw_size((i32)floorf((f32)min_dim - 2.f * image_padding), bounds.w, bounds.h);
+	if (!image_size) return;
 
 	auto calc_image_rect = [](rect_i32& bounds, i32 max_image_sz, image_placement placement) {
-		auto padding = DPI(8);
+		auto image_text_gap = DPI(8);
 		switch (placement) {
-		case image_placement::left: return bounds.cut_left(max_image_sz + padding).cut_center(max_image_sz);
-		case image_placement::right: return bounds.cut_right(max_image_sz + padding).cut_center(max_image_sz);
+		case image_placement::left: return bounds.cut_left(max_image_sz + image_text_gap).cut_center(max_image_sz);
+		case image_placement::right: return bounds.cut_right(max_image_sz + image_text_gap).cut_center(max_image_sz);
 		case image_placement::full: return bounds.cut_center(max_image_sz);
 		default: Assert(0); return bounds;
 		}
@@ -65,13 +68,11 @@ void draw_image(State& state, HDC dc, HBRUSH br, DWORD style, rect_i32& bounds, 
 		HICON icon = state.theme.icon;
 		//NOTE: we assume all icons to be squares 1:1
 		auto iconnfo = MyGetIconInfo(icon);
-		int max_sz = (int)((f32)min_dim * .8f);
-		auto img = calc_image_rect(bounds, max_sz, placement);
+		auto img = calc_image_rect(bounds, image_size, placement);
 		urender::draw_icon(dc, img.x, img.y, img.w, img.h, icon, 0, 0, iconnfo.w, iconnfo.h);
 	}
 	elif(style & BS_BITMAP) {
-		int max_sz = urender::bitmap_draw_size((int)((f32)min_dim * .8f), bounds.w, bounds.h);
-		auto img = calc_image_rect(bounds, max_sz, placement);
+		auto img = calc_image_rect(bounds, image_size, placement);
 		urender::draw_mask(dc, img.x, img.y, img.w, img.h, state.theme.bmp, br);
 	}
 }
@@ -113,22 +114,12 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 				: text_sz(state).cy;
 		}
 		else { //calculate cx and cy
-			auto image_sz = [](State& state, DWORD style) {
-				SIZE res{};
-				if (style & BS_ICON) {
-					auto iconnfo = MyGetIconInfo(state.theme.icon);
-					res.cx = iconnfo.w;
-					res.cy = iconnfo.h;
-				}
-				elif (style & BS_BITMAP) {
-					BITMAP bitmap; GetObject(state.theme.bmp, sizeof(bitmap), &bitmap);
-					res.cx = bitmap.bmWidth;
-					res.cy = bitmap.bmHeight;
-				}
-				return res;
+			auto image_sz = [](State& state) {
+				i32 size = maximum(0, (i32)roundf(state.theme.dimensions.image_ideal_size.to_px((u32)rdpi(32))));
+				return SIZE{ size, size };
 			};
-			*sz = image_only(state, style) ? image_sz(state, style)
-				: image_and_text(state, style) ? image_sz(state, style) + text_sz(state)
+			*sz = image_only(state, style) ? image_sz(state)
+				: image_and_text(state, style) ? image_sz(state) + text_sz(state)
 				: text_sz(state);
 		}
 		return TRUE;
@@ -245,6 +236,8 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 		st->parent = creation_nfo->hwndParent;
 		st->wnd = hwnd;
 		st->msg_to_send = (UINT)(UINT_PTR)creation_nfo->hMenu;
+		st->theme.dimensions.image_padding = { .type = UINumber::Type::percent, .value = 10 };
+		st->theme.dimensions.image_ideal_size = { .type = UINumber::Type::dpi, .value = 32 };
 		if(creation_nfo->lpszName) SendMessage(hwnd, WM_SETTEXT, 0, (LPARAM)creation_nfo->lpszName);
 		return TRUE;
 	} break;

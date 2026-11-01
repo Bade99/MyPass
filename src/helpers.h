@@ -579,7 +579,7 @@ static BOOL SetMenuItemString(HMENU hmenu, UINT item, BOOL fByPositon, const TCH
 template<bool use_debug_override = true>
 static u32 get_effective_dpi(HWND wnd = nil) {
 #ifdef _DEBUG
-	constexpr f32 debug_dpi_scale = 2;
+	constexpr f32 debug_dpi_scale = 0;
 	if constexpr (use_debug_override && debug_dpi_scale > 0.f) return (u32)(96.f * debug_dpi_scale + .5f);
 #endif
 	return wnd ? GetDpiForWindow(wnd) : GetDpiForSystem();

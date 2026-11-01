@@ -397,8 +397,11 @@ void update_caption_button_theme(State& state) {
 		.brushes = {
 			.foreground = {.normal = btn_fore, .mouseover = btn_fore, .clicked = btn_fore},
 			.bk = {.normal = btn_bk, .mouseover = btn_bk_mouseover, .clicked = btn_bk_push},
-			.border = {.normal = btn_border, .mouseover = btn_border, .clicked = btn_border}
-		}
+			.border = {.normal = btn_border, .mouseover = btn_border, .clicked = btn_border},
+		},
+		.dimensions = {
+			.image_padding = { .type = UINumber::Type::percent, .value = 20 },
+		},
 	};
 	button::set_theme(state.btn_close, btn);
 	button::set_theme(state.btn_min, btn);

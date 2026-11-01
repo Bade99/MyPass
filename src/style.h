@@ -134,6 +134,8 @@ void load_styles() {
 	themes.base_btn = [&]()->auto {
 		button::Theme base_btn{};
 		base_btn.dimensions.border_thickness = 1;
+		base_btn.dimensions.image_padding = { .type = UINumber::Type::percent, .value = 20 };
+		base_btn.dimensions.image_ideal_size = { .type = UINumber::Type::dpi, .value = 32 };
 		base_btn.brushes.bk.normal = colors.ControlBk;
 		base_btn.brushes.bk.disabled = colors.ControlBk_Disabled;
 		base_btn.brushes.bk.clicked = colors.ControlBkPush;
@@ -277,7 +279,7 @@ void load_styles() {
 	}();
 
 	themes.password_editor_toolbar_btn_static = [&]()->auto {
-		auto t = themes.password_editor_toolbar_btn_static;
+		auto t = themes.password_editor_toolbar_btn;
 		for (auto& b : t.brushes.bk.all) b = hollow_brush;
 		for (auto& b : t.brushes.border.all) b = hollow_brush;
 		t.brushes.foreground = {

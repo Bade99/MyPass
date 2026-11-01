@@ -28,6 +28,8 @@ struct Theme {
 	struct {
 		u32 border_thickness = U32MAX;
 		UINumber border_radius {.value = F32INFINITY};
+		UINumber image_padding {.value = F32INFINITY};
+		UINumber image_ideal_size {.value = F32INFINITY};
 	}dimensions;
 	HFONT font     = nullptr;
 	HICON icon     = nullptr;
@@ -40,6 +42,8 @@ struct Theme {
 
 		_theme_copy_u32(src.dimensions.border_thickness, this->dimensions.border_thickness);
 		_theme_copy_uinumber(src.dimensions.border_radius, this->dimensions.border_radius);
+		_theme_copy_uinumber(src.dimensions.image_padding, this->dimensions.image_padding);
+		_theme_copy_uinumber(src.dimensions.image_ideal_size, this->dimensions.image_ideal_size);
 
 		_theme_copy_pointer(src.font, this->font);
 		_theme_copy_pointer(src.icon, this->icon);
