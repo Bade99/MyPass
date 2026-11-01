@@ -177,10 +177,7 @@ void set_is_editing(State& state, bool is_editing) {
 	}
 }
 
-void on_properties_changed(State& state) {
-	TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
-	toolInfo.hwnd = state.controls.btn_dates;
-	toolInfo.uId = (UINT_PTR)state.controls.btn_dates;
+str format_dates_tooltip(State& state) {
 	auto format_datetime = [](time_t date) {
 		using namespace std::chrono;
 		constexpr auto date_format = L"{:%Y/%m/%d %H:%M}"; //TODO(fran): config so the user can set the date format they want, depending on the system or any other locale based calculation is not good enough
@@ -189,10 +186,10 @@ void on_properties_changed(State& state) {
 	};
 	auto created = format_datetime(state.properties.date_created);
 	auto modified = format_datetime(state.properties.date_modified);
-	auto dates_msg = std::vformat(RS(LANG_PWD_ED_DATES), std::make_wformat_args(created, modified));
-	toolInfo.lpszText = dates_msg.data();
-	SendMessage(state.controls.tooltip_btn_dates, TTM_UPDATETIPTEXT, 0, (LPARAM)&toolInfo);
+	return std::vformat(RS(LANG_PWD_ED_DATES), std::make_wformat_args(created, modified));
+}
 
+void on_properties_changed(State& state) {
 	button::set_selected(state.controls.btn_pin, state.properties.flags & ItemFlag::pin);
 
 	on_internal_state_change(state); //changing the flags changes the rendering
@@ -239,7 +236,8 @@ void create_controls(State& state) {
 	controls.btn_dates = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
 	SendMessage(controls.btn_dates, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.calendar);
 	button::set_theme(controls.btn_dates, themes.password_editor_toolbar_btn_static);
-	controls.tooltip_btn_dates = add_mouseover_tooltip(controls.btn_dates, 0, 
+	controls.tooltip_btn_dates = add_mouseover_tooltip(controls.btn_dates,
+		[](void* context) { return format_dates_tooltip(*(State*)context); }, &state,
 		{.multiline = true, .delay_ms = 200, .duration_ms = 15000}
 	);
 

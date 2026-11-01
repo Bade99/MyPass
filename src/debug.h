@@ -21,6 +21,18 @@ namespace debug {
 		{ _t("128 px"), nil, 128 },
 	};
 
+	DWORD user_object_limit() {
+		HKEY key;
+		auto status = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+			_t("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Windows"), 0, KEY_QUERY_VALUE, &key);
+		if (status != ERROR_SUCCESS) return 0;
+		DWORD limit = 0, type = 0, size = sizeof(limit);
+		status = RegQueryValueEx(key, _t("USERProcessHandleQuota"), nil, &type, (BYTE*)&limit, &size);
+		RegCloseKey(key);
+		if (status == ERROR_FILE_NOT_FOUND) return 10000;
+		return status == ERROR_SUCCESS && type == REG_DWORD && size == sizeof(limit) ? limit : 0;
+	}
+
 	struct Controls {
 		HWND color_buttons[ARRAYSIZE(colors.brushes)];
 		HWND bitmap_selector;
@@ -31,6 +43,7 @@ namespace debug {
 		HWND edit_speed_wnd;
 		HWND static_cache_memory_wnd;
 		HWND static_cache_hits_wnd;
+		HWND static_user_objects_wnd;
 		HWND static_focus_wnd;
 	};
 
@@ -44,6 +57,8 @@ namespace debug {
 		u64 displayed_cache_hits;
 		u64 displayed_cache_misses;
 		bool cache_stats_initialized;
+		DWORD displayed_user_objects;
+		bool user_objects_initialized;
 
 		Controls controls;
 
@@ -84,6 +99,18 @@ namespace debug {
 			}
 			cache_stats_initialized = true;
 		}
+
+		void update_user_object_stats() {
+			static const DWORD limit = user_object_limit();
+			auto count = GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS);
+			if (user_objects_initialized && displayed_user_objects == count) return;
+			str text = !count ? _t("USER objects: unavailable") :
+				limit ? std::format(_t("USER objects: {} / {}"), count, limit) :
+				std::format(_t("USER objects: {} / ?"), count);
+			SetWindowText(controls.static_user_objects_wnd, text.c_str());
+			displayed_user_objects = count;
+			user_objects_initialized = true;
+		}
 	
 		void add_controls() {
 
@@ -109,7 +136,7 @@ namespace debug {
 				button::set_theme(b, t);
 				auto col = ColorFromBrush(c);
 				auto msg = std::format(L"{}\nRGB({}, {}, {})", known_colors_names[i], GetRValue(col), GetGValue(col), GetBValue(col));
-				add_mouseover_tooltip(b, (u64)(void*)msg.c_str(), {.multiline = true, .delay_ms = 100});
+				add_mouseover_tooltip(b, str_view{ msg }, {.multiline = true, .delay_ms = 100});
 			}
 
 			controls.static_speed_wnd = create_window(wnd, edit_oneline::wndclass, _t("Animation speed (x)"), WS_VISIBLE | WS_CHILD | WS_DISABLED);
@@ -136,9 +163,10 @@ namespace debug {
 			edit_oneline::set_theme(controls.static_focus_wnd, static_theme);
 			controls.static_cache_memory_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
 			controls.static_cache_hits_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
+			controls.static_user_objects_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
 			edit_oneline::set_theme(controls.static_cache_memory_wnd, static_theme);
 			edit_oneline::set_theme(controls.static_cache_hits_wnd, static_theme);
-			update_cache_stats();
+			edit_oneline::set_theme(controls.static_user_objects_wnd, static_theme);
 
 			controls.bitmap_selector = create_window(wnd, combobox::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
 			controls.size_selector = create_window(wnd, combobox::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
@@ -226,6 +254,8 @@ namespace debug {
 			rect_i32 bounds{}; bounds.wh = { w, h };
 
 			rect_i32 static_focus_wnd = bounds.cut_bottom(DPI(30));
+			rect_i32 user_objects = bounds.cut_bottom(DPI(26));
+			user_objects.apply_padding(pad, 0);
 			rect_i32 cache_hits = bounds.cut_bottom(DPI(26));
 			cache_hits.apply_padding(pad, 0);
 			rect_i32 cache_memory = bounds.cut_bottom(DPI(26));
@@ -271,6 +301,7 @@ namespace debug {
 			MoveWindow(controls.edit_speed_wnd, speed_edit);
 			MoveWindow(controls.static_cache_memory_wnd, cache_memory);
 			MoveWindow(controls.static_cache_hits_wnd, cache_hits);
+			MoveWindow(controls.static_user_objects_wnd, user_objects);
 			MoveWindow(controls.static_focus_wnd, static_focus_wnd);
 			MoveWindow(controls.bitmap_selector, bitmap_selector);
 			MoveWindow(controls.size_selector, size_selector);
@@ -364,9 +395,14 @@ namespace debug {
 			SetTimer(wnd, anim_id, refresh_ms, anim_proc);
 		}
 
-		void track_cache_stats() {
+		void track_resource_stats() {
+			update_cache_stats();
+			update_user_object_stats();
 			SetTimer(wnd, 49857, 250, [](HWND wnd, UINT, UINT_PTR, DWORD) {
-				if (State* state = get_state(wnd)) state->update_cache_stats();
+				if (State* state = get_state(wnd)) {
+					state->update_cache_stats();
+					state->update_user_object_stats();
+				}
 			});
 		}
 	};
@@ -390,7 +426,7 @@ namespace debug {
 			state.resize_controls();
 			state.follow_track_window();
 			state.track_focus_window();
-			state.track_cache_stats();
+			state.track_resource_stats();
 		} break;
 		case WM_SIZE:
 		{
