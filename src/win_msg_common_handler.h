@@ -83,8 +83,7 @@ static void draw_menu_highlight(HDC dc, RECT bounds) {
 	if (RECTW(bounds) > 0 && RECTH(bounds) > 0) urender::draw_round_rectangle(dc, bounds, DPI(5), colors.ControlBkMouseOver);
 }
 
-static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam, HMENU top_level_menu = nil) {
-	DRAWITEMSTRUCT* item = (DRAWITEMSTRUCT*)lparam;
+static bool draw_menu_item(HWND wnd, DRAWITEMSTRUCT* item, HMENU top_level_menu, bool& suppress_native_submenu_arrow) {
 	switch (item->CtlType) {
 	case ODT_MENU:
 	{
@@ -102,7 +101,7 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 		menu_type.cbSize = sizeof(menu_type);
 		menu_type.fMask = MIIM_FTYPE | MIIM_SUBMENU;
 		if (!GetMenuItemInfo((HMENU)item->hwndItem, item->itemID, FALSE, &menu_type))
-			return DefWindowProc(wnd, msg, wparam, lparam);
+			return false;
 		menu_type.fType &= ~MFT_OWNERDRAW;
 
 		switch (menu_type.fType) {
@@ -139,10 +138,8 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 			auto oldtxtcol = SetTextColor(item->hDC, ColorFromBrush(txt_br)); defer{ SetTextColor(item->hDC, oldtxtcol); };
 			auto oldbkcol = SetBkColor(item->hDC, ColorFromBrush(bk_br)); defer{ SetBkColor(item->hDC, oldbkcol); };
 
-			if (item->itemAction & ODA_DRAWENTIRE || item->itemAction & ODA_SELECT) { //Draw background
-				FillRect(item->hDC, &item->rcItem, highlighted ? menu_bk_br : bk_br);
-				if (highlighted) draw_menu_highlight(item->hDC, item->rcItem);
-			}
+			FillRect(item->hDC, &item->rcItem, highlighted ? menu_bk_br : bk_br);
+			if (highlighted) draw_menu_highlight(item->hDC, item->rcItem);
 
 			// Select the font and draw the text. //TODO(fran): parametric font
 			auto oldfont = (HFONT)SelectObject(item->hDC, fonts.Menu); defer{ SelectObject(item->hDC, oldfont); };
@@ -220,9 +217,7 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 					int bmp_width = bmp_height;
 					urender::draw_mask(item->hDC, bmp_left, bmp_top, bmp_width, bmp_height, mask, colors.Img);
 
-					//Prevent windows from drawing what nobody asked it to draw
-					//Many thanks to David Sumich https://www.codeguru.com/cpp/controls/menu/miscellaneous/article.php/c13017/Owner-Drawing-the-Submenu-Arrow.htm 
-					ExcludeClipRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom);
+					suppress_native_submenu_arrow = true;
 				}
 			}
 		} break;
@@ -245,11 +240,56 @@ static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lpar
 			separator_rc.right = item->rcItem.right - separator_x_padding;
 			FillRect(item->hDC, &separator_rc, colors.ControlTxt);
 		} break;
-		default: return DefWindowProc(wnd, msg, wparam, lparam);
+		default: return false;
 		}
 
+		return true;
+	}
+	default: return false;
+	}
+}
+
+static LRESULT handle_wm_drawitem(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam, HMENU top_level_menu = nil) {
+	DRAWITEMSTRUCT* item = (DRAWITEMSTRUCT*)lparam;
+	auto draw_direct = [&]() -> LRESULT {
+		bool suppress_native_submenu_arrow = false;
+		if (!draw_menu_item(wnd, item, top_level_menu, suppress_native_submenu_arrow))
+			return DefWindowProc(wnd, msg, wparam, lparam);
+		if (suppress_native_submenu_arrow)
+			ExcludeClipRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom);
 		return TRUE;
+	};
+	if (item->CtlType != ODT_MENU) return draw_direct();
+
+	i32 width = RECTW(item->rcItem);
+	i32 height = RECTH(item->rcItem);
+	if (width <= 0 || height <= 0) return draw_direct();
+
+	HDC buffer_dc = CreateCompatibleDC(item->hDC);
+	if (!buffer_dc) return draw_direct();
+	HBITMAP buffer_bitmap = CreateCompatibleBitmap(item->hDC, width, height);
+	if (!buffer_bitmap) {
+		DeleteDC(buffer_dc);
+		return draw_direct();
 	}
-	default: return DefWindowProc(wnd, msg, wparam, lparam);
+	HBITMAP previous_bitmap = (HBITMAP)SelectObject(buffer_dc, buffer_bitmap);
+	if (!previous_bitmap || (HGDIOBJ)previous_bitmap == HGDI_ERROR) {
+		DeleteObject(buffer_bitmap);
+		DeleteDC(buffer_dc);
+		return draw_direct();
 	}
+
+	DRAWITEMSTRUCT buffered_item = *item;
+	buffered_item.hDC = buffer_dc;
+	buffered_item.rcItem = { 0, 0, width, height };
+	bool suppress_native_submenu_arrow = false;
+	bool drawn = draw_menu_item(wnd, &buffered_item, top_level_menu, suppress_native_submenu_arrow);
+	bool copied = drawn && BitBlt(item->hDC, item->rcItem.left, item->rcItem.top,
+		width, height, buffer_dc, 0, 0, SRCCOPY);
+	if (copied && suppress_native_submenu_arrow)
+		ExcludeClipRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom);
+	SelectObject(buffer_dc, previous_bitmap);
+	DeleteObject(buffer_bitmap);
+	DeleteDC(buffer_dc);
+	return copied ? TRUE : draw_direct();
 }
