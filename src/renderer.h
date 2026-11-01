@@ -3,6 +3,7 @@
 #include "helpers.h"
 #include "math.h"
 #include "text_render.h"
+#include <unordered_map>
 
 #define USE_GDIPLUS /*For lazy bilinear filtered drawing*/
 
@@ -224,45 +225,186 @@ namespace urender {
 		return (u8)roundf(clamp(0.f, coverage, 255.f));
 	}
 
+	struct MaskCacheKey {
+		HBITMAP bitmap;
+		i32 width;
+		i32 height;
+
+		bool operator==(const MaskCacheKey&) const = default;
+	};
+
+	struct MaskCacheKeyHash {
+		size_t operator()(const MaskCacheKey& key) const {
+			size_t hash = std::hash<HBITMAP>{}(key.bitmap);
+			hash ^= std::hash<i32>{}(key.width) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+			hash ^= std::hash<i32>{}(key.height) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+			return hash;
+		}
+	};
+
+	struct MaskCacheEntry {
+		std::vector<u8> coverage;
+		u64 last_used;
+	};
+
+	struct MaskCoverageCache {
+		static constexpr size_t max_bytes = Megabytes(8);
+		static constexpr size_t entry_overhead = sizeof(MaskCacheKey) + sizeof(MaskCacheEntry) + 2 * sizeof(void*);
+		std::unordered_map<MaskCacheKey, MaskCacheEntry, MaskCacheKeyHash> entries;
+		size_t used_bytes = 0;
+		u64 use_count = 0;
+		#ifdef _DEBUG
+		u64 hits = 0;
+		u64 misses = 0;
+		#endif
+
+		const std::vector<u8>* find(MaskCacheKey key) {
+			auto entry = entries.find(key);
+			if (entry == entries.end()) {
+				#ifdef _DEBUG
+				++misses;
+				#endif
+				return nil;
+			}
+			#ifdef _DEBUG
+			++hits;
+			#endif
+			entry->second.last_used = ++use_count;
+			return &entry->second.coverage;
+		}
+
+		const std::vector<u8>* insert(MaskCacheKey key, std::vector<u8>& coverage) {
+			size_t entry_bytes = coverage.capacity() + entry_overhead;
+			if (entry_bytes > max_bytes) return &coverage;
+			while (used_bytes > max_bytes - entry_bytes) {
+				auto oldest = std::min_element(entries.begin(), entries.end(), [](const auto& left, const auto& right) {
+					return left.second.last_used < right.second.last_used;
+				});
+				used_bytes -= oldest->second.coverage.capacity() + entry_overhead;
+				entries.erase(oldest);
+			}
+			auto [entry, inserted] = entries.emplace(key, MaskCacheEntry{ std::move(coverage), ++use_count });
+			Assert(inserted);
+			used_bytes += entry_bytes;
+			return &entry->second.coverage;
+		}
+
+		void clear() {
+			entries.clear();
+			used_bytes = 0;
+			use_count = 0;
+			#ifdef _DEBUG
+			hits = misses = 0;
+			#endif
+		}
+	};
+
+	static MaskCoverageCache& mask_coverage_cache() {
+		static MaskCoverageCache cache;
+		return cache;
+	}
+
+	void clear_mask_coverage_cache() {
+		mask_coverage_cache().clear();
+	}
+
+	struct MaskTintBuffer {
+		HDC dc = nil;
+		HBITMAP bitmap = nil;
+		HBITMAP previous_bitmap = nil;
+		u32* pixels = nil;
+		i32 width = 0;
+		i32 height = 0;
+
+		~MaskTintBuffer() {
+			if (bitmap) {
+				SelectObject(dc, previous_bitmap);
+				DeleteObject(bitmap);
+			}
+			if (dc) DeleteDC(dc);
+		}
+
+		bool ensure_size(HDC destination_dc, i32 required_width, i32 required_height) {
+			if (bitmap && required_width <= width && required_height <= height) return true;
+			i32 new_width = maximum(width, required_width);
+			i32 new_height = maximum(height, required_height);
+			if (new_width > LONG_MAX / 4 || new_height > LONG_MAX / (new_width * 4)) return false;
+			u32* new_pixels = nil;
+			HBITMAP new_bitmap = create_DIB32(new_width, new_height, &new_pixels);
+			if (!new_bitmap || !new_pixels) {
+				if (new_bitmap) DeleteObject(new_bitmap);
+				return false;
+			}
+			if (!dc) dc = CreateCompatibleDC(destination_dc);
+			if (!dc) {
+				DeleteObject(new_bitmap);
+				return false;
+			}
+			HBITMAP displaced_bitmap = (HBITMAP)SelectObject(dc, new_bitmap);
+			if (!displaced_bitmap || (HGDIOBJ)displaced_bitmap == HGDI_ERROR) {
+				DeleteObject(new_bitmap);
+				return false;
+			}
+			if (bitmap) DeleteObject(bitmap);
+			else previous_bitmap = displaced_bitmap;
+			bitmap = new_bitmap;
+			pixels = new_pixels;
+			width = new_width;
+			height = new_height;
+			return true;
+		}
+	};
+
 	void draw_mask(HDC destination_dc, i32 destination_x, i32 destination_y, i32 destination_width, i32 destination_height, HBITMAP mask, HBRUSH color_brush) {
 		if (!mask || destination_width <= 0 || destination_height <= 0) return;
-		BITMAP bitmap{};
-		if (!GetObject(mask, sizeof(bitmap), &bitmap) || (bitmap.bmBitsPixel != 1 && bitmap.bmBitsPixel != 8) ||
-			bitmap.bmWidth <= 0 || bitmap.bmHeight <= 0 || bitmap.bmWidthBytes <= 0 ||
-			bitmap.bmHeight > LONG_MAX / bitmap.bmWidthBytes ||
-			destination_width > LONG_MAX / 4 || destination_height > LONG_MAX / (destination_width * 4)) return;
+		if (destination_width > LONG_MAX / 4 || destination_height > LONG_MAX / (destination_width * 4)) return;
 
-		MaskImage source{ bitmap.bmWidth, bitmap.bmHeight, bitmap.bmWidthBytes, (u8)bitmap.bmBitsPixel };
-		i32 byte_count = source.height * source.pitch;
-		source.mem = (u8*)malloc(byte_count);
-		if (!source.mem) return;
-		defer{ free(source.mem); };
-		if (GetBitmapBits(mask, byte_count, source.mem) != byte_count) return;
+		MaskCacheKey key{ mask, destination_width, destination_height };
+		auto& cache = mask_coverage_cache();
+		std::vector<u8> uncached_coverage;
+		const std::vector<u8>* coverage = cache.find(key);
+		if (!coverage) {
+			BITMAP bitmap{};
+			if (!GetObject(mask, sizeof(bitmap), &bitmap) || (bitmap.bmBitsPixel != 1 && bitmap.bmBitsPixel != 8) ||
+				bitmap.bmWidth <= 0 || bitmap.bmHeight <= 0 || bitmap.bmWidthBytes <= 0 ||
+				bitmap.bmHeight > LONG_MAX / bitmap.bmWidthBytes) return;
 
-		u32* pixels = nullptr;
-		HBITMAP image = create_DIB32(destination_width, destination_height, &pixels);
-		if (!image || !pixels) return;
-		defer{ DeleteObject(image); };
+			MaskImage source{ bitmap.bmWidth, bitmap.bmHeight, bitmap.bmWidthBytes, (u8)bitmap.bmBitsPixel };
+			i32 byte_count = source.height * source.pitch;
+			source.mem = (u8*)malloc(byte_count);
+			if (!source.mem) return;
+			defer{ free(source.mem); };
+			if (GetBitmapBits(mask, byte_count, source.mem) != byte_count) return;
+
+			uncached_coverage.resize((size_t)destination_width * destination_height);
+			for (i32 y = 0; y < destination_height; ++y)
+				for (i32 x = 0; x < destination_width; ++x)
+					uncached_coverage[(size_t)y * destination_width + x] = filtered_mask_coverage(source, x, y, destination_width, destination_height);
+			coverage = cache.insert(key, uncached_coverage);
+		}
+
+		static MaskTintBuffer reusable_tint_buffer;
+		MaskTintBuffer temporary_tint_buffer;
+		size_t required_buffer_width = maximum(reusable_tint_buffer.width, destination_width);
+		size_t required_buffer_height = maximum(reusable_tint_buffer.height, destination_height);
+		MaskTintBuffer* tint_buffer = required_buffer_width * required_buffer_height * sizeof(u32) <= MaskCoverageCache::max_bytes
+			? &reusable_tint_buffer : &temporary_tint_buffer;
+		if (!tint_buffer->ensure_size(destination_dc, destination_width, destination_height)) return;
 		COLORREF color = ColorFromBrush(color_brush);
+		//TODO(fran): If static-color tinting becomes expensive, add a small finished-image cache keyed additionally by color.
 		for (i32 y = 0; y < destination_height; ++y) {
 			for (i32 x = 0; x < destination_width; ++x) {
-				u8 alpha = filtered_mask_coverage(source, x, y, destination_width, destination_height);
+				u8 alpha = (*coverage)[(size_t)y * destination_width + x];
 				u32 red = (GetRValue(color) * alpha + 127) / 255;
 				u32 green = (GetGValue(color) * alpha + 127) / 255;
 				u32 blue = (GetBValue(color) * alpha + 127) / 255;
-				pixels[y * destination_width + x] = (u32(alpha) << 24) | (red << 16) | (green << 8) | blue;
+				tint_buffer->pixels[(size_t)y * tint_buffer->width + x] = (u32(alpha) << 24) | (red << 16) | (green << 8) | blue;
 			}
 		}
 
-		HDC memory_dc = CreateCompatibleDC(destination_dc);
-		if (!memory_dc) return;
-		defer{ DeleteDC(memory_dc); };
-		HBITMAP previous_image = (HBITMAP)SelectObject(memory_dc, image);
-		if (!previous_image) return;
-		defer{ SelectObject(memory_dc, previous_image); };
 		BLENDFUNCTION blend{ AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
 		AlphaBlend(destination_dc, destination_x, destination_y, destination_width, destination_height,
-			memory_dc, 0, 0, destination_width, destination_height, blend);
+			tint_buffer->dc, 0, 0, destination_width, destination_height, blend);
 	}
 
 	void draw_icon(HDC dest, int destination_x, int destination_y, int destination_width, int destination_height, HICON icon, int source_x, int source_y, int source_width, int source_height) {

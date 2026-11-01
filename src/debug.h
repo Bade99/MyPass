@@ -29,6 +29,8 @@ namespace debug {
 		HWND static_bitmap_info;
 		HWND static_speed_wnd;
 		HWND edit_speed_wnd;
+		HWND static_cache_memory_wnd;
+		HWND static_cache_hits_wnd;
 		HWND static_focus_wnd;
 	};
 
@@ -37,6 +39,11 @@ namespace debug {
 
 		HWND focus_wnd;
 		rect_i32 raw_preview;
+		size_t displayed_cache_entries;
+		size_t displayed_cache_bytes;
+		u64 displayed_cache_hits;
+		u64 displayed_cache_misses;
+		bool cache_stats_initialized;
 
 		Controls controls;
 
@@ -56,6 +63,26 @@ namespace debug {
 			else SetWindowText(controls.static_bitmap_info, option->name);
 			ask_window_for_repaint(controls.bitmap_preview);
 			ask_window_for_repaint(wnd);
+		}
+
+		void update_cache_stats() {
+			auto& cache = urender::mask_coverage_cache();
+			if (!cache_stats_initialized || displayed_cache_entries != cache.entries.size() || displayed_cache_bytes != cache.used_bytes) {
+				auto memory_text = std::format(_t("Mask cache: {} entries, {} / {} KiB"),
+					cache.entries.size(), (cache.used_bytes + 1023) / 1024, cache.max_bytes / 1024);
+				SetWindowText(controls.static_cache_memory_wnd, memory_text.c_str());
+				displayed_cache_entries = cache.entries.size();
+				displayed_cache_bytes = cache.used_bytes;
+			}
+			if (!cache_stats_initialized || displayed_cache_hits != cache.hits || displayed_cache_misses != cache.misses) {
+				u64 total = cache.hits + cache.misses;
+				f32 hit_rate = total ? 100.f * (f32)cache.hits / (f32)total : 0.f;
+				auto hits_text = std::format(_t("Hits: {}  Misses: {}  ({:.1f}%)"), cache.hits, cache.misses, hit_rate);
+				SetWindowText(controls.static_cache_hits_wnd, hits_text.c_str());
+				displayed_cache_hits = cache.hits;
+				displayed_cache_misses = cache.misses;
+			}
+			cache_stats_initialized = true;
 		}
 	
 		void add_controls() {
@@ -107,6 +134,11 @@ namespace debug {
 
 			controls.static_focus_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
 			edit_oneline::set_theme(controls.static_focus_wnd, static_theme);
+			controls.static_cache_memory_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
+			controls.static_cache_hits_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
+			edit_oneline::set_theme(controls.static_cache_memory_wnd, static_theme);
+			edit_oneline::set_theme(controls.static_cache_hits_wnd, static_theme);
+			update_cache_stats();
 
 			controls.bitmap_selector = create_window(wnd, combobox::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
 			controls.size_selector = create_window(wnd, combobox::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
@@ -194,6 +226,10 @@ namespace debug {
 			rect_i32 bounds{}; bounds.wh = { w, h };
 
 			rect_i32 static_focus_wnd = bounds.cut_bottom(DPI(30));
+			rect_i32 cache_hits = bounds.cut_bottom(DPI(26));
+			cache_hits.apply_padding(pad, 0);
+			rect_i32 cache_memory = bounds.cut_bottom(DPI(26));
+			cache_memory.apply_padding(pad, 0);
 			rect_i32 speed_label = bounds.cut_bottom(DPI(30));
 			speed_label.apply_padding(pad, 0);
 			rect_i32 speed_edit = speed_label.cut_right(DPI(80));
@@ -233,6 +269,8 @@ namespace debug {
 
 			MoveWindow(controls.static_speed_wnd, speed_label);
 			MoveWindow(controls.edit_speed_wnd, speed_edit);
+			MoveWindow(controls.static_cache_memory_wnd, cache_memory);
+			MoveWindow(controls.static_cache_hits_wnd, cache_hits);
 			MoveWindow(controls.static_focus_wnd, static_focus_wnd);
 			MoveWindow(controls.bitmap_selector, bitmap_selector);
 			MoveWindow(controls.size_selector, size_selector);
@@ -325,6 +363,12 @@ namespace debug {
 
 			SetTimer(wnd, anim_id, refresh_ms, anim_proc);
 		}
+
+		void track_cache_stats() {
+			SetTimer(wnd, 49857, 250, [](HWND wnd, UINT, UINT_PTR, DWORD) {
+				if (State* state = get_state(wnd)) state->update_cache_stats();
+			});
+		}
 	};
 
 	LRESULT CALLBACK proc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -346,6 +390,7 @@ namespace debug {
 			state.resize_controls();
 			state.follow_track_window();
 			state.track_focus_window();
+			state.track_cache_stats();
 		} break;
 		case WM_SIZE:
 		{
