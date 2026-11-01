@@ -60,9 +60,10 @@ HFONT create_caption_font(u32 dpi) {
 
 void calc_caption(State& state) {
 	GetClientRect(state.wnd, &state.rc_caption);
-	state.rc_caption.bottom = caption_height_for_dpi(get_effective_dpi(state.wnd));
+	i32 caption_height = caption_height_for_dpi(get_effective_dpi(state.wnd));
+	state.rc_caption.bottom = caption_height + maximized_caption_offset_y(state.wnd);
 
-	state.caption_btn.cy = RECTH(state.rc_caption); state.caption_btn.cx = state.caption_btn.cy * 16 / 9;
+	state.caption_btn.cy = caption_height; state.caption_btn.cx = state.caption_btn.cy * 16 / 9;
 }
 
 RECT calc_nonclient_rc_from_client(RECT client_rc, BOOL has_menu) {
@@ -96,6 +97,7 @@ RECT calc_btn_min_rc(State& state) {
 	auto offset_y = maximized_caption_offset_y(state.wnd);
 	RECT rc{ r.right - 3 * state.caption_btn.cx, r.top, r.right - 2 * state.caption_btn.cx, r.top + state.caption_btn.cy };
 	rc.top += top_border_thickness + offset_y;
+	rc.bottom += offset_y;
 	return rc;
 }
 
@@ -104,6 +106,7 @@ RECT calc_btn_max_rc(State& state) {
 	RECT r; GetClientRect(state.wnd, &r);
 	RECT rc{ r.right - 2 * state.caption_btn.cx, r.top, r.right - 1 * state.caption_btn.cx, r.top + state.caption_btn.cy };
 	rc.top += top_border_thickness + offset_y;
+	rc.bottom += offset_y;
 	return rc;
 }
 
@@ -112,6 +115,7 @@ RECT calc_btn_close_rc(State& state) {
 	auto offset_y = maximized_caption_offset_y(state.wnd);
 	RECT rc{ r.right - 1 * state.caption_btn.cx, r.top, r.right - 0 * state.caption_btn.cx, r.top + state.caption_btn.cy };
 	rc.top += top_border_thickness + offset_y;
+	rc.bottom += offset_y;
 	return rc;
 }
 
@@ -455,6 +459,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		HDC dc = BeginPaint(state.wnd, &ps); defer{ EndPaint(state.wnd, &ps); };
 
 		if (rcs_overlap(state.rc_caption, ps.rcPaint)) {
+			auto offset_y = maximized_caption_offset_y(state.wnd);
 			//We get system painted 1px borders on the left, right and bottom, but not on the top, for now until we find out why we just emulate it
 			auto top_border_rc = state.rc_caption; top_border_rc.bottom = top_border_rc.top + top_border_thickness;
 			FillRect(dc, &top_border_rc, colors.CaptionBk_Inactive); //TODO(fran): could not find a system default that matches to the brush used for the borders, used mine which matches prety well
@@ -466,11 +471,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			TCHAR title[128]{}; GetWindowText(state.wnd, title, ARRAYSIZE(title));
 			TEXTMETRIC tm; GetTextMetrics(dc, &tm);
 
-			auto offset_y = maximized_caption_offset_y(state.wnd);
 			HICON icon = state.caption_icon;
 			int icon_height = (int)((float)tm.tmHeight * 1.5f);
 			int icon_width = icon_height;
-			int icon_align_height = (RECTH(state.rc_caption) - icon_height) / 2;
+			int icon_align_height = (state.caption_btn.cy - icon_height) / 2;
 			int icon_align_width = icon_align_height;
 			state.rc_icon = rectWH(icon_align_width, icon_align_height + offset_y, icon_width, icon_height);
 			auto iconnfo = MyGetIconInfo(icon);
@@ -481,7 +485,6 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			title_rc.left = icon_align_width * 2 + icon_width;
 			title_rc.right = state.settings->can_maximize ? calc_btn_min_rc(state).left : calc_btn_max_rc(state).left;
 			title_rc.top += offset_y;
-			title_rc.bottom += offset_y;
 			urender::draw_text(dc, title_rc, to_utf_str(title), state.caption_font, txtbr, urender::TextAlignment::left, 0);
 
 		}
