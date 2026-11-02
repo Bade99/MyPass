@@ -175,6 +175,19 @@ namespace table {
 		Assert(at_idx <= state.rows.size());
 		u32 idx = 0;
 		state.rows.insert(state.rows.begin() + at_idx, { state.functions.create_control(idx++, state.wnd, column_values)... });
+		HWND insert_after = HWND_TOP;
+		if (at_idx)
+			for (HWND cell : state.rows[at_idx - 1])
+				if (cell) insert_after = cell;
+		for (HWND cell : state.rows[at_idx]) {
+			if (!cell) continue;
+			if (!SetWindowPos(cell, insert_after, 0, 0, 0, 0,
+				SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)) {
+				Assert(0);
+				continue;
+			}
+			insert_after = cell;
+		}
 		ask_window_for_repaint(state.manager_parent);
 		ask_window_for_resize(state.manager_parent);
 	}
