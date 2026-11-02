@@ -351,6 +351,7 @@ void create_controls(State& state) {
 					auto& controls = state.controls;
 
 					controls.text = create_window(state.wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
+					edit_oneline::set_fixed_mask_length_when_disabled(controls.text, 20);
 					AWDT(controls.text, LANG_PWD_ED_TBL_VALUE);
 					SetWindowText(controls.text, cell.text);
 					edit_oneline::set_theme(controls.text, themes.clear_editoneline);

@@ -267,6 +267,7 @@ struct State : WindowState {
 	Theme theme;
 
 	u64 char_max_sz;//doesnt include terminating null, also we wont have terminating null
+	u32 fixed_mask_length_when_disabled;
 
 	CharSel selection;//current selection, in "character" coordinates, zero-based //TODO(fran): cache selection's starting line
 
