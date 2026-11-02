@@ -2317,7 +2317,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//NOTE: I wonder, it doesnt seem to send us \r\n so is that something that is manually done by the control?
 			//We dont handle "enter" for now
 			//if(state.identifier) //TODO(fran): should I only send notifs if I have an identifier? what do the defaults do?
-			PostMessage(GetParent(state.wnd), WM_COMMAND, MAKELONG(state.identifier, EN_ENTER), (LPARAM)state.wnd);
+			if (state.functions.on_enter_key_pressed) state.functions.on_enter_key_pressed(state.user_extra, state.wnd);
+			else PostMessage(GetParent(state.wnd), WM_COMMAND, MAKELONG(state.identifier, EN_ENTER), (LPARAM)state.wnd);
 
 			if (style & ES_MULTILINE) {
 				//Windows: CRLF ; Unix/Mac: LF ; Machintosh (pre-OS X aka old): CR | CR = \r = 0x0D = VK_RETURN ; LF = \n = 0x0A
