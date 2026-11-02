@@ -246,6 +246,9 @@
     <ClInclude Include="advanced_helpers.h">
       <Filter>Header Files\Utils</Filter>
     </ClInclude>
+    <ClInclude Include="tooltip.h">
+      <Filter>Header Files\Utils</Filter>
+    </ClInclude>
     <ClInclude Include="raw_buffer.h">
       <Filter>Header Files\Utils</Filter>
     </ClInclude>

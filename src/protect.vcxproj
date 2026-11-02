@@ -171,6 +171,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="advanced_helpers.h" />
+    <ClInclude Include="tooltip.h" />
     <ClInclude Include="combo.h" />
     <ClInclude Include="combo_types.h" />
     <ClInclude Include="control_helpers.h" />
