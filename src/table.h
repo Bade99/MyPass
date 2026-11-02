@@ -170,12 +170,31 @@ namespace table {
 	}
 
 	template<typename... Args>
-	void add_row(State& state, Args... column_values) {
+	void insert_row(State& state, size_t at_idx, Args... column_values) {
 		static_assert(sizeof...(column_values) <= MAX_COLUMNS);
+		Assert(at_idx <= state.rows.size());
 		u32 idx = 0;
-		state.rows.push_back({ state.functions.create_control(idx++, state.wnd, column_values)... });
+		state.rows.insert(state.rows.begin() + at_idx, { state.functions.create_control(idx++, state.wnd, column_values)... });
+		HWND insert_after = HWND_TOP;
+		if (at_idx)
+			for (HWND cell : state.rows[at_idx - 1])
+				if (cell) insert_after = cell;
+		for (HWND cell : state.rows[at_idx]) {
+			if (!cell) continue;
+			if (!SetWindowPos(cell, insert_after, 0, 0, 0, 0,
+				SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)) {
+				Assert(0);
+				continue;
+			}
+			insert_after = cell;
+		}
 		ask_window_for_repaint(state.manager_parent);
 		ask_window_for_resize(state.manager_parent);
+	}
+
+	template<typename... Args>
+	void add_row(State& state, Args... column_values) {
+		insert_row(state, state.rows.size(), column_values...);
 	}
 
 	void delete_row(State& state, HWND containing_wnd) {

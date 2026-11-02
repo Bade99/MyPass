@@ -122,13 +122,15 @@ private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 struct InvalidCharactersResult { bool res; str explanation; };
 typedef InvalidCharactersResult(*func_has_invalid_chars)(const utf16* txt, size_t char_cnt, void* user_extra);
 typedef void(*func_on_change)(void* user_extra, HWND wnd);
+typedef void(*func_on_enter_key_pressed)(void* user_extra, HWND wnd);
 
 union Functions {
 	struct {
 		func_has_invalid_chars has_invalid_chars;
 		func_on_change on_change;
+		func_on_enter_key_pressed on_enter_key_pressed;
 	};
-	void* all[2]{ 0 };
+	void* all[3]{ 0 };
 private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 };
 
@@ -265,6 +267,7 @@ struct State : WindowState {
 	Theme theme;
 
 	u64 char_max_sz;//doesnt include terminating null, also we wont have terminating null
+	u32 fixed_mask_length_when_disabled;
 
 	CharSel selection;//current selection, in "character" coordinates, zero-based //TODO(fran): cache selection's starting line
 

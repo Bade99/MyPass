@@ -26,6 +26,13 @@ void set_user_extra(HWND wnd, void* user_extra) {
 
 void set_functions(HWND wnd, const Functions& functions) { _control_create_function__set_functions }
 
+void set_fixed_mask_length_when_disabled(HWND wnd, u32 length) {
+	State& state = *get_state(wnd); Assert(&state);
+	if (state.fixed_mask_length_when_disabled == length) return;
+	state.fixed_mask_length_when_disabled = length;
+	ask_window_for_repaint(state.wnd);
+}
+
 SIZE calc_caret_dim(State& state) {
 	SIZE res;
 	HDC dc = GetDC(state.wnd); defer{ ReleaseDC(state.wnd,dc); };
@@ -1672,8 +1679,9 @@ void render(State& state, HDC dc) {
 	int w = RECTW(rc), h = RECTH(rc);
 
 	LONG_PTR style = GetWindowLongPtr(state.wnd, GWL_STYLE);
-	bool show_placeholder = is_placeholder_visible(state);
 	bool is_enabled = IsWindowEnabled(state.wnd);
+	bool show_fixed_mask = state.fixed_mask_length_when_disabled && (style & ES_PASSWORD) && !is_enabled;
+	bool show_placeholder = !show_fixed_mask && is_placeholder_visible(state);
 
 	u32 border_thickness = state.theme.dimensions.border_thickness;
 
@@ -1698,6 +1706,14 @@ void render(State& state, HDC dc) {
 	}
 
 	urender::draw_background(dc, rc, bk_br, border_br, state.theme.dimensions);
+	if (show_fixed_mask) {
+		str fixed_mask(state.fixed_mask_length_when_disabled, password_char);
+		urender::TextAlignment alignment = style & ES_CENTER ? urender::TextAlignment::center
+			: style & ES_RIGHT ? urender::TextAlignment::right : urender::TextAlignment::left;
+		urender::draw_text(dc, rc, to_utf_str(fixed_mask), font, txt_br, alignment, horizontal_text_padding_px(),
+			urender::TextVerticalAlignment::top, state.padding.y);
+		return;
+	}
 
 	//TODO(fran): clip text rendering inside drawing area of the background and border (must take into account rounded borders as well)
 	{
@@ -2317,7 +2333,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			//NOTE: I wonder, it doesnt seem to send us \r\n so is that something that is manually done by the control?
 			//We dont handle "enter" for now
 			//if(state.identifier) //TODO(fran): should I only send notifs if I have an identifier? what do the defaults do?
-			PostMessage(GetParent(state.wnd), WM_COMMAND, MAKELONG(state.identifier, EN_ENTER), (LPARAM)state.wnd);
+			if (state.functions.on_enter_key_pressed) state.functions.on_enter_key_pressed(state.user_extra, state.wnd);
+			else PostMessage(GetParent(state.wnd), WM_COMMAND, MAKELONG(state.identifier, EN_ENTER), (LPARAM)state.wnd);
 
 			if (style & ES_MULTILINE) {
 				//Windows: CRLF ; Unix/Mac: LF ; Machintosh (pre-OS X aka old): CR | CR = \r = 0x0D = VK_RETURN ; LF = \n = 0x0A

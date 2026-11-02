@@ -90,8 +90,7 @@ namespace password_editor {
 				const i32 tool_cnt = (i32)tools.size();
 				auto total_tool_pad = (tool_cnt - 1) * pad;
 				auto toolbar_usable_w = toolbar_w - total_tool_pad;
-				auto tool_h = RECTH(title_r);
-				auto max_tool_w = tool_h;
+				auto max_tool_w = maximum(0, (i32)table::get_state(state.parent)->theme.cells.get_row_h_in_pixels() - 2);
 				auto tool_w = (i32)minimum(toolbar_usable_w / tool_cnt, max_tool_w);
 				auto tool_x = w - total_tool_pad - tool_cnt * tool_w;
 				size_t tool_index = 1;
@@ -195,15 +194,20 @@ void on_properties_changed(State& state) {
 	on_internal_state_change(state); //changing the flags changes the rendering
 }
 
-void table_add_row(State& state, DescriptionCell* description, ValueCell* value) {
+void table_insert_row(State& state, size_t at_idx, DescriptionCell* description, ValueCell* value) {
 	auto& tbl = *table::get_state(state.controls.tbl_values);
 	if (!description->on_change) description->on_change = state.stateful_functions.on_change;
 	if (!value->on_change) value->on_change = state.stateful_functions.on_change;
-	table::add_row(tbl, description, value);
+	table::insert_row(tbl, at_idx, description, value);
 	RECT table_bounds; GetClientRect(tbl.wnd, &table_bounds);
 	if (RECTW(table_bounds) > 0) table::resize_controls(tbl);
-	set_row_editing_enabled(tbl.rows.back(), state.is_open && state.is_editing);
+	set_row_editing_enabled(tbl.rows[at_idx], state.is_open && state.is_editing);
 	if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
+}
+
+void table_add_row(State& state, DescriptionCell* description, ValueCell* value) {
+	auto& tbl = *table::get_state(state.controls.tbl_values);
+	table_insert_row(state, tbl.rows.size(), description, value);
 }
 
 void table_delete_row(State& state, HWND containing_wnd) {
@@ -214,6 +218,23 @@ void table_delete_row(State& state, HWND containing_wnd) {
 	RECT table_bounds; GetClientRect(tbl.wnd, &table_bounds);
 	if (RECTW(table_bounds) > 0) table::resize_controls(tbl);
 	if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
+}
+
+void on_row_editor_enter_key_pressed(void*, HWND edit_wnd) {
+	HWND card_wnd = get_parent_of_class(edit_wnd, wndclass);
+	Assert(card_wnd);
+	auto& state = *get_window_state<State>(card_wnd);
+	auto& tbl = *table::get_state(state.controls.tbl_values);
+	HWND cell_wnd = GetParent(edit_wnd) == tbl.wnd ? edit_wnd : GetParent(edit_wnd);
+	for (size_t row_idx = 0; row_idx < tbl.rows.size(); ++row_idx) {
+		const auto& row = tbl.rows[row_idx];
+		if (row[0] != cell_wnd && row[1] != cell_wnd) continue;
+		auto description = empty_description_cell;
+		auto value = empty_value_cell;
+		table_insert_row(state, row_idx + 1, &description, &value);
+		SetFocus(tbl.rows[row_idx + 1][0]);
+		return;
+	}
 }
 
 void create_controls(State& state) {
@@ -315,7 +336,7 @@ void create_controls(State& state) {
 					AWDT(wnd, LANG_PWD_ED_TBL_FIELD);
 					SetWindowFont(wnd, fonts.General, true);
 					edit_oneline::set_user_extra(wnd, cell.on_change.state);
-					edit_oneline::set_functions(wnd, {.on_change = cell.on_change.function});
+					edit_oneline::set_functions(wnd, {.on_change = cell.on_change.function, .on_enter_key_pressed = on_row_editor_enter_key_pressed});
 					return wnd;
 				}
 				case 1: 
@@ -330,11 +351,12 @@ void create_controls(State& state) {
 					auto& controls = state.controls;
 
 					controls.text = create_window(state.wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
+					edit_oneline::set_fixed_mask_length_when_disabled(controls.text, 20);
 					AWDT(controls.text, LANG_PWD_ED_TBL_VALUE);
 					SetWindowText(controls.text, cell.text);
 					edit_oneline::set_theme(controls.text, themes.clear_editoneline);
 					edit_oneline::set_user_extra(controls.text, cell.on_change.state);
-					edit_oneline::set_functions(controls.text, { .on_change = cell.on_change.function });
+					edit_oneline::set_functions(controls.text, { .on_change = cell.on_change.function, .on_enter_key_pressed = on_row_editor_enter_key_pressed });
 
 					controls.btn_show = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
 					SendMessage(controls.btn_show, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.eye_open);
