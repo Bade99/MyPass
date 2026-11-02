@@ -463,13 +463,12 @@ i32 desired_height(State& state) {
 //TODO(fran): positioning relative to a character offset, eg {3,5} 3rd char of 5th row place on top or left or...
 void show_tip(HWND wnd, const cstr* msg, int duration_ms, u32 ETP_flags) {
 	State& state = *get_state(wnd); Assert(&state);
-	TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
-	toolInfo.hwnd = state.wnd;
-	toolInfo.uId = (UINT_PTR)state.wnd;
-	toolInfo.hinst = GetModuleHandle(NULL);
-	toolInfo.lpszText = const_cast<cstr*>(msg);
-	SendMessage(state.controls.tooltip, TTM_UPDATETIPTEXT, 0, (LPARAM)&toolInfo);
-	SendMessage(state.controls.tooltip, TTM_TRACKACTIVATE, TRUE, (LPARAM)&toolInfo);
+	TOOLINFO current{ TTTOOLINFO_V1_SIZE };
+	if (SendMessage(state.controls.tooltip, TTM_GETCURRENTTOOL, 0, (LPARAM)&current) && current.uId != (UINT_PTR)state.wnd) {
+		KillTimer((HWND)current.uId, EDITONELINE_tooltip_timer_id);
+		SendMessage(state.controls.tooltip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&current);
+	}
+	shared_tooltip::update_text(state.wnd, msg);
 	POINT tooltip_p{ 0,0 };
 	RECT tooltip_r;
 	tooltip_r.left = 0;
@@ -494,15 +493,18 @@ void show_tip(HWND wnd, const cstr* msg, int duration_ms, u32 ETP_flags) {
 
 	ClientToScreen(state.wnd, &tooltip_p);
 	SendMessage(state.controls.tooltip, TTM_TRACKPOSITION, 0, (LPARAM)MAKELONG(tooltip_p.x, tooltip_p.y));
+	auto toolInfo = shared_tooltip::tool_info(state.wnd);
+	SendMessage(state.controls.tooltip, TTM_TRACKACTIVATE, TRUE, (LPARAM)&toolInfo);
 	SetTimer(state.wnd, EDITONELINE_tooltip_timer_id, duration_ms, nil);
 }
 
 void hide_tip(State& state) {
 	KillTimer(state.wnd, EDITONELINE_tooltip_timer_id);
-	TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
-	toolInfo.hwnd = state.wnd;
-	toolInfo.uId = (UINT_PTR)state.wnd;
-	SendMessage(state.controls.tooltip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&toolInfo);
+	TOOLINFO current{ TTTOOLINFO_V1_SIZE };
+	if (SendMessage(state.controls.tooltip, TTM_GETCURRENTTOOL, 0, (LPARAM)&current) && current.uId == (UINT_PTR)state.wnd) {
+		auto toolInfo = shared_tooltip::tool_info(state.wnd);
+		SendMessage(state.controls.tooltip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&toolInfo);
+	}
 }
 
 void scroll_to_caret(State& state) {
@@ -1827,27 +1829,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_CREATE:
 	{
-		//Create our tooltip
-		state.controls.tooltip = CreateWindowEx(WS_EX_TOPMOST/*make sure it can be seen in any wnd config*/, TOOLTIPS_CLASS, NULL,
-			WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,//INFO(fran): TTS_BALLOON doesnt work on windows10, you need a registry change https://superuser.com/questions/1349414/app-wont-show-balloon-tip-notifications-in-windows-10 simply amazing
-			CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-			state.wnd, NULL, NULL, NULL);
-		Assert(state.controls.tooltip);
-
-		TOOLINFO toolInfo{ TTTOOLINFO_V1_SIZE };
-		toolInfo.hwnd = state.wnd;
-		toolInfo.uFlags = TTF_IDISHWND | TTF_ABSOLUTE | TTF_TRACK /*allows to show the tooltip when we please*/; //TODO(fran): TTF_TRANSPARENT might be useful, mouse msgs that go to the tooltip are sent to the parent aka us
-		toolInfo.uId = (UINT_PTR)state.wnd;
-		toolInfo.rect = { 0 };
-		toolInfo.hinst = GetModuleHandle(NULL);
-		toolInfo.lpszText = 0;
-		toolInfo.lParam = 0;
-		toolInfo.lpReserved = 0;
-		BOOL addtool_res = (BOOL)SendMessage(state.controls.tooltip, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
-		Assert(addtool_res);
-
-		SendMessage(state.controls.tooltip, TTM_SETTIPTEXTCOLOR, ColorFromBrush(colors.ControlTxt), 0);
-		SendMessage(state.controls.tooltip, TTM_SETTIPBKCOLOR, ColorFromBrush(colors.ControlBk), 0);
+		state.controls.tooltip = add_tracking_tooltip(state.wnd);
 
 		const auto initial_text = ((CREATESTRUCT*)lparam)->lpszName;
 		if (initial_text && *initial_text) {

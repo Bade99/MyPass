@@ -147,6 +147,8 @@ CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_p
 		layout.backdrop_bounds.right = width - width_padding + backdrop_extent;
 		offset_y = button_start_y + button_dimension + spacing;
 		//TODO(fran): defer descendant layout for offscreen cards during width changes, then refresh it before a card enters the viewport; preserve scrolling and keyboard focus.
+		//TODO(fran): pool HWND-backed cards for the visible viewport plus overscan, rebinding them as the page scrolls.
+		//Keep card data independent of HWND identity and preserve search, focus/tab order, animations, and saving.
 		for (auto card : controls.password_editors) {
 			if (!IsWindowVisible(card)) continue;
 			const auto& card_state = *password_editor::get_state(card);
