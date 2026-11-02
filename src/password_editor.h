@@ -90,8 +90,7 @@ namespace password_editor {
 				const i32 tool_cnt = (i32)tools.size();
 				auto total_tool_pad = (tool_cnt - 1) * pad;
 				auto toolbar_usable_w = toolbar_w - total_tool_pad;
-				auto tool_h = RECTH(title_r);
-				auto max_tool_w = tool_h;
+				auto max_tool_w = maximum(0, (i32)table::get_state(state.parent)->theme.cells.get_row_h_in_pixels() - 2);
 				auto tool_w = (i32)minimum(toolbar_usable_w / tool_cnt, max_tool_w);
 				auto tool_x = w - total_tool_pad - tool_cnt * tool_w;
 				size_t tool_index = 1;
