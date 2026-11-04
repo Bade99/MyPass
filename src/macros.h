@@ -85,7 +85,7 @@ template<typename F> Defer<F> operator+(DeferDummy, F&& f) { return make_defer<F
 #define _theme_copy_all_brushes(src, dest) for (u32 i = 0; auto& b : dest.all) repaint |= b.copy_from(src.all[i++])
 #define _theme_copy_u32(src, dest) if (src != U32MAX) { dest = src; repaint = true; }
 #define _theme_copy_uinumber(src, dest) if (src.value != F32INFINITY) { dest = src; repaint = true; }
-#define _theme_copy_pointer(src, dest) if (src) { dest = src; repaint = true; }
+#define _theme_copy_pointer(src, dest) if (src && src != dest) { dest = src; repaint = true; }
 #define _theme_copy_theme(src, dest) repaint |= dest.copy_from(src);
 //trool = 2bit bool, 2nd bit is used to determine whether to copy or not
 #define _theme_copy_trool(src, dest) if (src != 2) { dest = src; repaint = true; }

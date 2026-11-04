@@ -25,6 +25,7 @@
 #include "win_msg_common_handler.h"
 
 #include "page_types.h"
+#include "tabs_types.h"
 #include "button_types.h"
 #include "toast_types.h"
 #include "nonclient_types.h"
@@ -46,6 +47,7 @@
 #include "button.h"
 #include "scrollbar.h"
 #include "page.h"
+#include "tabs.h"
 #include "text.h"
 #include "search.h"
 #include "nonclient.h"

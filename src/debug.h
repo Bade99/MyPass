@@ -20,6 +20,27 @@ namespace debug {
 		{ _t("48 px"), nil, 48 }, { _t("64 px"), nil, 64 }, { _t("96 px"), nil, 96 },
 		{ _t("128 px"), nil, 128 },
 	};
+	static constexpr std::array render_events{
+		render_diagnostics::Event::window_resize,
+		render_diagnostics::Event::editor_resize,
+		render_diagnostics::Event::card_move,
+		render_diagnostics::Event::card_children_batch,
+		render_diagnostics::Event::text_paint,
+		render_diagnostics::Event::bitmap_draw_layout,
+		render_diagnostics::Event::bitmap_copy_out,
+	};
+
+	edit_oneline::Theme static_text_theme() {
+		auto hollow_brush = GetStockBrush(HOLLOW_BRUSH);
+		return {
+			.brushes = {
+				.foreground = {.disabled = colors.ControlTxt},
+				.bk = {.disabled = hollow_brush},
+				.border = {.disabled = hollow_brush},
+			},
+			.font = fonts.General,
+		};
+	}
 
 	DWORD user_object_limit() {
 		HKEY key;
@@ -34,6 +55,7 @@ namespace debug {
 	}
 
 	struct Controls {
+		HWND tabs;
 		HWND color_buttons[ARRAYSIZE(colors.brushes)];
 		HWND bitmap_selector;
 		HWND size_selector;
@@ -45,6 +67,8 @@ namespace debug {
 		HWND static_cache_hits_wnd;
 		HWND static_user_objects_wnd;
 		HWND static_focus_wnd;
+		HWND static_render_summary_wnd;
+		HWND render_metrics_table;
 	};
 
 	struct State : WindowState {
@@ -59,6 +83,8 @@ namespace debug {
 		bool cache_stats_initialized;
 		DWORD displayed_user_objects;
 		bool user_objects_initialized;
+		LONGLONG displayed_render_start;
+		bool render_stats_initialized;
 
 		Controls controls;
 
@@ -111,8 +137,64 @@ namespace debug {
 			displayed_user_objects = count;
 			user_objects_initialized = true;
 		}
+
+		void update_render_stats() {
+		#if RENDER_DIAGNOSTICS_ENABLED
+			auto& session = render_diagnostics::session();
+			if (session.active || (render_stats_initialized && displayed_render_start == session.start)) return;
+			if (!session.start) {
+				SetWindowText(controls.static_render_summary_wnd, _t("No resize session recorded yet"));
+				for (const auto& row : table::get_state(controls.render_metrics_table)->rows | std::views::drop(1))
+					for (u32 column = 1; column < 4; ++column) SetWindowText(row[column], _t(""));
+			}
+			else {
+				auto summary = std::format(_t("Last resize: {:.2f} ms"), (f64)session.wall_ticks / GetPCFrequency());
+				SetWindowText(controls.static_render_summary_wnd, summary.c_str());
+				const auto& rows = table::get_state(controls.render_metrics_table)->rows;
+				for (size_t index = 0; index < render_events.size(); ++index) {
+					auto event = render_events[index];
+					const auto& metric = session.metrics[(size_t)event];
+					const auto& row = rows[index + 1];
+					auto calls = std::format(_t("{}"), metric.calls);
+					SetWindowText(row[1], calls.c_str());
+					auto total = metric.ticks ? std::format(_t("{:.2f}"), (f64)metric.ticks / GetPCFrequency()) : str{};
+					auto max_time = metric.ticks ? std::format(_t("{:.2f}"), (f64)metric.max_ticks / GetPCFrequency()) : str{};
+					SetWindowText(row[2], total.c_str());
+					SetWindowText(row[3], max_time.c_str());
+				}
+			}
+			displayed_render_start = session.start;
+		#else
+			if (render_stats_initialized) return;
+			SetWindowText(controls.static_render_summary_wnd, _t("Render diagnostics are disabled"));
+		#endif
+			render_stats_initialized = true;
+		}
+
+		void apply_tab_visibility() {
+			bool controls_tab = tabs::get_selected(controls.tabs) == 0;
+			if (!controls_tab) {
+				combobox::show_listbox(*combobox::get_state(controls.bitmap_selector), false);
+				combobox::show_listbox(*combobox::get_state(controls.size_selector), false);
+			}
+			for (HWND color_button : controls.color_buttons) ShowWindow(color_button, controls_tab ? SW_SHOW : SW_HIDE);
+			for (HWND control : { controls.bitmap_selector, controls.size_selector, controls.bitmap_preview,
+				controls.static_bitmap_info, controls.static_speed_wnd, controls.edit_speed_wnd,
+				controls.static_cache_memory_wnd, controls.static_cache_hits_wnd,
+				controls.static_user_objects_wnd, controls.static_focus_wnd })
+				ShowWindow(control, controls_tab ? SW_SHOW : SW_HIDE);
+			ShowWindow(controls.static_render_summary_wnd, controls_tab ? SW_HIDE : SW_SHOW);
+			ShowWindow(controls.render_metrics_table, controls_tab ? SW_HIDE : SW_SHOW);
+			if (controls_tab) { update_cache_stats(); update_user_object_stats(); }
+			else update_render_stats();
+			ask_window_for_repaint(wnd);
+		}
 	
 		void add_controls() {
+			controls.tabs = create_window(wnd, tabs::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
+			tabs::set_theme(controls.tabs, themes.base_tabs);
+			tabs::add_tab(controls.tabs, L"Controls");
+			tabs::add_tab(controls.tabs, L"Rendering");
 
 			button::Theme t{};
 			auto hollow_br = GetStockBrush(HOLLOW_BRUSH);
@@ -120,14 +202,7 @@ namespace debug {
 			for (auto& br : t.brushes.foreground.all) br = hollow_br;
 			t.dimensions.border_thickness = 1;
 
-			edit_oneline::Theme static_theme{
-				.brushes = {
-					.foreground = {.disabled = colors.ControlTxt},
-					.bk = {.disabled = hollow_br},
-					.border = {.disabled = hollow_br},
-				},
-				.font = fonts.General,
-			};
+			auto static_theme = static_text_theme();
 
 			for (const auto& [i, c] : colors.brushes | std::views::enumerate) {
 				auto& b = controls.color_buttons[i];
@@ -242,6 +317,39 @@ namespace debug {
 			controls.static_bitmap_info = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
 			edit_oneline::set_theme(controls.static_bitmap_info, static_theme);
 			update_bitmap_preview();
+
+			controls.static_render_summary_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_CHILD | WS_DISABLED);
+			edit_oneline::set_theme(controls.static_render_summary_wnd, static_theme);
+			controls.render_metrics_table = create_window(wnd, table::wndclass, nil, WS_CHILD);
+			set_window_manager_parent(controls.render_metrics_table, wnd);
+			table::set_functions(controls.render_metrics_table, {
+				.create_control = [](u32, HWND parent, const void* text) -> HWND {
+					HWND cell = create_window(parent, edit_oneline::wndclass, (const cstr*)text, WS_VISIBLE | WS_CHILD | WS_DISABLED);
+					edit_oneline::set_theme(cell, static_text_theme());
+					return cell;
+				},
+			});
+			table::set_column_cnt(controls.render_metrics_table, 4);
+			auto table_theme = themes.base_table;
+			table_theme.brushes.border.normal = colors.ControlTxt_Disabled;
+			table_theme.cells = {
+				.row_h = 25,
+				.columns_w = {
+					UINumber{ .type = UINumber::Type::dyn }, UINumber{ .value = 50 },
+					UINumber{ .value = 75 }, UINumber{ .value = 75 }
+				}
+			};
+			table::set_theme(controls.render_metrics_table, table_theme);
+		#if RENDER_DIAGNOSTICS_ENABLED
+			auto& table_state = *table::get_state(controls.render_metrics_table);
+			table::add_row(table_state, _t("Event"), _t("Calls"), _t("Total ms"), _t("Max ms"));
+			for (auto event : render_events)
+				table::add_row(table_state, render_diagnostics::event_name(event), _t(""), _t(""), _t(""));
+		#endif
+			tabs::set_on_selection_changed(controls.tabs, [](void* user_data, HWND, size_t) {
+				((State*)user_data)->apply_tab_visibility();
+			}, this);
+			apply_tab_visibility();
 		}
 
 		void resize_controls() {
@@ -252,6 +360,17 @@ namespace debug {
 			auto pad = DPI(8);
 
 			rect_i32 bounds{}; bounds.wh = { w, h };
+			rect_i32 tab_bar = bounds.cut_top(DPI(36));
+			tab_bar.apply_padding(pad, 0);
+			MoveWindow(controls.tabs, tab_bar);
+
+			rect_i32 render_bounds = bounds;
+			rect_i32 render_summary = render_bounds.cut_top(DPI(32));
+			render_summary.apply_padding(pad, 0);
+			MoveWindow(controls.static_render_summary_wnd, render_summary);
+			rect_i32 render_table = render_bounds.cut_top(DPI(25) * (i32)(render_events.size() + 1));
+			render_table.apply_padding(pad, 0);
+			MoveWindow(controls.render_metrics_table, render_table);
 
 			rect_i32 static_focus_wnd = bounds.cut_bottom(DPI(30));
 			rect_i32 user_objects = bounds.cut_bottom(DPI(26));
@@ -284,7 +403,7 @@ namespace debug {
 
 			auto [rows, cols, dim] = pack_squares(bounds.w, bounds.h, ARRAYSIZE(controls.color_buttons), pad);
 
-			i32 start_offset_x = pad, offset_x = start_offset_x, offset_y = pad;
+			i32 start_offset_x = pad, offset_x = start_offset_x, offset_y = bounds.top + pad;
 			for (i32 j = 0; j < rows; j++) {
 				for (i32 i = 0; i < cols; i++) {
 					auto idx = i + j * cols;
@@ -396,12 +515,13 @@ namespace debug {
 		}
 
 		void track_resource_stats() {
-			update_cache_stats();
-			update_user_object_stats();
 			SetTimer(wnd, 49857, 250, [](HWND wnd, UINT, UINT_PTR, DWORD) {
 				if (State* state = get_state(wnd)) {
-					state->update_cache_stats();
-					state->update_user_object_stats();
+					if (tabs::get_selected(state->controls.tabs) == 0) {
+						state->update_cache_stats();
+						state->update_user_object_stats();
+					}
+					else state->update_render_stats();
 				}
 			});
 		}
@@ -438,6 +558,7 @@ namespace debug {
 		{
 			PAINTSTRUCT ps;
 			HDC dc = BeginPaint(wnd, &ps); defer{ EndPaint(wnd, &ps); };
+			if (tabs::get_selected(state.controls.tabs) != 0) return 0;
 			auto bitmap_listbox = combobox::get_controls(state.controls.bitmap_selector).listbox;
 			auto selected = (SelectorOption*)listbox::get_sel_element(bitmap_listbox);
 			if (!selected) return 0;

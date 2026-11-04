@@ -45,6 +45,7 @@ str get_app_fontname() {
 
 struct Themes {
 	button::Theme base_btn;
+	tabs::Theme base_tabs;
 	button::Theme login_btn;
 	button::Theme login_btn_toggle;
 	button::Theme editor_add_btn;
@@ -152,6 +153,17 @@ void load_styles() {
 		//TODO(fran): use the extra brushes, fore_push,... , border_mouseover,...
 		base_btn.font = fonts.General;
 		return base_btn;
+	}();
+
+	themes.base_tabs = [&]()->auto {
+		tabs::Theme theme{};
+		theme.brushes.bk.normal = colors.ControlBk;
+		theme.brushes.bk.mouseover = colors.ControlBkMouseOver;
+		theme.brushes.foreground.normal = colors.ControlTxt;
+		theme.brushes.accent.normal = colors.Img;
+		theme.font = fonts.General;
+		theme.cursor = hand_cursor;
+		return theme;
 	}();
 
 	themes.base_editoneline = [&]()->auto {

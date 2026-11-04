@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef RENDER_DIAGNOSTICS_ENABLED
-#define RENDER_DIAGNOSTICS_ENABLED 0
+#define RENDER_DIAGNOSTICS_ENABLED 1
 #endif
 
 #include "win_sdk.h"
@@ -83,6 +83,7 @@ struct Metric {
 struct Session {
 	bool active = false;
 	LONGLONG start = 0;
+	LONGLONG wall_ticks = 0;
 	Metric metrics[(size_t)Event::count]{};
 };
 
@@ -155,6 +156,7 @@ void end_resize_session() {
 	LARGE_INTEGER counter{}, frequency{};
 	QueryPerformanceCounter(&counter);
 	QueryPerformanceFrequency(&frequency);
+	current.wall_ticks = counter.QuadPart - current.start;
 	const wchar_t* mode_name = L"directwrite";
 	switch (mode()) {
 	case Mode::directwrite_gdi: mode_name = L"directwrite-gdi"; break;
