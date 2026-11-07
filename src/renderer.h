@@ -355,6 +355,7 @@ namespace urender {
 	void draw_mask(HDC destination_dc, i32 destination_x, i32 destination_y, i32 destination_width, i32 destination_height, HBITMAP mask, HBRUSH color_brush) {
 		if (!mask || destination_width <= 0 || destination_height <= 0) return;
 		if (destination_width > LONG_MAX / 4 || destination_height > LONG_MAX / (destination_width * 4)) return;
+		render_diagnostics::Scope diagnostic{ render_diagnostics::Event::mask_draw };
 
 		MaskCacheKey key{ mask, destination_width, destination_height };
 		auto& cache = mask_coverage_cache();
@@ -405,7 +406,8 @@ namespace urender {
 	}
 
 	void draw_icon(HDC dest, int destination_x, int destination_y, int destination_width, int destination_height, HICON icon, int source_x, int source_y, int source_width, int source_height) {
-		Gdiplus::Graphics graphics(dest);//Yeah, who cares, icons are small, I just want bilinear filtering
+		//TODO(fran): this is super slow (~2ms), replace with something else
+		Gdiplus::Graphics graphics(dest);
 		graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBilinear);
 		Gdiplus::Bitmap bmp(icon);
 		//TODO?(fran): with gdi+ we can do subpixel placement (RectF)
