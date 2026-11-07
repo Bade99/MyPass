@@ -148,6 +148,98 @@ void set_signup_mode(State& state, bool signup_mode) {
 	ask_window_for_repaint(state.wnd);
 }
 
+bool any_char(cstr* s, bool op(cstr)) {
+	for (; s && *s; ++s)
+		if (op(*s))
+			return true;
+	return false;
+}
+
+void on_login(State& state) {
+	if (state.transition_pending) return;
+	bool success = false;
+	size_t username_len = GetWindowTextLength(state.controls.edit_username) + 1;//includes null terminator
+	size_t password_len = GetWindowTextLength(state.controls.edit_password) + 1;//includes null terminator
+	if (username_len > 1 && password_len > 1) { //Check: there has to be something written
+		cstr* username_buf = (cstr*)malloc(username_len * sizeof(*username_buf));
+		cstr* password_buf = (cstr*)malloc(password_len * sizeof(*password_buf));
+		GetWindowText(state.controls.edit_username, username_buf, (int)username_len);
+		GetWindowText(state.controls.edit_password, password_buf, (int)password_len);
+		int username_sz = (int)(username_len - 1) * sizeof(*username_buf); //we dont care about the null terminator
+		int password_sz = (int)(password_len - 1) * sizeof(*password_buf); //we dont care about the null terminator
+
+		//Perform the last checks on the username https://gist.github.com/doctaphred/d01d05291546186941e1b7ddc02034d3
+		bool check_failed = false;
+		//1.reserved characters: we manage that with EM_SETINVALIDCHARS in the edit control
+		//2.chars with value 31 or lower (control chars):
+		if (any_char(username_buf, [](cstr c) { return c <= 31; })) {
+			check_failed = true;
+			edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_CONTROLCHARS), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
+		}
+		//3.reserved names (CON, PRN, AUX, NUL, COM0, COM1, COM2, COM3, COM4, COM5, COM6, COM7, COM8, COM9, LPT0, LPT1, LPT2, LPT3, LPT4, LPT5, LPT6, LPT7, LPT8, LPT9, also all this followed by a . (eg. COM0.fefe.ef is invalid, once you put the dot it will always be invalid): we append a known string before each username
+
+		//4.do not start nor end with space:
+		if (username_buf[0] == _t(' ') || username_buf[username_len - 2] == _t(' ')) {
+			//NOTE: actually it can start with a space thanks to our fix to problem 3. but still, a username starting with spaces is strange
+			check_failed = true;
+			edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_STARTENDSPACE), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
+		}
+		//5.do not end with . :
+		if (username_buf[username_len - 2] == _t('.')) {
+			check_failed = true;
+			edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_ENDDOT), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
+		}
+
+		if (check_failed) {
+			secure_zero_free(username_buf, username_sz);
+			secure_zero_free(password_buf, password_sz);
+			return;
+		}
+
+		secure_zero_free(state.results->password);
+		secure_zero_free(state.results->username);
+
+		if (sizeof(*username_buf) == 1) {//we got ascii data, we always want utf16 otherwise the key would stop working when switching from ascii to unicode controls
+			defer{ secure_zero_free(username_buf, username_len * sizeof(*username_buf)); secure_zero_free(password_buf, password_len * sizeof(*password_buf)); };
+			int username_sz_char = MultiByteToWideChar(CP_ACP, 0, (LPCCH)username_buf, username_sz, 0, 0);
+			int password_sz_char = MultiByteToWideChar(CP_ACP, 0, (LPCCH)password_buf, password_sz, 0, 0);
+			if (username_sz_char && password_sz_char) {
+				void* username_mem = malloc(username_sz_char * sizeof(WCHAR));
+				void* password_mem = malloc(password_sz_char * sizeof(WCHAR));
+				if (username_mem && password_mem) {
+					MultiByteToWideChar(CP_ACP, 0, (LPCCH)username_buf, username_sz, (LPWSTR)username_mem, username_sz_char);
+					MultiByteToWideChar(CP_ACP, 0, (LPCCH)password_buf, password_sz, (LPWSTR)password_mem, password_sz_char);
+					state.results->password.str = (WCHAR*)password_mem;
+					state.results->password.sz_chars = password_sz_char;
+					state.results->username.str = (WCHAR*)username_mem;
+					state.results->username.sz_chars = username_sz_char;
+					success = true;
+					state.results->signup = state.signup_mode;
+				}
+			}
+		}
+		else {
+			state.results->username.str = username_buf;
+			state.results->username.sz_chars = username_len - 1;
+			state.results->password.str = password_buf;
+			state.results->password.sz_chars = password_len - 1;
+			state.results->signup = state.signup_mode;
+			success = true;
+		}
+		if (success) {
+			if (PostMessage(0, WM_STATE_NEXT, 0, 0)) state.transition_pending = true;
+			else {
+				secure_zero_free(state.results->password);
+				secure_zero_free(state.results->username);
+			}
+		}
+	}
+	else {
+		if (username_len == 1) edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_EMPTY), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
+		else edit_oneline::show_tip(state.controls.edit_password, RCS(LANG_LOGIN_PASSWORD_EMPTY), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
+	}
+}
+
 void add_controls(State& state) {
 	auto& controls = state.controls;
 
@@ -162,34 +254,46 @@ void add_controls(State& state) {
 		}
 	});
 
-	controls.edit_username = create_window(state.wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP, 0, EDIT_USERNAME);
+	const auto on_login_handler = [](void* data, HWND wnd) { on_login(*(State*)data); };
+
+	controls.edit_username = create_window(state.wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
 	edit_oneline::set_theme(controls.edit_username, themes.login_editoneline);
 	AWDT(controls.edit_username, LANG_LOGIN_USERNAME);
 	Edit_LimitText(controls.edit_username, max_input_chars);
-	edit_oneline::set_functions(controls.edit_username, { .has_invalid_chars = [](const utf16* str, size_t char_cnt, void*) -> auto {
-		edit_oneline::InvalidCharactersResult res{};
-		constexpr auto& invalid_username_chars = _t("<>:\"/\\|?*"); //INFO: there's more to it than this, there are some special restrictions that we implemented outside the control when the user presses login https://gist.github.com/doctaphred/d01d05291546186941e1b7ddc02034d3
-		for (u64 i = 0; i < ArraySizeWithoutTerminator(invalid_username_chars); i++) {
-			if (contains_char(str, char_cnt, invalid_username_chars[i])) {
-				res.res = true;
-				res.explanation = (RS(LANG_EDIT_USERNAME_INVALIDCHARS) + L" " + invalid_username_chars);
-				break;
+	edit_oneline::set_user_extra(controls.edit_username, &state);
+	edit_oneline::set_functions(controls.edit_username, {
+		.has_invalid_chars = [](const utf16* str, size_t char_cnt, void*) -> auto {
+			edit_oneline::InvalidCharactersResult res{};
+			constexpr auto& invalid_username_chars = _t("<>:\"/\\|?*"); //INFO: there's more to it than this, there are some special restrictions that we implemented outside the control when the user presses login https://gist.github.com/doctaphred/d01d05291546186941e1b7ddc02034d3
+			for (u64 i = 0; i < ArraySizeWithoutTerminator(invalid_username_chars); i++) {
+				if (contains_char(str, char_cnt, invalid_username_chars[i])) {
+					res.res = true;
+					res.explanation = (RS(LANG_EDIT_USERNAME_INVALIDCHARS) + L" " + invalid_username_chars);
+					break;
+				}
 			}
-		}
-		return res;
-	}});
+			return res;
+		},
+		.on_enter_key_pressed = on_login_handler,
+	});
 
-	controls.edit_password = create_window(state.wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_PASSWORD, 0, EDIT_PASSWORD);
+	controls.edit_password = create_window(state.wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_PASSWORD);
 	edit_oneline::set_theme(controls.edit_password, themes.login_editoneline);
 	AWDT(controls.edit_password, LANG_LOGIN_PASSWORD);
 	Edit_LimitText(controls.edit_password, max_input_chars);
+	edit_oneline::set_user_extra(controls.edit_password, &state);
+	edit_oneline::set_functions(controls.edit_password, {
+		.on_enter_key_pressed = on_login_handler,
+	});
 
 	controls.static_error_message = create_window(state.wnd, edit_oneline::wndclass, nil, WS_CHILD | WS_DISABLED);
 	edit_oneline::set_theme(controls.static_error_message, themes.login_text_static_error);
 
-	controls.button_login = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP, 0, BTN_LOGIN);
-	AWT(controls.button_login, LANG_CONTROL_LOGIN);
+	controls.button_login = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
 	button::set_theme(controls.button_login, themes.login_btn);
+	AWT(controls.button_login, LANG_CONTROL_LOGIN);
+	button::set_user_data(controls.button_login, &state);
+	button::set_functions(controls.button_login, { .on_click = on_login_handler });
 }
 
 void add_menu(State& state) {
@@ -203,13 +307,6 @@ void add_menu(State& state) {
 void save_settings(State& state) {
 	RECT rc; GetWindowRect(state.wnd, &rc);
 	state.settings->rc = rc;
-}
-
-bool any_char(cstr* s, bool op(cstr)) {
-	for (; s && *s; ++s)
-		if (op(*s))
-			return true;
-	return false;
 }
 
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -263,101 +360,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_COMMAND:
 	{
-		// Msgs from my controls
-		HWND child = (HWND)lparam;
-		if (child && (child == state.controls.edit_username || child == state.controls.edit_password)) {
-			if (HIWORD(wparam) == EN_ENTER)
-				PostMessage(state.wnd, WM_COMMAND, MAKELONG(BTN_LOGIN, 0), (LPARAM)state.controls.button_login);//TODO(fran): decide on a general way to simulate the action of a child control, maybe simulate a click? idk
-			return 0;
-		}
 		switch (LOWORD(wparam))
 		{
-		case BTN_LOGIN:
-		{
-			if (state.transition_pending) return 0;
-			bool success = false;
-			size_t username_len = GetWindowTextLength(state.controls.edit_username) + 1;//includes null terminator
-			size_t password_len = GetWindowTextLength(state.controls.edit_password) + 1;//includes null terminator
-			if (username_len > 1 && password_len > 1) { //Check: there has to be something written
-				cstr* username_buf = (cstr*)malloc(username_len * sizeof(*username_buf));
-				cstr* password_buf = (cstr*)malloc(password_len * sizeof(*password_buf));
-				GetWindowText(state.controls.edit_username, username_buf, (int)username_len);
-				GetWindowText(state.controls.edit_password, password_buf, (int)password_len);
-				int username_sz = (int)(username_len - 1) * sizeof(*username_buf); //we dont care about the null terminator
-				int password_sz = (int)(password_len - 1) * sizeof(*password_buf); //we dont care about the null terminator
-
-				//Perform the last checks on the username https://gist.github.com/doctaphred/d01d05291546186941e1b7ddc02034d3
-				bool check_failed = false;
-				//1.reserved characters: we manage that with EM_SETINVALIDCHARS in the edit control
-				//2.chars with value 31 or lower (control chars):
-				if (any_char(username_buf, [](cstr c) { return c <= 31; })) {
-					check_failed = true;
-					edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_CONTROLCHARS), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
-				}
-				//3.reserved names (CON, PRN, AUX, NUL, COM0, COM1, COM2, COM3, COM4, COM5, COM6, COM7, COM8, COM9, LPT0, LPT1, LPT2, LPT3, LPT4, LPT5, LPT6, LPT7, LPT8, LPT9, also all this followed by a . (eg. COM0.fefe.ef is invalid, once you put the dot it will always be invalid): we append a known string before each username
-
-				//4.do not start nor end with space:
-				if (username_buf[0] == _t(' ') || username_buf[username_len - 2] == _t(' ')) {
-					//NOTE: actually it can start with a space thanks to our fix to problem 3. but still, a username starting with spaces is strange
-					check_failed = true;
-					edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_STARTENDSPACE), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
-				}
-				//5.do not end with . :
-				if (username_buf[username_len - 2] == _t('.')) {
-					check_failed = true;
-					edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_ENDDOT), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
-				}
-
-				if (check_failed) {
-					secure_zero_free(username_buf, username_sz);
-					secure_zero_free(password_buf, password_sz);
-					return 0;
-				}
-
-				secure_zero_free(state.results->password);
-				secure_zero_free(state.results->username);
-
-				if (sizeof(*username_buf) == 1) {//we got ascii data, we always want utf16 otherwise the key would stop working when switching from ascii to unicode controls
-					defer{ secure_zero_free(username_buf, username_len * sizeof(*username_buf)); secure_zero_free(password_buf, password_len * sizeof(*password_buf)); };
-					int username_sz_char = MultiByteToWideChar(CP_ACP, 0, (LPCCH)username_buf, username_sz, 0, 0);
-					int password_sz_char = MultiByteToWideChar(CP_ACP, 0, (LPCCH)password_buf, password_sz, 0, 0);
-					if (username_sz_char && password_sz_char) {
-						void* username_mem = malloc(username_sz_char * sizeof(WCHAR));
-						void* password_mem = malloc(password_sz_char * sizeof(WCHAR));
-						if (username_mem && password_mem) {
-							MultiByteToWideChar(CP_ACP, 0, (LPCCH)username_buf, username_sz, (LPWSTR)username_mem, username_sz_char);
-							MultiByteToWideChar(CP_ACP, 0, (LPCCH)password_buf, password_sz, (LPWSTR)password_mem, password_sz_char);
-							state.results->password.str = (WCHAR*)password_mem;
-							state.results->password.sz_chars = password_sz_char;
-							state.results->username.str = (WCHAR*)username_mem;
-							state.results->username.sz_chars = username_sz_char;
-							success = true;
-							state.results->signup = state.signup_mode;
-						}
-					}
-				}
-				else {
-					state.results->username.str = username_buf;
-					state.results->username.sz_chars = username_len - 1;
-					state.results->password.str = password_buf;
-					state.results->password.sz_chars = password_len - 1;
-					state.results->signup = state.signup_mode;
-					success = true;
-				}
-				if (success) {
-					if (PostMessage(0, WM_STATE_NEXT, 0, 0)) state.transition_pending = true;
-					else {
-						secure_zero_free(state.results->password);
-						secure_zero_free(state.results->username);
-					}
-				}
-			}
-			else {
-				if(username_len==1) edit_oneline::show_tip(state.controls.edit_username, RCS(LANG_LOGIN_USERNAME_EMPTY), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
-				else edit_oneline::show_tip(state.controls.edit_password, RCS(LANG_LOGIN_PASSWORD_EMPTY), EDITONELINE_default_tooltip_duration, default_text_tooltip_location);
-			}
-			return 0;
-		}
 		WM_COMMAND_LANGUAGE_CASES(wparam)
 		}
 		return DefWindowProc(hwnd, msg, wparam, lparam);
