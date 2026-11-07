@@ -135,7 +135,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 
 	load_styles();
 
-	#ifdef _DEBUG
+	#if APP_DIAGNOSTICS_ENABLED
 	HWND debug_track_wnd = nil;
 	nonclient::LpParam debug_nc_param{
 		.client_class_name = debug::wndclass,
@@ -230,7 +230,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 				PostMessage(nonclient::get_state(old_state.wnd)->client, WM_STATE_RESET, 0, 0);
 				ShowWindow(old_state.wnd, SW_HIDE);
 				ShowWindow(new_state.wnd, SW_SHOW);
-				#ifdef _DEBUG
+				#if APP_DIAGNOSTICS_ENABLED
 				debug_track_wnd = login_wnd;
 				#endif
 			} break;
@@ -248,7 +248,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 					PostMessage(nonclient::get_state(old_state.wnd)->client, WM_STATE_RESET, 0, 0);
 					ShowWindow(old_state.wnd, SW_HIDE);
 					ShowWindow(new_state.wnd, SW_SHOW);
-					#ifdef _DEBUG
+					#if APP_DIAGNOSTICS_ENABLED
 					debug_track_wnd = editor_wnd;
 					#endif
 				}

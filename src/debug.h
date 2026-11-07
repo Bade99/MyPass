@@ -5,7 +5,7 @@
 #include <cmath>
 #include <cwchar>
 
-#ifdef _DEBUG
+#if APP_DIAGNOSTICS_ENABLED
 namespace debug {
 
 	constexpr auto& wndclass = wndclass_name("debug");

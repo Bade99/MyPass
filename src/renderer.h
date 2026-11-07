@@ -250,7 +250,7 @@ namespace urender {
 		std::unordered_map<MaskCacheKey, MaskCacheEntry, MaskCacheKeyHash> entries;
 		size_t used_bytes = 0;
 		u64 use_count = 0;
-		#ifdef _DEBUG
+		#if APP_DIAGNOSTICS_ENABLED
 		u64 hits = 0;
 		u64 misses = 0;
 		#endif
@@ -258,12 +258,12 @@ namespace urender {
 		const std::vector<u8>* find(MaskCacheKey key) {
 			auto entry = entries.find(key);
 			if (entry == entries.end()) {
-				#ifdef _DEBUG
+				#if APP_DIAGNOSTICS_ENABLED
 				++misses;
 				#endif
 				return nil;
 			}
-			#ifdef _DEBUG
+			#if APP_DIAGNOSTICS_ENABLED
 			++hits;
 			#endif
 			entry->second.last_used = ++use_count;
@@ -290,7 +290,7 @@ namespace urender {
 			entries.clear();
 			used_bytes = 0;
 			use_count = 0;
-			#ifdef _DEBUG
+			#if APP_DIAGNOSTICS_ENABLED
 			hits = misses = 0;
 			#endif
 		}

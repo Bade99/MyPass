@@ -5,7 +5,7 @@
 namespace animation {
 
 struct Timeline {
-#ifdef _DEBUG
+#if APP_DIAGNOSTICS_ENABLED
 	static inline f32 debug_speed_multiplier = 1.f;
 	i64 last_counter = 0;
 	f64 elapsed_ms = 0;
@@ -16,7 +16,7 @@ struct Timeline {
 	void start(f32 duration /*ms*/) {
 		start_counter = StartCounter();
 		duration_ms = duration;
-#ifdef _DEBUG
+#if APP_DIAGNOSTICS_ENABLED
 		last_counter = start_counter;
 		elapsed_ms = 0;
 #endif
@@ -25,7 +25,7 @@ struct Timeline {
 
 	f32 progress() {
 		if (!active) return 1.f;
-#ifdef _DEBUG
+#if APP_DIAGNOSTICS_ENABLED
 		i64 counter = StartCounter();
 		elapsed_ms += f64(counter - last_counter) / GetPCFrequency() * debug_speed_multiplier;
 		last_counter = counter;

@@ -1,10 +1,11 @@
 #pragma once
+#include "win_sdk.h"
+#include "platform.h"
 
 #ifndef RENDER_DIAGNOSTICS_ENABLED
-#define RENDER_DIAGNOSTICS_ENABLED 1
+#define RENDER_DIAGNOSTICS_ENABLED APP_DIAGNOSTICS_ENABLED
 #endif
 
-#include "win_sdk.h"
 #include "reflection.h"
 
 #if RENDER_DIAGNOSTICS_ENABLED
