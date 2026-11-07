@@ -251,12 +251,12 @@ namespace debug {
 			if (paint_capture_pending || render_diagnostics::paint_session().active) return;
 			paint_capture_pending = true;
 			EnableWindow(controls.paint_capture_button, false);
-			SetWindowText(controls.static_paint_summary_wnd, _t("Capture starts shortly; interact with the app"));
 			if (!SetTimer(wnd, paint_capture_start_timer_id, paint_capture_delay_ms, paint_capture_start_timer_proc)) {
 				paint_capture_pending = false;
 				EnableWindow(controls.paint_capture_button, true);
 				SetWindowText(controls.static_paint_summary_wnd, _t("Could not start paint capture"));
 			}
+			else SetWindowText(controls.static_paint_summary_wnd, _t("Capture started; interact with the app"));
 		}
 
 		void begin_paint_capture() {

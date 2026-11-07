@@ -408,7 +408,7 @@ namespace urender {
 	void draw_icon(HDC dest, int destination_x, int destination_y, int destination_width, int destination_height, HICON icon, int source_x, int source_y, int source_width, int source_height) {
 		//TODO(fran): this is super slow (~2ms), replace with something else
 		Gdiplus::Graphics graphics(dest);
-		graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBilinear);
+		SetUpRenderSettings(graphics);
 		Gdiplus::Bitmap bmp(icon);
 		//TODO?(fran): with gdi+ we can do subpixel placement (RectF)
 		graphics.DrawImage(&bmp,
