@@ -188,6 +188,8 @@
     <ClInclude Include="nonclient_types.h" />
     <ClInclude Include="page.h" />
     <ClInclude Include="page_types.h" />
+    <ClInclude Include="tabs.h" />
+    <ClInclude Include="tabs_types.h" />
     <ClInclude Include="password_editor.h" />
     <ClInclude Include="password_editor_types.h" />
     <ClInclude Include="rect.h" />

@@ -12,10 +12,6 @@ constexpr auto& wndclass = wndclass_name("login");
 
 //TODO(fran): failure after multiple wrong passwords? eg 10 min block
 
-constexpr auto EDIT_USERNAME = 10;
-constexpr auto EDIT_PASSWORD = 11;
-constexpr auto BTN_LOGIN = 12;
-
 constexpr auto default_text_tooltip_location = edit_oneline::ETP::left | edit_oneline::ETP::top;
 
 constexpr auto invalid_password_message_duration_ms = 3000;

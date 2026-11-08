@@ -428,6 +428,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	case WM_WINDOWPOSCHANGED: //TODO(fran): we can use this guy to replace WM_SIZE and WM_MOVE by not calling defwindowproc
 	{
+		render_diagnostics::Scope diagnostic{ render_diagnostics::Event::window_position_changed };
 		calc_caption(state);
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	} break;
@@ -595,6 +596,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_NCCALCSIZE:
 	{
+		render_diagnostics::Scope diagnostic{ render_diagnostics::Event::window_nonclient_recalc };
 		RECT testrc{ 0,0,100,100 };
 		RECT ncrc = adjust_frame_rect_for_dpi(testrc, false, get_effective_dpi<false>(hwnd));
 

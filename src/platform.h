@@ -18,8 +18,12 @@
 #include "reflection.h"
 #include "version.h"
 
+#ifndef APP_DIAGNOSTICS_ENABLED
+#define APP_DIAGNOSTICS_ENABLED 1
+#endif
+
 #define _APP_NAME _t(SOLUTION_PRODUCTNAME)
-#define _APP_VERSION _t(SOLUTION_PRODUCTVERSION_STRING)
+#define _APP_VERSION _t("") SOLUTION_PRODUCTVERSION_STRING
 constexpr auto& app_name = _APP_NAME;
 constexpr auto& app_name_with_version = _APP_NAME _t(" ") _APP_VERSION;
 

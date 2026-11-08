@@ -620,6 +620,7 @@ namespace listbox {
 		}break;
 		case WM_PAINT:
 		{
+			render_diagnostics::Scope diagnostic{ render_diagnostics::Event::list_paint };
 			PAINTSTRUCT ps;
 			RECT rc; GetClientRect(state.wnd, &rc);
 			int w = RECTW(rc), h = RECTH(rc);

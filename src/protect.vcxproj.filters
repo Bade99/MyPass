@@ -70,6 +70,9 @@
     <Filter Include="Header Files\Controls\Page">
       <UniqueIdentifier>{9e521592-eb30-436d-b946-3c66b1fdb52d}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Controls\Tabs">
+      <UniqueIdentifier>{1bbff474-47ba-4101-86d8-d6c15f387a3b}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Header Files\Screens\Debug">
       <UniqueIdentifier>{0885ab99-898b-4309-95c6-7aa91ea505cb}</UniqueIdentifier>
     </Filter>
@@ -218,6 +221,12 @@
     </ClInclude>
     <ClInclude Include="page.h">
       <Filter>Header Files\Controls\Page</Filter>
+    </ClInclude>
+    <ClInclude Include="tabs.h">
+      <Filter>Header Files\Controls\Tabs</Filter>
+    </ClInclude>
+    <ClInclude Include="tabs_types.h">
+      <Filter>Header Files\Controls\Tabs</Filter>
     </ClInclude>
     <ClInclude Include="debug.h">
       <Filter>Header Files\Screens\Debug</Filter>

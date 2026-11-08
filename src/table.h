@@ -118,6 +118,7 @@ namespace table {
 		} break;
 		case WM_PAINT:
 		{
+			render_diagnostics::Scope diagnostic{ render_diagnostics::Event::table_paint };
 			PAINTSTRUCT ps;
 			HDC dc = BeginPaint(state.wnd, &ps); defer{ EndPaint(state.wnd,&ps); };
 			RECT r; GetClientRect(state.wnd, &r);

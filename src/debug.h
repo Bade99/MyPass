@@ -5,7 +5,7 @@
 #include <cmath>
 #include <cwchar>
 
-#ifdef _DEBUG
+#if APP_DIAGNOSTICS_ENABLED
 namespace debug {
 
 	constexpr auto& wndclass = wndclass_name("debug");
@@ -20,6 +20,94 @@ namespace debug {
 		{ _t("48 px"), nil, 48 }, { _t("64 px"), nil, 64 }, { _t("96 px"), nil, 96 },
 		{ _t("128 px"), nil, 128 },
 	};
+	static constexpr std::array resize_events{
+		render_diagnostics::Event::window_position_changed,
+		render_diagnostics::Event::window_nonclient_recalc,
+		render_diagnostics::Event::window_resize,
+		render_diagnostics::Event::editor_resize,
+		render_diagnostics::Event::card_move,
+		render_diagnostics::Event::card_children_batch,
+		render_diagnostics::Event::text_paint,
+	};
+	static constexpr std::array paint_events{
+		render_diagnostics::Event::text_paint,
+		render_diagnostics::Event::button_paint,
+		render_diagnostics::Event::caption_paint,
+		render_diagnostics::Event::table_paint,
+		render_diagnostics::Event::list_paint,
+		render_diagnostics::Event::list_backbuffer,
+		render_diagnostics::Event::static_text,
+		render_diagnostics::Event::background,
+		render_diagnostics::Event::mask_draw,
+		render_diagnostics::Event::bitmap_draw_layout,
+	};
+	constexpr UINT_PTR paint_capture_start_timer_id = 49858;
+	constexpr UINT_PTR paint_capture_end_timer_id = 49859;
+	constexpr UINT paint_capture_delay_ms = 750;
+	constexpr UINT paint_capture_duration_ms = 2000;
+	void CALLBACK paint_capture_start_timer_proc(HWND wnd, UINT, UINT_PTR, DWORD);
+	void CALLBACK paint_capture_end_timer_proc(HWND wnd, UINT, UINT_PTR, DWORD);
+
+	edit_oneline::Theme static_text_theme() {
+		auto hollow_brush = GetStockBrush(HOLLOW_BRUSH);
+		return {
+			.brushes = {
+				.foreground = {.disabled = colors.ControlTxt},
+				.bk = {.disabled = hollow_brush},
+				.border = {.disabled = hollow_brush},
+			},
+			.font = fonts.General,
+		};
+	}
+
+	template<size_t Count>
+	HWND create_metrics_table(HWND parent, const std::array<render_diagnostics::Event, Count>& events, u32 row_height) {
+		HWND metrics = create_window(parent, table::wndclass, nil, WS_CHILD);
+		set_window_manager_parent(metrics, parent);
+		table::set_functions(metrics, {
+			.create_control = [](u32, HWND cell_parent, const void* text) -> HWND {
+				HWND cell = create_window(cell_parent, edit_oneline::wndclass, (const cstr*)text, WS_VISIBLE | WS_CHILD | WS_DISABLED);
+				edit_oneline::set_theme(cell, static_text_theme());
+				return cell;
+			},
+		});
+		table::set_column_cnt(metrics, 4);
+		auto theme = themes.base_table;
+		theme.brushes.border.normal = colors.ControlTxt_Disabled;
+		theme.cells = {
+			.row_h = row_height,
+			.columns_w = {
+				UINumber{ .type = UINumber::Type::dyn }, UINumber{ .value = 50 },
+				UINumber{ .value = 75 }, UINumber{ .value = 75 }
+			}
+		};
+		table::set_theme(metrics, theme);
+	#if RENDER_DIAGNOSTICS_ENABLED
+		auto& table_state = *table::get_state(metrics);
+		table::add_row(table_state, _t("Event"), _t("Calls"), _t("Total ms"), _t("Max ms"));
+		for (auto event : events)
+			table::add_row(table_state, render_diagnostics::event_name(event), _t(""), _t(""), _t(""));
+	#endif
+		return metrics;
+	}
+
+	#if RENDER_DIAGNOSTICS_ENABLED
+	template<size_t Count>
+	void update_metrics_table(HWND metrics, const std::array<render_diagnostics::Event, Count>& events,
+		const render_diagnostics::Session& session) {
+		const auto& rows = table::get_state(metrics)->rows;
+		for (size_t index = 0; index < events.size(); ++index) {
+			const auto& row = rows[index + 1];
+			const auto& metric = session.metrics[(size_t)events[index]];
+			auto calls = session.start ? std::format(_t("{}"), metric.calls) : str{};
+			auto total = metric.ticks ? std::format(_t("{:.2f}"), (f64)metric.ticks / GetPCFrequency()) : str{};
+			auto max_time = metric.ticks ? std::format(_t("{:.2f}"), (f64)metric.max_ticks / GetPCFrequency()) : str{};
+			SetWindowText(row[1], calls.c_str());
+			SetWindowText(row[2], total.c_str());
+			SetWindowText(row[3], max_time.c_str());
+		}
+	}
+	#endif
 
 	DWORD user_object_limit() {
 		HKEY key;
@@ -34,6 +122,7 @@ namespace debug {
 	}
 
 	struct Controls {
+		HWND tabs;
 		HWND color_buttons[ARRAYSIZE(colors.brushes)];
 		HWND bitmap_selector;
 		HWND size_selector;
@@ -45,6 +134,11 @@ namespace debug {
 		HWND static_cache_hits_wnd;
 		HWND static_user_objects_wnd;
 		HWND static_focus_wnd;
+		HWND static_resize_summary_wnd;
+		HWND resize_metrics_table;
+		HWND paint_capture_button;
+		HWND static_paint_summary_wnd;
+		HWND paint_metrics_table;
 	};
 
 	struct State : WindowState {
@@ -59,6 +153,10 @@ namespace debug {
 		bool cache_stats_initialized;
 		DWORD displayed_user_objects;
 		bool user_objects_initialized;
+		LONGLONG displayed_resize_start;
+		bool resize_stats_initialized;
+		bool paint_capture_pending;
+		bool paint_stats_initialized;
 
 		Controls controls;
 
@@ -111,8 +209,98 @@ namespace debug {
 			displayed_user_objects = count;
 			user_objects_initialized = true;
 		}
+
+		void update_resize_stats() {
+		#if RENDER_DIAGNOSTICS_ENABLED
+			auto& session = render_diagnostics::session();
+			if (session.active || (resize_stats_initialized && displayed_resize_start == session.start)) return;
+			if (!session.start) SetWindowText(controls.static_resize_summary_wnd, _t("No move/resize session recorded yet"));
+			else {
+				auto summary = std::format(_t("Last move/resize: {:.2f} ms"), (f64)session.wall_ticks / GetPCFrequency());
+				SetWindowText(controls.static_resize_summary_wnd, summary.c_str());
+			}
+			update_metrics_table(controls.resize_metrics_table, resize_events, session);
+			displayed_resize_start = session.start;
+		#else
+			if (resize_stats_initialized) return;
+			SetWindowText(controls.static_resize_summary_wnd, _t("Render diagnostics are disabled"));
+		#endif
+			resize_stats_initialized = true;
+		}
+
+		void update_paint_stats() {
+		#if RENDER_DIAGNOSTICS_ENABLED
+			if (paint_capture_pending || render_diagnostics::paint_session().active || paint_stats_initialized) return;
+			const auto& session = render_diagnostics::paint_session();
+			if (!session.start) SetWindowText(controls.static_paint_summary_wnd, _t("Paint: click Capture, then interact with the app"));
+			else {
+				auto summary = std::format(_t("Paint capture: {:.2f} ms (inclusive timings)"),
+					(f64)session.wall_ticks / GetPCFrequency());
+				SetWindowText(controls.static_paint_summary_wnd, summary.c_str());
+			}
+			update_metrics_table(controls.paint_metrics_table, paint_events, session);
+		#else
+			if (paint_stats_initialized) return;
+			SetWindowText(controls.static_paint_summary_wnd, _t("Render diagnostics are disabled"));
+		#endif
+			paint_stats_initialized = true;
+		}
+
+	#if RENDER_DIAGNOSTICS_ENABLED
+		void request_paint_capture() {
+			if (paint_capture_pending || render_diagnostics::paint_session().active) return;
+			paint_capture_pending = true;
+			EnableWindow(controls.paint_capture_button, false);
+			if (!SetTimer(wnd, paint_capture_start_timer_id, paint_capture_delay_ms, paint_capture_start_timer_proc)) {
+				paint_capture_pending = false;
+				EnableWindow(controls.paint_capture_button, true);
+				SetWindowText(controls.static_paint_summary_wnd, _t("Could not start paint capture"));
+			}
+			else SetWindowText(controls.static_paint_summary_wnd, _t("Capture started; interact with the app"));
+		}
+
+		void begin_paint_capture() {
+			paint_capture_pending = false;
+			render_diagnostics::begin_paint_session();
+			if (!SetTimer(wnd, paint_capture_end_timer_id, paint_capture_duration_ms, paint_capture_end_timer_proc))
+				finish_paint_capture();
+		}
+
+		void finish_paint_capture() {
+			render_diagnostics::end_paint_session();
+			paint_stats_initialized = false;
+			update_paint_stats();
+			EnableWindow(controls.paint_capture_button, true);
+		}
+	#endif
+
+		void apply_tab_visibility() {
+			bool controls_tab = tabs::get_selected(controls.tabs) == 0;
+			if (!controls_tab) {
+				combobox::show_listbox(*combobox::get_state(controls.bitmap_selector), false);
+				combobox::show_listbox(*combobox::get_state(controls.size_selector), false);
+			}
+			for (HWND color_button : controls.color_buttons) ShowWindow(color_button, controls_tab ? SW_SHOW : SW_HIDE);
+			for (HWND control : { controls.bitmap_selector, controls.size_selector, controls.bitmap_preview,
+				controls.static_bitmap_info, controls.static_speed_wnd, controls.edit_speed_wnd,
+				controls.static_cache_memory_wnd, controls.static_cache_hits_wnd,
+				controls.static_user_objects_wnd, controls.static_focus_wnd })
+				ShowWindow(control, controls_tab ? SW_SHOW : SW_HIDE);
+			ShowWindow(controls.static_resize_summary_wnd, controls_tab ? SW_HIDE : SW_SHOW);
+			ShowWindow(controls.resize_metrics_table, controls_tab ? SW_HIDE : SW_SHOW);
+			ShowWindow(controls.paint_capture_button, controls_tab ? SW_HIDE : SW_SHOW);
+			ShowWindow(controls.static_paint_summary_wnd, controls_tab ? SW_HIDE : SW_SHOW);
+			ShowWindow(controls.paint_metrics_table, controls_tab ? SW_HIDE : SW_SHOW);
+			if (controls_tab) { update_cache_stats(); update_user_object_stats(); }
+			else { update_resize_stats(); update_paint_stats(); }
+			ask_window_for_repaint(wnd);
+		}
 	
 		void add_controls() {
+			controls.tabs = create_window(wnd, tabs::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
+			tabs::set_theme(controls.tabs, themes.base_tabs);
+			tabs::add_tab(controls.tabs, L"Controls");
+			tabs::add_tab(controls.tabs, L"Rendering");
 
 			button::Theme t{};
 			auto hollow_br = GetStockBrush(HOLLOW_BRUSH);
@@ -120,14 +308,7 @@ namespace debug {
 			for (auto& br : t.brushes.foreground.all) br = hollow_br;
 			t.dimensions.border_thickness = 1;
 
-			edit_oneline::Theme static_theme{
-				.brushes = {
-					.foreground = {.disabled = colors.ControlTxt},
-					.bk = {.disabled = hollow_br},
-					.border = {.disabled = hollow_br},
-				},
-				.font = fonts.General,
-			};
+			auto static_theme = static_text_theme();
 
 			for (const auto& [i, c] : colors.brushes | std::views::enumerate) {
 				auto& b = controls.color_buttons[i];
@@ -242,6 +423,27 @@ namespace debug {
 			controls.static_bitmap_info = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
 			edit_oneline::set_theme(controls.static_bitmap_info, static_theme);
 			update_bitmap_preview();
+
+			controls.static_resize_summary_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_CHILD | WS_DISABLED);
+			edit_oneline::set_theme(controls.static_resize_summary_wnd, static_theme);
+			controls.resize_metrics_table = create_metrics_table(wnd, resize_events, 25);
+			controls.paint_capture_button = create_window(wnd, button::wndclass, _t("Capture painting (2 s)"), WS_CHILD);
+			button::set_theme(controls.paint_capture_button, themes.base_btn);
+		#if RENDER_DIAGNOSTICS_ENABLED
+			button::set_user_data(controls.paint_capture_button, this);
+			button::set_functions(controls.paint_capture_button, {
+				.on_click = [](void* data, HWND) { ((State*)data)->request_paint_capture(); }
+			});
+		#else
+			EnableWindow(controls.paint_capture_button, false);
+		#endif
+			controls.static_paint_summary_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_CHILD | WS_DISABLED);
+			edit_oneline::set_theme(controls.static_paint_summary_wnd, static_theme);
+			controls.paint_metrics_table = create_metrics_table(wnd, paint_events, 22);
+			tabs::set_on_selection_changed(controls.tabs, [](void* user_data, HWND, size_t) {
+				((State*)user_data)->apply_tab_visibility();
+			}, this);
+			apply_tab_visibility();
 		}
 
 		void resize_controls() {
@@ -252,6 +454,26 @@ namespace debug {
 			auto pad = DPI(8);
 
 			rect_i32 bounds{}; bounds.wh = { w, h };
+			rect_i32 tab_bar = bounds.cut_top(DPI(36));
+			tab_bar.apply_padding(pad, 0);
+			MoveWindow(controls.tabs, tab_bar);
+
+			rect_i32 render_bounds = bounds;
+			rect_i32 render_summary = render_bounds.cut_top(DPI(32));
+			render_summary.apply_padding(pad, 0);
+			MoveWindow(controls.static_resize_summary_wnd, render_summary);
+			rect_i32 render_table = render_bounds.cut_top(DPI(25) * (i32)(resize_events.size() + 1));
+			render_table.apply_padding(pad, 0);
+			MoveWindow(controls.resize_metrics_table, render_table);
+			rect_i32 capture_button = render_bounds.cut_top(DPI(32));
+			capture_button.apply_padding(pad, 0);
+			MoveWindow(controls.paint_capture_button, capture_button);
+			rect_i32 paint_summary = render_bounds.cut_top(DPI(26));
+			paint_summary.apply_padding(pad, 0);
+			MoveWindow(controls.static_paint_summary_wnd, paint_summary);
+			rect_i32 paint_table = render_bounds.cut_top(DPI(22) * (i32)(paint_events.size() + 1));
+			paint_table.apply_padding(pad, 0);
+			MoveWindow(controls.paint_metrics_table, paint_table);
 
 			rect_i32 static_focus_wnd = bounds.cut_bottom(DPI(30));
 			rect_i32 user_objects = bounds.cut_bottom(DPI(26));
@@ -284,7 +506,7 @@ namespace debug {
 
 			auto [rows, cols, dim] = pack_squares(bounds.w, bounds.h, ARRAYSIZE(controls.color_buttons), pad);
 
-			i32 start_offset_x = pad, offset_x = start_offset_x, offset_y = pad;
+			i32 start_offset_x = pad, offset_x = start_offset_x, offset_y = bounds.top + pad;
 			for (i32 j = 0; j < rows; j++) {
 				for (i32 i = 0; i < cols; i++) {
 					auto idx = i + j * cols;
@@ -316,6 +538,9 @@ namespace debug {
 			static void (*anim_proc)(HWND, UINT, UINT_PTR, DWORD) = [](HWND wnd, UINT, UINT_PTR anim_id, DWORD) {
 				auto& state = *get_state(wnd);
 				if (&state) {
+					#if RENDER_DIAGNOSTICS_ENABLED
+					if (render_diagnostics::paint_session().active) goto set_timer;
+					#endif
 					if (!state.track_wnd) goto set_timer;
 					HWND track = *state.track_wnd;
 					HWND follower = state.parent;
@@ -396,16 +621,34 @@ namespace debug {
 		}
 
 		void track_resource_stats() {
-			update_cache_stats();
-			update_user_object_stats();
 			SetTimer(wnd, 49857, 250, [](HWND wnd, UINT, UINT_PTR, DWORD) {
 				if (State* state = get_state(wnd)) {
-					state->update_cache_stats();
-					state->update_user_object_stats();
+				#if RENDER_DIAGNOSTICS_ENABLED
+					if (render_diagnostics::paint_session().active) return;
+				#endif
+					if (tabs::get_selected(state->controls.tabs) == 0) {
+						state->update_cache_stats();
+						state->update_user_object_stats();
+					}
+					else state->update_resize_stats();
 				}
 			});
 		}
 	};
+
+	void CALLBACK paint_capture_start_timer_proc(HWND wnd, UINT, UINT_PTR, DWORD) {
+		KillTimer(wnd, paint_capture_start_timer_id);
+	#if RENDER_DIAGNOSTICS_ENABLED
+		if (auto state = State::get_state(wnd)) state->begin_paint_capture();
+	#endif
+	}
+
+	void CALLBACK paint_capture_end_timer_proc(HWND wnd, UINT, UINT_PTR, DWORD) {
+		KillTimer(wnd, paint_capture_end_timer_id);
+	#if RENDER_DIAGNOSTICS_ENABLED
+		if (auto state = State::get_state(wnd)) state->finish_paint_capture();
+	#endif
+	}
 
 	LRESULT CALLBACK proc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		auto& state = *State::get_state(wnd);
@@ -428,6 +671,15 @@ namespace debug {
 			state.track_focus_window();
 			state.track_resource_stats();
 		} break;
+		case WM_NCDESTROY:
+		{
+			KillTimer(wnd, paint_capture_start_timer_id);
+			KillTimer(wnd, paint_capture_end_timer_id);
+			render_diagnostics::end_paint_session();
+			set_window_state(wnd, nil);
+			free(&state);
+			return DefWindowProc(wnd, msg, wparam, lparam);
+		}
 		case WM_SIZE:
 		{
 			LRESULT res = DefWindowProc(wnd, msg, wparam, lparam);
@@ -438,6 +690,7 @@ namespace debug {
 		{
 			PAINTSTRUCT ps;
 			HDC dc = BeginPaint(wnd, &ps); defer{ EndPaint(wnd, &ps); };
+			if (tabs::get_selected(state.controls.tabs) != 0) return 0;
 			auto bitmap_listbox = combobox::get_controls(state.controls.bitmap_selector).listbox;
 			auto selected = (SelectorOption*)listbox::get_sel_element(bitmap_listbox);
 			if (!selected) return 0;

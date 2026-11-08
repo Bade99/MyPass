@@ -59,7 +59,7 @@ union KnownColors {
 	_generate_default_struct_deserialize(foreach_color);
 } static colors{};
 
-#ifdef _DEBUG
+#if APP_DIAGNOSTICS_ENABLED
 #define _get_color_name(type, name, value) _t(#name),
 constexpr const utf16* known_colors_names[] = { foreach_color(_get_color_name) };
 #endif

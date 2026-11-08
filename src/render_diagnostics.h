@@ -1,10 +1,11 @@
 #pragma once
+#include "win_sdk.h"
+#include "platform.h"
 
 #ifndef RENDER_DIAGNOSTICS_ENABLED
-#define RENDER_DIAGNOSTICS_ENABLED 0
+#define RENDER_DIAGNOSTICS_ENABLED APP_DIAGNOSTICS_ENABLED
 #endif
 
-#include "win_sdk.h"
 #include "reflection.h"
 
 #if RENDER_DIAGNOSTICS_ENABLED
@@ -23,6 +24,8 @@ constexpr Mode mode() { return selected_mode; }
 constexpr bool directwrite_gdi() { return mode() == Mode::directwrite_gdi; }
 
 #define _foreach_render_event(op) \
+	op(window_position_changed,) \
+	op(window_nonclient_recalc,) \
 	op(window_resize,) \
 	op(editor_resize,) \
 	op(card_resize_plan,) \
@@ -44,9 +47,12 @@ constexpr bool directwrite_gdi() { return mode() == Mode::directwrite_gdi; }
 	op(static_text,) \
 	op(button_paint,) \
 	op(caption_paint,) \
+	op(table_paint,) \
+	op(list_paint,) \
 	op(list_resize,) \
 	op(list_backbuffer,) \
 	op(background,) \
+	op(mask_draw,) \
 	op(text_format,) \
 	op(text_layout,) \
 	op(dc_target,) \
@@ -83,12 +89,36 @@ struct Metric {
 struct Session {
 	bool active = false;
 	LONGLONG start = 0;
+	LONGLONG wall_ticks = 0;
 	Metric metrics[(size_t)Event::count]{};
 };
 
 Session& session() {
 	static Session current{};
 	return current;
+}
+
+Session& paint_session() {
+	static Session current{};
+	return current;
+}
+
+void begin_paint_session() {
+	auto& current = paint_session();
+	current = {};
+	LARGE_INTEGER counter{};
+	QueryPerformanceCounter(&counter);
+	current.start = counter.QuadPart;
+	current.active = true;
+}
+
+void end_paint_session() {
+	auto& current = paint_session();
+	if (!current.active) return;
+	LARGE_INTEGER counter{};
+	QueryPerformanceCounter(&counter);
+	current.wall_ticks = counter.QuadPart - current.start;
+	current.active = false;
 }
 
 void begin_resize_session() {
@@ -109,7 +139,15 @@ const wchar_t* event_name(Event event) {
 }
 
 void record_count(Event event) {
-	if (session().active) session().metrics[(size_t)event].calls++;
+	if (auto& current = session(); current.active) current.metrics[(size_t)event].calls++;
+	if (auto& current = paint_session(); current.active) current.metrics[(size_t)event].calls++;
+}
+
+void record_time(Session& current, Event event, LONGLONG elapsed) {
+	auto& metric = current.metrics[(size_t)event];
+	metric.calls++;
+	metric.ticks += elapsed;
+	if (elapsed > metric.max_ticks) metric.max_ticks = elapsed;
 }
 
 void append_report_to_file(const std::wstring& report) {
@@ -155,6 +193,7 @@ void end_resize_session() {
 	LARGE_INTEGER counter{}, frequency{};
 	QueryPerformanceCounter(&counter);
 	QueryPerformanceFrequency(&frequency);
+	current.wall_ticks = counter.QuadPart - current.start;
 	const wchar_t* mode_name = L"directwrite";
 	switch (mode()) {
 	case Mode::directwrite_gdi: mode_name = L"directwrite-gdi"; break;
@@ -168,7 +207,7 @@ void end_resize_session() {
 	const wchar_t* build_name = L"Release";
 	#endif
 	wchar_t line[256]{};
-	swprintf_s(line, L"[render] %04u-%02u-%02u %02u:%02u:%02u.%03u mode=%ls build=%ls resize_wall=%.2f ms\n",
+	swprintf_s(line, L"[render] %04u-%02u-%02u %02u:%02u:%02u.%03u mode=%ls build=%ls move_size_wall=%.2f ms\n",
 		timestamp.wYear, timestamp.wMonth, timestamp.wDay, timestamp.wHour, timestamp.wMinute,
 		timestamp.wSecond, timestamp.wMilliseconds, mode_name, build_name,
 		1000.0 * (counter.QuadPart - current.start) / frequency.QuadPart);
@@ -195,7 +234,7 @@ struct Scope {
 	LONGLONG start = 0;
 
 	explicit Scope(Event event) : event(event) {
-		if (session().active) {
+		if (session().active || paint_session().active) {
 			LARGE_INTEGER counter{};
 			QueryPerformanceCounter(&counter);
 			start = counter.QuadPart;
@@ -206,11 +245,9 @@ struct Scope {
 		if (!start) return;
 		LARGE_INTEGER counter{};
 		QueryPerformanceCounter(&counter);
-		auto& metric = session().metrics[(size_t)event];
 		LONGLONG elapsed = counter.QuadPart - start;
-		metric.calls++;
-		metric.ticks += elapsed;
-		if (elapsed > metric.max_ticks) metric.max_ticks = elapsed;
+		if (auto& current = session(); current.active) record_time(current, event, elapsed);
+		if (auto& current = paint_session(); current.active) record_time(current, event, elapsed);
 	}
 };
 
@@ -218,6 +255,8 @@ struct Scope {
 
 inline void begin_resize_session() noexcept {}
 inline void end_resize_session() noexcept {}
+inline void begin_paint_session() noexcept {}
+inline void end_paint_session() noexcept {}
 inline void record_count(Event) noexcept {}
 
 struct Scope {

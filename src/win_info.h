@@ -232,7 +232,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		return 0;
 	} break;
-	case WM_COMMAND://Notifs from our childs
+	case WM_COMMAND://Notifs from our children
 	{
 		HWND child = (HWND)lparam;
 		if (child) {//a control has sent a notification

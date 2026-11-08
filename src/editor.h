@@ -9,6 +9,14 @@
 #include "render_diagnostics.h"
 #include "child_layout.h"
 
+#ifdef _DEBUG
+#define EDITOR_DEBUG_SIGNUP_TORTURE_TEST 0
+#endif
+
+#if defined(_DEBUG) && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
+#include <random>
+#endif
+
 namespace editor {
 
 constexpr auto card_animation_timer_id = 3101;
@@ -117,6 +125,47 @@ void add_preset_password_editor(State& state, size_t at_idx) {
 	ask_window_for_resize(state.wnd);
 	ask_window_for_repaint(state.wnd);
 }
+
+#if defined(_DEBUG) && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
+void add_signup_torture_test_cards(State& state) {
+	constexpr auto card_count = 250;
+	std::mt19937 random{ 0x5a17u };
+	std::uniform_int_distribution<i32> text_length{ 10, 20 };
+	std::uniform_int_distribution<i32> row_count{ 2, 5 };
+	std::uniform_int_distribution<i32> pin_chance{ 0, 9 };
+	std::uniform_int_distribution<i32> password_chance{ 0, 1 };
+	constexpr str_view alphabet = L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+	std::uniform_int_distribution<size_t> character_index{ 0, alphabet.size() - 1 };
+	const auto random_text = [&]() {
+		str result(text_length(random), L'\0');
+		for (auto& character : result) character = alphabet[character_index(random)];
+		return result;
+	};
+
+	time_t created = std::time(nil);
+	for (i32 card_index = 0; card_index < card_count; ++card_index) {
+		str title = random_text();
+		Props properties{
+			.title = title.c_str(),
+			.date_created = created,
+			.date_modified = created,
+			.flags = pin_chance(random) == 0 ? password_editor::ItemFlag::pin : 0,
+		};
+		auto& card = add_password_editor(state, properties, -1);
+		i32 rows = row_count(random);
+		for (i32 row_index = 0; row_index < rows; ++row_index) {
+			str description_text = random_text();
+			str value_text = random_text();
+			auto description = password_editor::empty_description_cell;
+			description.text = description_text.c_str();
+			auto value = password_editor::empty_value_cell;
+			value.text = value_text.c_str();
+			value.flags = password_chance(random) ? password_editor::ValueCellFlag::lock : 0;
+			password_editor::table_add_row(card, &description, &value);
+		}
+	}
+}
+#endif
 
 struct CardLayout {
 	std::vector<child_layout::MoveRequest> moves;
@@ -1259,7 +1308,12 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			}
 		
 			if (start_attempt == login::AttemptResult::success) {
-				if (start->signup) set_passwords_need_save(state, true);
+				if (start->signup) {
+					set_passwords_need_save(state, true);
+					#if defined(_DEBUG) && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
+					add_signup_torture_test_cards(state);
+					#endif
+				}
 				set_app_shortcuts(state.wnd, ED_SHORTCUTS);
 				generate_salt(state.salt); // New salt to be used for all future saves during the current session
 				u32 key[8];

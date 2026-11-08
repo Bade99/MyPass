@@ -25,6 +25,7 @@
 #include "win_msg_common_handler.h"
 
 #include "page_types.h"
+#include "tabs_types.h"
 #include "button_types.h"
 #include "toast_types.h"
 #include "nonclient_types.h"
@@ -46,6 +47,7 @@
 #include "button.h"
 #include "scrollbar.h"
 #include "page.h"
+#include "tabs.h"
 #include "text.h"
 #include "search.h"
 #include "nonclient.h"
@@ -133,7 +135,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 
 	load_styles();
 
-	#ifdef _DEBUG
+	#if APP_DIAGNOSTICS_ENABLED
 	HWND debug_track_wnd = nil;
 	nonclient::LpParam debug_nc_param{
 		.client_class_name = debug::wndclass,
@@ -228,7 +230,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 				PostMessage(nonclient::get_state(old_state.wnd)->client, WM_STATE_RESET, 0, 0);
 				ShowWindow(old_state.wnd, SW_HIDE);
 				ShowWindow(new_state.wnd, SW_SHOW);
-				#ifdef _DEBUG
+				#if APP_DIAGNOSTICS_ENABLED
 				debug_track_wnd = login_wnd;
 				#endif
 			} break;
@@ -246,7 +248,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 					PostMessage(nonclient::get_state(old_state.wnd)->client, WM_STATE_RESET, 0, 0);
 					ShowWindow(old_state.wnd, SW_HIDE);
 					ShowWindow(new_state.wnd, SW_SHOW);
-					#ifdef _DEBUG
+					#if APP_DIAGNOSTICS_ENABLED
 					debug_track_wnd = editor_wnd;
 					#endif
 				}

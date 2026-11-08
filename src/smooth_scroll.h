@@ -46,7 +46,7 @@ struct SmoothScroll {
 		i64 counter = StartCounter();
 		f64 elapsed_ms = f64(counter - last_tick) / GetPCFrequency();
 		last_tick = counter;
-#ifdef _DEBUG
+#if APP_DIAGNOSTICS_ENABLED
 		elapsed_ms *= animation::Timeline::debug_speed_multiplier;
 #endif
 		f32 distance = remaining_distance * animation::exponential_smoothing_factor(elapsed_ms, smoothing_time_ms);
