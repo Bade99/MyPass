@@ -538,6 +538,9 @@ namespace debug {
 			static void (*anim_proc)(HWND, UINT, UINT_PTR, DWORD) = [](HWND wnd, UINT, UINT_PTR anim_id, DWORD) {
 				auto& state = *get_state(wnd);
 				if (&state) {
+					#if RENDER_DIAGNOSTICS_ENABLED
+					if (render_diagnostics::paint_session().active) goto set_timer;
+					#endif
 					if (!state.track_wnd) goto set_timer;
 					HWND track = *state.track_wnd;
 					HWND follower = state.parent;

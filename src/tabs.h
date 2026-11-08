@@ -153,6 +153,7 @@ namespace tabs {
 	bool remove_tab(HWND wnd, size_t index) {
 		State& state = *get_state(wnd); Assert(&state);
 		if (index >= state.items.size()) return false;
+		bool removed_selected = state.selected == index;
 		state.items.erase(state.items.begin() + index);
 		refresh_layout(state);
 		if (state.hovered == index) state.hovered = no_selection;
@@ -164,7 +165,7 @@ namespace tabs {
 		snap_underline(state);
 		update_cursor(state);
 		ask_window_for_repaint(wnd);
-		if (state.on_selection_changed) state.on_selection_changed(state.user_data, wnd, state.selected);
+		if (removed_selected && state.on_selection_changed) state.on_selection_changed(state.user_data, wnd, state.selected);
 		return true;
 	}
 
