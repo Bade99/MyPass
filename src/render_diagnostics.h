@@ -24,6 +24,8 @@ constexpr Mode mode() { return selected_mode; }
 constexpr bool directwrite_gdi() { return mode() == Mode::directwrite_gdi; }
 
 #define _foreach_render_event(op) \
+	op(window_position_changed,) \
+	op(window_nonclient_recalc,) \
 	op(window_resize,) \
 	op(editor_resize,) \
 	op(card_resize_plan,) \
@@ -205,7 +207,7 @@ void end_resize_session() {
 	const wchar_t* build_name = L"Release";
 	#endif
 	wchar_t line[256]{};
-	swprintf_s(line, L"[render] %04u-%02u-%02u %02u:%02u:%02u.%03u mode=%ls build=%ls resize_wall=%.2f ms\n",
+	swprintf_s(line, L"[render] %04u-%02u-%02u %02u:%02u:%02u.%03u mode=%ls build=%ls move_size_wall=%.2f ms\n",
 		timestamp.wYear, timestamp.wMonth, timestamp.wDay, timestamp.wHour, timestamp.wMinute,
 		timestamp.wSecond, timestamp.wMilliseconds, mode_name, build_name,
 		1000.0 * (counter.QuadPart - current.start) / frequency.QuadPart);

@@ -21,13 +21,13 @@ namespace debug {
 		{ _t("128 px"), nil, 128 },
 	};
 	static constexpr std::array resize_events{
+		render_diagnostics::Event::window_position_changed,
+		render_diagnostics::Event::window_nonclient_recalc,
 		render_diagnostics::Event::window_resize,
 		render_diagnostics::Event::editor_resize,
 		render_diagnostics::Event::card_move,
 		render_diagnostics::Event::card_children_batch,
 		render_diagnostics::Event::text_paint,
-		render_diagnostics::Event::bitmap_draw_layout,
-		render_diagnostics::Event::bitmap_copy_out,
 	};
 	static constexpr std::array paint_events{
 		render_diagnostics::Event::text_paint,
@@ -214,9 +214,9 @@ namespace debug {
 		#if RENDER_DIAGNOSTICS_ENABLED
 			auto& session = render_diagnostics::session();
 			if (session.active || (resize_stats_initialized && displayed_resize_start == session.start)) return;
-			if (!session.start) SetWindowText(controls.static_resize_summary_wnd, _t("No resize session recorded yet"));
+			if (!session.start) SetWindowText(controls.static_resize_summary_wnd, _t("No move/resize session recorded yet"));
 			else {
-				auto summary = std::format(_t("Last resize: {:.2f} ms"), (f64)session.wall_ticks / GetPCFrequency());
+				auto summary = std::format(_t("Last move/resize: {:.2f} ms"), (f64)session.wall_ticks / GetPCFrequency());
 				SetWindowText(controls.static_resize_summary_wnd, summary.c_str());
 			}
 			update_metrics_table(controls.resize_metrics_table, resize_events, session);
