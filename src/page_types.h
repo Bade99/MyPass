@@ -1,8 +1,11 @@
 #pragma once
 #include "smooth_scroll.h"
+#include "math.h"
 
 namespace page {
 constexpr auto& wndclass = wndclass_name("page");
+
+using OnViewportChanged = void(*)(void*, rect_i32);
 
 struct Theme {
 	union {
@@ -42,6 +45,7 @@ struct State {
 	} controls;
 
 	bool does_scrolling;
+	StatefulFunction<OnViewportChanged> on_viewport_changed;
 
 	SmoothScroll scroller;
 

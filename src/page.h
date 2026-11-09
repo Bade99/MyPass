@@ -16,6 +16,25 @@ void set_scrolling(HWND wnd, bool does_scrolling) {
 	if (&state) state.does_scrolling = does_scrolling;
 }
 
+rect_i32 get_viewport(HWND wnd) {
+	State& state = *get_state(wnd);
+	RECT bounds; GetClientRect(wnd, &bounds);
+	RECT content = get_window_rect_at(state.controls.content_area, wnd);
+	i32 left = maximum(0, -content.left);
+	i32 top = maximum(0, -content.top);
+	return { left, top, RECTW(bounds), RECTH(bounds) };
+}
+
+void notify_viewport_changed(State& state) {
+	if (state.on_viewport_changed) state.on_viewport_changed(get_viewport(state.wnd));
+}
+
+void set_on_viewport_changed(HWND wnd, OnViewportChanged callback, void* user_data = nil) {
+	State& state = *get_state(wnd);
+	state.on_viewport_changed = { user_data, callback };
+	notify_viewport_changed(state);
+}
+
 auto create_scrollable_area(HWND parent, const scrollbar::Theme& scrollbar_theme = themes.base_scrollbar) {
 	struct CreateScrollableAreaResult {
 		HWND scrollable_area;
@@ -66,6 +85,7 @@ void set_wnd_size(HWND scrollable_area, i32 h) {
 
 		scrollbar::set_stats(state.controls.v_scroll, page.h, page_space_h, abs(minimum(page.y, 0)));
 		SendMessage(state.controls.v_scroll, scrollbar::custom_message::AUTORESIZE, 0, 0);
+		notify_viewport_changed(state);
 	}
 }
 
@@ -82,6 +102,7 @@ void apply_scroll_position(HWND wnd, f32 previous_offset, f32 offset) {
 	if (new_y == r.top) return;
 	MoveWindow(state.controls.content_area, r.left, new_y, RECTW(r), RECTH(r), TRUE);
 	SendMessage(state.controls.v_scroll, scrollbar::custom_message::SET_POS, -new_y, 0);
+	notify_viewport_changed(state);
 }
 
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -155,6 +176,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 			MoveWindow(state.controls.content_area, r.left, new_y, RECTW(r), RECTH(r), TRUE);
 			state.scroller.offset = (f32)new_y;
+			notify_viewport_changed(state);
 		} break;
 		case SB_LINEDOWN:
 		case SB_LINEUP:

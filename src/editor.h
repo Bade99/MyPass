@@ -950,40 +950,37 @@ void cleanup_password_editors_v1(State& state) {
 	vec.clear();
 }
 
-bool create_password_editors_v1(State& state, RawBufferReader& data) {
-	struct PasswordEditorV1 {
-		str_view title;
-		time64 date_created;
-		time64 date_modified;
-		multiflag<password_editor::ItemFlag> flags;
-	};
-
-	struct PasswordEditorRowV1 {
-		str_view description, value;
-		multiflag<password_editor::ValueCellFlag> flags = 0;
-	};
-
+bool read_password_editors_v1(RawBufferReader& data, std::vector<PasswordEditorV1View>& cards) {
 	u64 editor_cnt;
 	if (!data.read(editor_cnt)) return false; //TODO(fran): for complex data reading it may be a good idea to use exceptions to make the code simpler and avoid if checks all over
 	for (u64 e = 0; e < editor_cnt; e++) {
-		PasswordEditorV1 editor;
-		if (!(data.read(editor.title) && data.read(editor.date_created) && data.read(editor.date_modified) && data.read(editor.flags)))
+		PasswordEditorV1View card{};
+		if (!(data.read(card.title) && data.read(card.date_created) && data.read(card.date_modified) && data.read(card.flags)))
 			return false;
-		Props properties{
-			.title = editor.title.data(),
-			.date_created = editor.date_created, 
-			.date_modified = editor.date_modified, 
-			.flags = editor.flags 
-		};
-
-		auto password_editor = add_password_editor(state, properties, -1);
-
 		u64 row_cnt;
 		if (!data.read(row_cnt)) return false;
 		for (u64 r = 0; r < row_cnt; r++) {
-			PasswordEditorRowV1 row;
+			PasswordEditorRowV1View row{};
 			if (!(data.read(row.description) && data.read(row.value) && data.read(row.flags))) return false;
+			card.rows.push_back(row);
+		}
+		cards.push_back(std::move(card));
+	}
+	return true;
+}
 
+bool create_password_editors_v1(State& state, RawBufferReader& data) {
+	std::vector<PasswordEditorV1View> cards;
+	if (!read_password_editors_v1(data, cards)) return false;
+	for (const PasswordEditorV1View& card : cards) {
+		Props properties{
+			.title = card.title.data(),
+			.date_created = card.date_created,
+			.date_modified = card.date_modified,
+			.flags = card.flags,
+		};
+		auto& password_editor = add_password_editor(state, properties, -1);
+		for (const PasswordEditorRowV1View& row : card.rows) {
 			auto description_cell = password_editor::empty_description_cell;
 			auto value_cell = password_editor::empty_value_cell;
 			description_cell.text = strip(const_cast<utf16*>(row.description.data())); //TODO(fran): I think we should strip on data save not data load

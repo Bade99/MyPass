@@ -104,6 +104,18 @@ struct CardLayoutState {
 	bool search_reflow_pending = false;
 };
 
+struct PasswordEditorRowV1View {
+	str_view description, value;
+	multiflag<password_editor::ValueCellFlag> flags = 0;
+};
+
+struct PasswordEditorV1View {
+	str_view title;
+	time64 date_created, date_modified;
+	multiflag<password_editor::ItemFlag> flags;
+	std::vector<PasswordEditorRowV1View> rows;
+};
+
 struct Controls {
 	using type = HWND;
 	union {
