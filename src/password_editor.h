@@ -448,16 +448,62 @@ void create_controls(State& state) {
 	on_internal_state_change(state);
 }
 
+struct CardGeometry {
+	RECT title{}, pin{}, values{};
+	std::array<RECT, 5> tools{};
+	i32 height = 0;
+};
+
+CardGeometry calculate_card_geometry(i32 width, i32 current_height, bool is_open, size_t row_count, i32 row_height) {
+	CardGeometry geometry;
+	i32 title_h = DPI(30);
+	i32 margin_x = title_h;
+	i32 pad = title_h / 4;
+	if (!is_open) {
+		geometry.title = {
+			.left = margin_x,
+			.top = maximum((current_height - title_h) / 2, 0),
+			.right = width - margin_x,
+			.bottom = geometry.title.top + title_h,
+		};
+		geometry.pin = rect_i32::create_from(geometry.title).cut_right(title_h).to_RECT();
+		geometry.height = RECTH(geometry.title);
+		return geometry;
+	}
+
+	i32 title_w = width * .5f;
+	i32 toolbar_w = (width - title_h * 2) - title_w;
+	geometry.title = {
+		.left = margin_x,
+		.top = title_h / 2,
+		.right = margin_x + title_w,
+		.bottom = geometry.title.top + title_h,
+	};
+	i32 total_tool_pad = ((i32)geometry.tools.size() - 1) * pad;
+	i32 toolbar_usable_w = toolbar_w - total_tool_pad;
+	i32 tool_w = minimum(toolbar_usable_w / (i32)geometry.tools.size(), (i32)DPI(80));
+	i32 tool_x = width - margin_x - total_tool_pad - (i32)geometry.tools.size() * tool_w;
+	for (RECT& tool : geometry.tools) {
+		tool = { tool_x, geometry.title.top, tool_x + tool_w, geometry.title.bottom };
+		tool_x = tool.right + pad;
+	}
+	geometry.values = {
+		.left = margin_x,
+		.top = geometry.title.bottom + pad,
+		.right = width - margin_x,
+		.bottom = geometry.values.top + (i32)(row_count * row_height),
+	};
+	geometry.height = geometry.values.bottom + pad * 2;
+	return geometry;
+}
+
 i32 resize_controls(const State& state, bool resize = true) {
 	render_diagnostics::Scope diagnostic{ resize ? render_diagnostics::Event::card_resize_apply : render_diagnostics::Event::card_resize_plan };
 	auto& controls = state.controls;
 	RECT wnd_r; GetClientRect(state.wnd, &wnd_r);
-	auto w = RECTW(wnd_r), h = RECTH(wnd_r);
-	i32 title_h = DPI(30);
-	i32 margin_x = title_h;
-	i32 title_w = w * .5f;
-	i32 toolbar_w = (w - title_h * 2) - title_w;
-	i32 pad = title_h / 4;
+	const auto& tbl = *table::get_state(controls.tbl_values);
+	CardGeometry geometry = calculate_card_geometry(RECTW(wnd_r), RECTH(wnd_r), state.is_open,
+		tbl.rows.size(), tbl.theme.cells.get_row_h_in_pixels());
 
 	if (resize) {
 		render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_backdrop_move };
@@ -465,65 +511,27 @@ i32 resize_controls(const State& state, bool resize = true) {
 	}
 
 	if (!state.is_open) {
-		RECT title_r { 
-			.left = margin_x, 
-			.top = maximum((h - title_h) / 2, 0),
-			.right = w - title_r.left,
-			.bottom = title_r.top + title_h
-		};
 		if (resize) {
-			auto pin = rect_i32::create_from(title_r).cut_right(RECTH(title_r));
-			RECT pin_r = pin.to_RECT();
 			std::array<child_layout::MoveRequest, 2> child_moves{ {
-				{ controls.edo_title, title_r }, { controls.btn_pin, pin_r }
+				{ controls.edo_title, geometry.title }, { controls.btn_pin, geometry.pin }
 			} };
 			render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_children_batch };
 			child_layout::move_batch(child_moves);
 		}
-		return RECTH(title_r);
 	}
-	else {
-
-		RECT title_r { 
-			.left = margin_x, 
-			.top = title_h / 2,
-			.right = title_r.left + title_w, 
-			.bottom = title_r.top + title_h };
-
+	else if (resize) {
 		const std::array tools = _password_editor_tool_list();
-		const auto tool_cnt = tools.size();
+		static_assert(tools.size() == CardGeometry{}.tools.size());
 		std::array<child_layout::MoveRequest, tools.size() + 2> child_moves;
 		size_t child_count = 0;
-		auto total_tool_pad = (tool_cnt - 1) * pad;
-		auto toolbar_usable_w = toolbar_w - total_tool_pad;
-		auto max_tool_w = DPI(80);
-		auto tool_w = (i32)minimum(toolbar_usable_w / tool_cnt, max_tool_w);
-		auto tool_x = w - margin_x - total_tool_pad - tool_cnt * tool_w;
-		for (const auto& c : tools) {
-			RECT tool_r;
-			tool_r.left = tool_x;
-			tool_r.top = title_r.top;
-			tool_r.right = tool_x + tool_w;
-			tool_r.bottom = title_r.bottom;
-			if (resize) child_moves[child_count++] = { c, tool_r };
-			tool_x = tool_r.right + pad;
-		}
-		const auto& tbl = *table::get_state(controls.tbl_values);
-		RECT values_r {
-			.left = title_r.left,
-			.top = title_r.bottom + pad,
-			.right = w - values_r.left,
-			.bottom = values_r.top + (i32)(tbl.rows.size() * tbl.theme.cells.get_row_h_in_pixels())
-		};
-
-		if (resize) {
-			child_moves[child_count++] = { controls.edo_title, title_r };
-			child_moves[child_count++] = { controls.tbl_values, values_r };
-			render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_children_batch };
-			child_layout::move_batch(std::span(child_moves).first(child_count));
-		}
-		return values_r.bottom + pad * 2;
+		for (size_t index = 0; index < tools.size(); ++index)
+			child_moves[child_count++] = { tools[index], geometry.tools[index] };
+		child_moves[child_count++] = { controls.edo_title, geometry.title };
+		child_moves[child_count++] = { controls.tbl_values, geometry.values };
+		render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_children_batch };
+		child_layout::move_batch(std::span(child_moves).first(child_count));
 	}
+	return geometry.height;
 }
 
 auto get_state(HWND wnd) { return get_window_state<State>(wnd); }
