@@ -460,11 +460,12 @@ CardGeometry calculate_card_geometry(i32 width, i32 current_height, bool is_open
 	i32 margin_x = title_h;
 	i32 pad = title_h / 4;
 	if (!is_open) {
+		i32 title_top = maximum((current_height - title_h) / 2, 0);
 		geometry.title = {
 			.left = margin_x,
-			.top = maximum((current_height - title_h) / 2, 0),
+			.top = title_top,
 			.right = width - margin_x,
-			.bottom = geometry.title.top + title_h,
+			.bottom = title_top + title_h,
 		};
 		geometry.pin = rect_i32::create_from(geometry.title).cut_right(title_h).to_RECT();
 		geometry.height = RECTH(geometry.title);
@@ -473,11 +474,12 @@ CardGeometry calculate_card_geometry(i32 width, i32 current_height, bool is_open
 
 	i32 title_w = width * .5f;
 	i32 toolbar_w = (width - title_h * 2) - title_w;
+	i32 title_top = title_h / 2;
 	geometry.title = {
 		.left = margin_x,
-		.top = title_h / 2,
+		.top = title_top,
 		.right = margin_x + title_w,
-		.bottom = geometry.title.top + title_h,
+		.bottom = title_top + title_h,
 	};
 	i32 total_tool_pad = ((i32)geometry.tools.size() - 1) * pad;
 	i32 toolbar_usable_w = toolbar_w - total_tool_pad;
@@ -487,11 +489,12 @@ CardGeometry calculate_card_geometry(i32 width, i32 current_height, bool is_open
 		tool = { tool_x, geometry.title.top, tool_x + tool_w, geometry.title.bottom };
 		tool_x = tool.right + pad;
 	}
+	i32 values_top = geometry.title.bottom + pad;
 	geometry.values = {
 		.left = margin_x,
-		.top = geometry.title.bottom + pad,
+		.top = values_top,
 		.right = width - margin_x,
-		.bottom = geometry.values.top + (i32)(row_count * row_height),
+		.bottom = values_top + (i32)(row_count * row_height),
 	};
 	geometry.height = geometry.values.bottom + pad * 2;
 	return geometry;
