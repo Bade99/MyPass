@@ -130,7 +130,7 @@ void set_row_editing_enabled(const std::array<HWND, table::MAX_COLUMNS>& row, bo
 
 void create_open_controls(State& state);
 
-void on_internal_state_change(State& state) {
+void on_internal_state_change(State& state, bool notify_manager = true) {
 	auto& controls = state.controls;
 	button::set_selected(controls.btn_card, state.is_open);
 	if (controls.btn_edit) button::set_selected(controls.btn_edit, state.is_editing);
@@ -156,7 +156,7 @@ void on_internal_state_change(State& state) {
 	auto& tbl = *table::get_state(controls.tbl_values);
 	for (const auto& row : tbl.rows)
 		set_row_editing_enabled(row, enable_editing);
-	if (!state.suppress_manager_notifications) {
+	if (notify_manager && !state.suppress_manager_notifications) {
 		ask_window_for_resize(state.manager_parent);
 		ask_window_for_repaint(state.manager_parent);
 	}
@@ -456,7 +456,7 @@ void create_controls(State& state) {
 			SetWindowFont(c, fonts.General, true);
 	SetWindowFont(controls.edo_title, fonts.GeneralBold, true);
 
-	on_internal_state_change(state);
+	on_internal_state_change(state, false);
 }
 
 struct CardGeometry {

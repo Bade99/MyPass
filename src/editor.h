@@ -397,7 +397,7 @@ void resize_controls(State& state, bool animate_cards = false);
 
 #if defined(_DEBUG) && !APP_PRODUCTION_BUILD && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
 void add_signup_torture_test_cards(State& state) {
-	constexpr auto card_count = 250;
+	constexpr auto card_count = 1000;
 	std::mt19937 random{ 0x5a17u };
 	std::uniform_int_distribution<i32> text_length{ 10, 20 };
 	std::uniform_int_distribution<i32> row_count{ 2, 5 };
@@ -493,7 +493,7 @@ CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_p
 	return layout;
 }
 
-void prepare_sort_animation_cards(State& state, CardLayout& target, const std::vector<RECT>& previous_bounds) {
+void prepare_incoming_animation_cards(State& state, CardLayout& target, const std::vector<RECT>& previous_bounds) {
 	auto viewport = page::get_viewport(state.controls.page_space);
 	if (viewport.w <= 0 || viewport.h <= 0) return;
 	i32 overscan = maximum(viewport.h / 2, (i32)DPI(120));
@@ -509,8 +509,10 @@ void prepare_sort_animation_cards(State& state, CardLayout& target, const std::v
 			if (previous.bottom <= viewport.y) from.top = viewport.y - RECTH(from);
 			else if (previous.top >= viewport.y + viewport.h) from.top = viewport.y + viewport.h;
 			else from.top = previous.top;
-			from.bottom = from.top + RECTH(card.bounds);
 		}
+		else if (card.bounds.top < viewport.y + viewport.h / 2) from.top = viewport.y - RECTH(from);
+		else from.top = viewport.y + viewport.h;
+		from.bottom = from.top + RECTH(card.bounds);
 		mount_card(state, card);
 		SetWindowPos(card.wnd, nil, from.left, from.top, RECTW(from), RECTH(from),
 			SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
@@ -685,12 +687,12 @@ void resize_controls(State& state, bool animate_cards) {
 	}
 
 	std::vector<RECT> previous_card_bounds;
-	if (animate_cards && state.card_layout.animation.sort_transition) {
+	if (animate_cards) {
 		previous_card_bounds.reserve(state.cards.size());
 		for (const CardSlot& card : state.cards) previous_card_bounds.push_back(card.bounds);
 	}
 	auto target = measure_card_layout(state, w, spacing, w_pad);
-	if (!previous_card_bounds.empty()) prepare_sort_animation_cards(state, target, previous_card_bounds);
+	if (!previous_card_bounds.empty()) prepare_incoming_animation_cards(state, target, previous_card_bounds);
 	if (animate_cards) start_card_animation(state, target);
 	else {
 		stop_card_animation(state);
