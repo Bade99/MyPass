@@ -75,7 +75,7 @@ namespace debug {
 		auto theme = themes.base_table;
 		theme.brushes.border.normal = colors.ControlTxt_Disabled;
 		theme.cells = {
-			.row_h = row_height,
+			.row_h = UINumber{ .value = (f32)row_height },
 			.columns_w = {
 				UINumber{ .type = UINumber::Type::dyn }, UINumber{ .value = 50 },
 				UINumber{ .value = 75 }, UINumber{ .value = 75 }

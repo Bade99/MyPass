@@ -55,7 +55,7 @@ namespace table {
 		auto& controls = state.rows;
 		RECT wnd_r; GetClientRect(state.wnd, &wnd_r);
 		auto w = RECTW(wnd_r), h = RECTH(wnd_r);
-		auto cell_h = DPI(state.theme.cells.row_h);
+		auto cell_h = state.theme.cells.get_row_h_in_pixels();
 		auto col_cnt = state.column_cnt;
 
 		auto cols_w = calc_cell_widths(state.theme.cells.columns_w, col_cnt, w);
@@ -157,6 +157,7 @@ namespace table {
 
 	void set_theme(HWND table_wnd, const Theme& theme) {
 		State& state = *get_state(table_wnd); Assert(&state);
+		Assert(theme.cells.row_h.type == UINumber::Type::px || theme.cells.row_h.type == UINumber::Type::dpi);
 		auto [repaint, resize] = state.theme.copy_from(theme);
 		if (repaint) ask_window_for_repaint(state.wnd);
 		if (resize)  ask_window_for_resize(state.wnd);

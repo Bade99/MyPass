@@ -10,11 +10,11 @@ namespace table {
 	struct RowTheme {
 		/**
 		  * We dont allow for variable row heights
-		  * Calculated as: final_h = DPI(row_h)
+		  * Only pixel and DPI-scaled heights are supported
 		  */
-		u32 row_h;
+		UINumber row_h;
 		std::array<UINumber, MAX_COLUMNS> columns_w; //TODO: im not even benefitting from using std::array, its actually screwing me up by having removed the default constructor for Theme. can I just instead use: ColumnTheme columns_w[MAX_COLUMNS]; ?
-		u32 get_row_h_in_pixels() const { return DPI(row_h); }
+		u32 get_row_h_in_pixels() const { return (u32)row_h.to_px(); }
 	};
 
 	struct Theme {

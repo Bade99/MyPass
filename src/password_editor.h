@@ -18,9 +18,8 @@
  * 
  */
 
- //TODO(fran): virtual window manager, hwnd that handles other hwnds, so we can do scrolling, have the virtual manager be passed a way to generate my windows, in this case the password editor. It will only generate a few windows to cover the visible space, and on demand switch the state of the windows when scrolling to simulate going over the whole list of passwords
-
 namespace password_editor {
+	constexpr UINumber card_row_height{ .value = 30 };
 
 	namespace value_cell {
 		constexpr auto& wndclass = wndclass_name("password_editor_value_cell");
@@ -435,7 +434,7 @@ void create_controls(State& state) {
 	table::set_column_cnt(controls.tbl_values, 2);
 	table::Theme tbl_theme = themes.base_table; 
 	tbl_theme.cells = {
-		.row_h = 30,
+		.row_h = card_row_height,
 		.columns_w = {UINumber{.value = 100}, UINumber{.type = UINumber::Type::dyn}}
 	};
 	table::set_theme(controls.tbl_values, tbl_theme);

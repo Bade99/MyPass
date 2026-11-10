@@ -102,6 +102,8 @@ struct CardLayoutState {
 	RECT backdrop_bounds{};
 	std::vector<HWND> search_pending_reveals;
 	bool search_reflow_pending = false;
+	bool applying_layout = false;
+	bool refreshing_cards = false;
 };
 
 struct PasswordEditorRowV1View {
@@ -114,6 +116,41 @@ struct PasswordEditorV1View {
 	time64 date_created, date_modified;
 	multiflag<password_editor::ItemFlag> flags;
 	std::vector<PasswordEditorRowV1View> rows;
+};
+
+struct CardRowData {
+	str description, value;
+	multiflag<password_editor::ValueCellFlag> flags = 0;
+};
+
+struct CardData {
+	str title;
+	password_editor::Properties properties{};
+	std::vector<CardRowData> rows;
+	bool is_open = false;
+	bool is_editing = false;
+};
+
+struct CardTextViewState {
+	UndoHistory<edit_oneline::TextEditEntry> history;
+	edit_oneline::UndoMergeState history_helper;
+	edit_oneline::CharSel selection;
+	v2_i32 scroll{};
+	bool trailing = false;
+	bool valid = false;
+};
+
+struct CardRowTextViewState {
+	CardTextViewState description, value;
+};
+
+struct CardSlot {
+	CardData data;
+	HWND wnd = nil;
+	bool search_visible = true;
+	RECT bounds{};
+	CardTextViewState title_view;
+	std::vector<CardRowTextViewState> row_views;
 };
 
 struct Controls {
@@ -143,8 +180,7 @@ struct Controls {
 		};
 		type all_fixed[12];
 	};
-	std::vector<HWND> password_editors;
-private: void _() { static_assert(sizeof(all_fixed) == (sizeof(*this) - sizeof(password_editors))); }
+private: void _() { static_assert(sizeof(all_fixed) == sizeof(*this)); }
 };
 
 struct State {
@@ -157,6 +193,7 @@ struct State {
 		HMENU menu_edit;
 	};
 	Controls controls;
+	std::vector<CardSlot> cards;
 	Settings* settings;
 
 	str current_user;
