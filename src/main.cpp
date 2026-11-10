@@ -1,6 +1,16 @@
 
 //TODO(fran): add a note tip about password breaches, eg check https://haveibeenpwned.com/ or similar to make sure non of your accounts have been breached
 
+//TODO(fran): full app undo / repo support(add card, remove card, add row, etc)
+//TODO(fran): Resizing while in the v0 transition state: cards and other elements render well but the background doesnt seem to get properly cleared and also it looks like gelatin
+//TODO(fran): ability to overscroll past the last card
+//TODO(fran): when opening a card it should be scrolled into view
+//TODO(fran): Password Editor Table Default Text : email is more common than username(currently it's username and password, so instead of renaming it every time when using the app I just use username for the email) (allow the user to edit what the default table contains?)
+//TODO(fran): Tabs: to be able to separate passwords into sections
+//TODO(fran): Password Editor Table: combobox for the first column of the table, with optional default values you can assign to the cell(still allows free text), default values: mail, username, password, security question, recovery code, note
+//TODO(fran): crash report functionality(Windows keeps crash data on %appdata%\Local\CrashDumps\MyPass.exe.34996.dmp, it would be good if the app at indicated a crash happened, and provided a way to report it, before letting the exception close the app. A worry here is that the dmp may contain user passwords and other sensitive data
+//TODO(fran): Password Editor Table: ability to move table rows to change their order
+
 
 //----------------------Warnings-----------------------:
 #pragma warning (disable: 4244) // C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
