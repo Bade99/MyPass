@@ -73,7 +73,7 @@ void setup_bmps(HINSTANCE instance = GetModuleHandle(nil)) {
 	auto load_bitmap8 = [](HINSTANCE instance, u32 resource_id) {
 		auto bmp = (HBITMAP)LoadImage(instance, MAKEINTRESOURCE(resource_id), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION | LR_SHARED);
 		Assert(bmp);
-		#ifdef _DEBUG
+		#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 		BITMAP info{};
 		Assert(GetObject(bmp, sizeof(info), &info) == sizeof(info) && info.bmBitsPixel == 8);
 		#endif

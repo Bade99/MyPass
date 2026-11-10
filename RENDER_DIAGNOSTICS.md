@@ -1,6 +1,6 @@
 # Resize rendering diagnostics
 
-Set `RENDER_DIAGNOSTICS_ENABLED` near the top of `src/render_diagnostics.h` to `1` for timing reports or `0` to compile the diagnostics out, then rebuild. A project preprocessor definition can override the default. No environment variables are needed at runtime.
+`APP_PRODUCTION_BUILD` defaults to `0` in `src/platform.h` so Debug and Release builds can be profiled. Set it to `1`, or override it in the project preprocessor definitions, for a distributable build. Production builds compile out the debug window, render diagnostics, and test-only DPI scaling, even when diagnostics are otherwise enabled. In a test build, set `APP_DIAGNOSTICS_ENABLED` or `RENDER_DIAGNOSTICS_ENABLED` to `0` to disable either feature. Rebuild after changing any of these macros; no environment variables are needed at runtime.
 
 - `selected_mode` chooses the renderer. `Mode::directwrite_gdi` is the current renderer: it keeps DirectWrite layout and hit testing, rasterizes glyphs through a cached DirectWrite bitmap target, and copies them to each control's GDI paint DC. `Mode::directwrite` uses the original Direct2D DC target for comparison.
 The renderer selection is independent of the diagnostics toggle; `Mode::directwrite_gdi` remains selected when diagnostics are disabled.

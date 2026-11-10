@@ -126,7 +126,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 		login_cl.validate();
 		_deserialize_struct(editor_cl, to_deserialize);
 		editor_cl.validate();
-		#ifndef _DEBUG // While debugging always use default struct colors to make it easier to try different ones
+		#if !defined(_DEBUG) || APP_PRODUCTION_BUILD // While testing, use default struct colors to make it easier to try different ones
 		_deserialize_struct(colors, to_deserialize);
 		#endif
 		default_colors_if_not_set(&colors);
@@ -215,7 +215,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 	// Main message loop:
 	MSG msg;
 	BOOL bRet;
-	while ((bRet = GetMessage(&msg, nullptr, 0, 0)) != 0)
+	while ((bRet = GetMessage(&msg, nil, 0, 0)) != 0)
 	{
 		Assert(bRet != -1);// There was an error
 		switch (msg.message) {
@@ -277,7 +277,11 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 		{
 			if (!(app_shortcuts.table && TranslateAccelerator(app_shortcuts.listener_wnd ? app_shortcuts.listener_wnd : msg.hwnd, app_shortcuts.table, &msg))) {
 				bool needs_dialog_parsing = msg.message == WM_KEYDOWN && msg.wParam == VK_TAB; //TODO(fran): controls that use tab, eg multiline text editor, need to process WM_GETDLGCODE and return DLGC_WANTTAB
-				if (!needs_dialog_parsing || !IsDialogMessage(get_dialog_root(msg.hwnd), &msg)) {
+				HWND dialog_root = needs_dialog_parsing ? get_dialog_root(msg.hwnd) : nil;
+				if (needs_dialog_parsing && IsChild(editor_wnd, msg.hwnd) && IsChild(dialog_root, msg.hwnd))
+					editor::prepare_card_tab_navigation(*editor::get_state(dialog_root), msg.hwnd, dialog_root,
+						GetKeyState(VK_SHIFT) < 0, msg);
+				if (!needs_dialog_parsing || !IsDialogMessage(dialog_root, &msg)) {
 					TranslateMessage(&msg);
 					DispatchMessage(&msg);
 				}

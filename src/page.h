@@ -16,6 +16,25 @@ void set_scrolling(HWND wnd, bool does_scrolling) {
 	if (&state) state.does_scrolling = does_scrolling;
 }
 
+rect_i32 get_viewport(HWND wnd) {
+	State& state = *get_state(wnd);
+	RECT bounds; GetClientRect(wnd, &bounds);
+	RECT content = get_window_rect_at(state.controls.content_area, wnd);
+	i32 left = maximum(0, -content.left);
+	i32 top = maximum(0, -content.top);
+	return { left, top, RECTW(bounds), RECTH(bounds) };
+}
+
+void notify_viewport_changed(State& state) {
+	if (state.on_viewport_changed) state.on_viewport_changed(get_viewport(state.wnd));
+}
+
+void set_on_viewport_changed(HWND wnd, OnViewportChanged callback, void* user_data = nil) {
+	State& state = *get_state(wnd);
+	state.on_viewport_changed = { user_data, callback };
+	notify_viewport_changed(state);
+}
+
 auto create_scrollable_area(HWND parent, const scrollbar::Theme& scrollbar_theme = themes.base_scrollbar) {
 	struct CreateScrollableAreaResult {
 		HWND scrollable_area;
@@ -41,6 +60,7 @@ auto create_scrollable_area(HWND parent, const scrollbar::Theme& scrollbar_theme
 	return res;
 }
 
+//TODO(fran): Use a logical content height and scroll offset for pages over 32767 px; Windows clamps the child HWND's height and position, so viewport-mounted children must be rebased instead of moving one oversized window.
 void set_wnd_size(HWND scrollable_area, i32 h) {
 	State& state = *get_state(scrollable_area);
 	if (&state) {
@@ -66,6 +86,7 @@ void set_wnd_size(HWND scrollable_area, i32 h) {
 
 		scrollbar::set_stats(state.controls.v_scroll, page.h, page_space_h, abs(minimum(page.y, 0)));
 		SendMessage(state.controls.v_scroll, scrollbar::custom_message::AUTORESIZE, 0, 0);
+		notify_viewport_changed(state);
 	}
 }
 
@@ -82,6 +103,25 @@ void apply_scroll_position(HWND wnd, f32 previous_offset, f32 offset) {
 	if (new_y == r.top) return;
 	MoveWindow(state.controls.content_area, r.left, new_y, RECTW(r), RECTH(r), TRUE);
 	SendMessage(state.controls.v_scroll, scrollbar::custom_message::SET_POS, -new_y, 0);
+	notify_viewport_changed(state);
+}
+
+void scroll_to(HWND wnd, i32 position) {
+	State& state = *get_state(wnd);
+	AssertAll(state.controls.all);
+	state.scroller.cancel();
+	RECT content = get_window_rect_at(state.controls.content_area, wnd);
+	RECT viewport; GetClientRect(wnd, &viewport);
+	i32 max_scroll = maximum(RECTH(content) - RECTH(viewport), 0);
+	i32 new_y = -clamp(0, position, max_scroll);
+	state.scroller.offset = (f32)new_y;
+	if (new_y == content.top) {
+		SendMessage(state.controls.v_scroll, scrollbar::custom_message::SET_POS, -new_y, 0);
+		return;
+	}
+	MoveWindow(state.controls.content_area, content.left, new_y, RECTW(content), RECTH(content), TRUE);
+	SendMessage(state.controls.v_scroll, scrollbar::custom_message::SET_POS, -new_y, 0);
+	notify_viewport_changed(state);
 }
 
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -139,22 +179,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		case SB_THUMBTRACK:
 		case SB_THUMBPOSITION: //INFO: can be used to detect the end of a SB_THUMBTRACK sequence
 		{
-			state.scroller.cancel();
 			auto new_scroll = (HWND)lparam == state.controls.v_scroll
 				? (i32)SendMessage(state.controls.v_scroll, scrollbar::custom_message::GET_POS, 0, 0)
 				: (i32)HIWORD(wparam);
-			//TODO(fran): move into common logic with smooth_scroll
-			RECT r = get_window_rect_at(state.controls.content_area, state.wnd);
-			RECT parent_r; GetWindowRect(state.wnd, &parent_r);
-			i32 parent_h = RECTH(parent_r);
-			i32 current_h = RECTH(r);
-			const i32 min_scroll_y = 0; //prevent scrolling to go above of the page boundaries
-			i32 max_scroll_y = maximum(current_h - parent_h, 0); //prevent scrolling to go below of the page boundaries
-
-			i32 new_y = -clamp(min_scroll_y, (i32)(new_scroll), max_scroll_y);
-
-			MoveWindow(state.controls.content_area, r.left, new_y, RECTW(r), RECTH(r), TRUE);
-			state.scroller.offset = (f32)new_y;
+			scroll_to(state.wnd, new_scroll);
 		} break;
 		case SB_LINEDOWN:
 		case SB_LINEUP:

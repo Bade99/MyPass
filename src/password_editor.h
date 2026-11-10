@@ -18,9 +18,8 @@
  * 
  */
 
- //TODO(fran): virtual window manager, hwnd that handles other hwnds, so we can do scrolling, have the virtual manager be passed a way to generate my windows, in this case the password editor. It will only generate a few windows to cover the visible space, and on demand switch the state of the windows when scrolling to simulate going over the whole list of passwords
-
 namespace password_editor {
+	constexpr UINumber card_row_height{ .value = 30 };
 
 	namespace value_cell {
 		constexpr auto& wndclass = wndclass_name("password_editor_value_cell");
@@ -129,16 +128,18 @@ void set_row_editing_enabled(const std::array<HWND, table::MAX_COLUMNS>& row, bo
 	PostMessage(row[1], WM_ENABLE_REQUEST, enabled, 0);
 }
 
-void on_internal_state_change(State& state) {
+void create_open_controls(State& state);
+
+void on_internal_state_change(State& state, bool notify_manager = true) {
 	auto& controls = state.controls;
 	button::set_selected(controls.btn_card, state.is_open);
-	button::set_selected(controls.btn_edit, state.is_editing);
+	if (controls.btn_edit) button::set_selected(controls.btn_edit, state.is_editing);
 
 	bool pin = button::get_state(controls.btn_pin)->selected;
 
 	for (const auto& c : _password_editor_tool_list(controls.tbl_values)) {
 		bool show = state.is_open ? !state.reveal_open_controls_on_resize : pin && c == controls.btn_pin;
-		ShowWindow(c, show ? SW_SHOW : SW_HIDE);
+		if (c) ShowWindow(c, show ? SW_SHOW : SW_HIDE);
 	}
 
 	EnableWindow(controls.btn_pin, state.is_open);
@@ -148,22 +149,25 @@ void on_internal_state_change(State& state) {
 	button::Theme btn{ .brushes = {.bk = {.clicked = enable_editing ? colors.Control_BkPush_Strong : colors.Control_BkPush_Soft} } };
 	button::set_theme(controls.btn_card, btn);
 
-	SendMessage(controls.btn_edit, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)(enable_editing ? bmps.cancel : bmps.edit));
+	if (controls.btn_edit) SendMessage(controls.btn_edit, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)(enable_editing ? bmps.cancel : bmps.edit));
 		
 	//TODO: may be better to ask the table to do this child disabling logic by itself
 	//Also this is too restrictive, we want to send a message to the individual cells to disable themselves, so they can decide what needs disabling and what not, eg a 'copy field' button should always stay enabled
 	auto& tbl = *table::get_state(controls.tbl_values);
 	for (const auto& row : tbl.rows)
 		set_row_editing_enabled(row, enable_editing);
-	ask_window_for_resize(state.manager_parent);
-	ask_window_for_repaint(state.manager_parent);
+	if (notify_manager && !state.suppress_manager_notifications) {
+		ask_window_for_resize(state.manager_parent);
+		ask_window_for_repaint(state.manager_parent);
+	}
 }
 
 void set_is_open(State& state, bool is_open) {
 	if (state.is_open != is_open) {
 		state.is_open = is_open;
 		state.reveal_open_controls_on_resize = is_open;
-		if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
+		if (is_open && !state.controls.btn_dates) create_open_controls(state);
+		if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change(state.wnd);
 		on_internal_state_change(state);
 		if (is_open) ask_window_for_repaint(state.controls.tbl_values);
 	}
@@ -177,7 +181,7 @@ void set_is_editing(State& state, bool is_editing) {
 }
 
 str format_dates_tooltip(State& state) {
-	auto format_datetime = [](time_t date) {
+	auto format_datetime = [](time64 date) {
 		using namespace std::chrono;
 		constexpr auto date_format = L"{:%Y/%m/%d %H:%M}"; //TODO(fran): config so the user can set the date format they want, depending on the system or any other locale based calculation is not good enough
 		auto date_string = std::format( date_format, zoned_time{ current_zone(), sys_seconds{ seconds(date) } });
@@ -202,7 +206,8 @@ void table_insert_row(State& state, size_t at_idx, DescriptionCell* description,
 	RECT table_bounds; GetClientRect(tbl.wnd, &table_bounds);
 	if (RECTW(table_bounds) > 0) table::resize_controls(tbl);
 	set_row_editing_enabled(tbl.rows[at_idx], state.is_open && state.is_editing);
-	if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
+	if (!state.suppress_manager_notifications && state.stateful_functions.on_layout_change)
+		state.stateful_functions.on_layout_change(state.wnd);
 }
 
 void table_add_row(State& state, DescriptionCell* description, ValueCell* value) {
@@ -217,7 +222,7 @@ void table_delete_row(State& state, HWND containing_wnd) {
 	if (tbl.rows.size() == old_row_count) return;
 	RECT table_bounds; GetClientRect(tbl.wnd, &table_bounds);
 	if (RECTW(table_bounds) > 0) table::resize_controls(tbl);
-	if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
+	if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change(state.wnd);
 }
 
 void on_row_editor_enter_key_pressed(void*, HWND edit_wnd) {
@@ -237,24 +242,9 @@ void on_row_editor_enter_key_pressed(void*, HWND edit_wnd) {
 	}
 }
 
-void create_controls(State& state) {
-	//TODO(fran): this is an interesting case where I would not want password_editor itself to be an hwnd at all, just a manager for this btn_card which should be the main hwnd from which others are created inside of. Can I just have this object not exist and be just a handler, or maybe a worse solution would be have it be a subclass of button?
+void create_open_controls(State& state) {
 	auto& controls = state.controls;
-	controls.btn_card = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD, WS_EX_CONTROLPARENT);
-	button::set_theme(controls.btn_card, themes.password_editor_card_btn);
-	button::set_user_data(controls.btn_card, &state);
-	button::set_functions(controls.btn_card, {
-		.on_click = [](void* data, HWND wnd) {
-			auto& state = *(State*)data;
-			set_is_open(state, !state.is_open);
-		}
-	});
-	
-	controls.edo_title = create_window(controls.btn_card, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
-	auto hollow_brush = (HBRUSH)GetStockObject(HOLLOW_BRUSH);
-	edit_oneline::set_theme(controls.edo_title, themes.clear_editoneline);
-
-	controls.btn_dates = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
+	controls.btn_dates = create_window(controls.btn_card, button::wndclass, nil, WS_CHILD | BS_BITMAP);
 	SendMessage(controls.btn_dates, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.calendar);
 	button::set_theme(controls.btn_dates, themes.password_editor_toolbar_btn_static);
 	controls.tooltip_btn_dates = add_mouseover_tooltip(controls.btn_dates,
@@ -262,22 +252,7 @@ void create_controls(State& state) {
 		{.multiline = true, .delay_ms = 200, .duration_ms = 15000}
 	);
 
-	controls.btn_pin = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
-	SendMessage(controls.btn_pin, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.pin);
-	button::set_theme(controls.btn_pin, themes.table_toolbar_btn);
-	add_mouseover_tooltip(controls.btn_pin, LANG_PWD_ED_PIN);
-	button::set_user_data(controls.btn_pin, &state);
-	button::set_functions(controls.btn_pin, {
-		.on_click = [](void* data, HWND wnd) {
-			auto& state = *(State*)data;
-			auto& btn = *button::get_state(state.controls.btn_pin);
-			button::set_selected(btn.wnd, !btn.selected);
-			set_flag_bit(state.properties.flags, btn.selected, password_editor::ItemFlag::pin);
-			if (state.stateful_functions.on_change) state.stateful_functions.on_change(state.controls.btn_pin);
-		}
-	});
-
-	controls.btn_edit = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
+	controls.btn_edit = create_window(controls.btn_card, button::wndclass, nil, WS_CHILD | BS_BITMAP);
 	SendMessage(controls.btn_edit, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.edit);
 	button::set_theme(controls.btn_edit, themes.table_toolbar_btn);
 	add_mouseover_tooltip(controls.btn_edit, LANG_PWD_ED_EDIT);
@@ -289,7 +264,7 @@ void create_controls(State& state) {
 		}
 	});
 
-	controls.btn_add = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
+	controls.btn_add = create_window(controls.btn_card, button::wndclass, nil, WS_CHILD | BS_BITMAP);
 	button::set_theme(controls.btn_add, themes.password_editor_toolbar_btn);
 	SendMessage(controls.btn_add, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.add);
 	add_mouseover_tooltip(controls.btn_add, LANG_PWD_ED_ADD);
@@ -305,8 +280,8 @@ void create_controls(State& state) {
 			set_is_editing(state, true);
 		}
 	});
-	
-	controls.btn_del = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
+
+	controls.btn_del = create_window(controls.btn_card, button::wndclass, nil, WS_CHILD | BS_BITMAP);
 	SendMessage(controls.btn_del, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.bin);
 	button::set_theme(controls.btn_del, themes.password_editor_toolbar_btn_danger);
 	add_mouseover_tooltip(controls.btn_del, LANG_PWD_ED_DELETE);
@@ -315,6 +290,42 @@ void create_controls(State& state) {
 		.on_click = [](void* data, HWND wnd) {
 			auto& state = *(State*)data;
 			state.functions.on_delete(state.wnd, state.user_data);
+		}
+	});
+
+	for (HWND button : { controls.btn_dates, controls.btn_edit, controls.btn_add, controls.btn_del })
+		SetWindowFont(button, fonts.General, true);
+}
+
+void create_controls(State& state) {
+	//TODO(fran): this is an interesting case where I would not want password_editor itself to be an hwnd at all, just a manager for this btn_card which should be the main hwnd from which others are created inside of. Can I just have this object not exist and be just a handler, or maybe a worse solution would be have it be a subclass of button?
+	auto& controls = state.controls;
+	controls.btn_card = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD, WS_EX_CONTROLPARENT);
+	button::set_theme(controls.btn_card, themes.password_editor_card_btn);
+	button::set_user_data(controls.btn_card, &state);
+	button::set_functions(controls.btn_card, {
+		.on_click = [](void* data, HWND wnd) {
+			auto& state = *(State*)data;
+			set_is_open(state, !state.is_open);
+		}
+	});
+
+	controls.edo_title = create_window(controls.btn_card, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
+	auto hollow_brush = (HBRUSH)GetStockObject(HOLLOW_BRUSH);
+	edit_oneline::set_theme(controls.edo_title, themes.clear_editoneline);
+
+	controls.btn_pin = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
+	SendMessage(controls.btn_pin, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.pin);
+	button::set_theme(controls.btn_pin, themes.table_toolbar_btn);
+	add_mouseover_tooltip(controls.btn_pin, LANG_PWD_ED_PIN);
+	button::set_user_data(controls.btn_pin, &state);
+	button::set_functions(controls.btn_pin, {
+		.on_click = [](void* data, HWND wnd) {
+			auto& state = *(State*)data;
+			auto& btn = *button::get_state(state.controls.btn_pin);
+			button::set_selected(btn.wnd, !btn.selected);
+			set_flag_bit(state.properties.flags, btn.selected, password_editor::ItemFlag::pin);
+			if (state.stateful_functions.on_change) state.stateful_functions.on_change(state.controls.btn_pin);
 		}
 	});
 
@@ -427,7 +438,7 @@ void create_controls(State& state) {
 
 					return state.wnd;
 				}
-				default: Assert(0); return nullptr;
+				default: Assert(0); return nil;
 			}
 		}
 	};
@@ -435,29 +446,78 @@ void create_controls(State& state) {
 	table::set_column_cnt(controls.tbl_values, 2);
 	table::Theme tbl_theme = themes.base_table; 
 	tbl_theme.cells = {
-		.row_h = 30,
+		.row_h = card_row_height,
 		.columns_w = {UINumber{.value = 100}, UINumber{.type = UINumber::Type::dyn}}
 	};
 	table::set_theme(controls.tbl_values, tbl_theme);
 
 	for (const auto& c : controls.all)
-		if (c != controls.edo_title && c != controls.tooltip_btn_dates) 
+		if (c && c != controls.edo_title && c != controls.tooltip_btn_dates)
 			SetWindowFont(c, fonts.General, true);
 	SetWindowFont(controls.edo_title, fonts.GeneralBold, true);
 
-	on_internal_state_change(state);
+	on_internal_state_change(state, false);
+}
+
+struct CardGeometry {
+	RECT title{}, pin{}, values{};
+	std::array<RECT, 5> tools{};
+	i32 height = 0;
+};
+
+CardGeometry calculate_card_geometry(i32 width, i32 current_height, bool is_open, size_t row_count, i32 row_height) {
+	CardGeometry geometry;
+	i32 title_h = DPI(30);
+	i32 margin_x = title_h;
+	i32 pad = title_h / 4;
+	if (!is_open) {
+		i32 title_top = maximum((current_height - title_h) / 2, 0);
+		geometry.title = {
+			.left = margin_x,
+			.top = title_top,
+			.right = width - margin_x,
+			.bottom = title_top + title_h,
+		};
+		geometry.pin = rect_i32::create_from(geometry.title).cut_right(title_h).to_RECT();
+		geometry.height = RECTH(geometry.title);
+		return geometry;
+	}
+
+	i32 title_w = width * .5f;
+	i32 toolbar_w = (width - title_h * 2) - title_w;
+	i32 title_top = title_h / 2;
+	geometry.title = {
+		.left = margin_x,
+		.top = title_top,
+		.right = margin_x + title_w,
+		.bottom = title_top + title_h,
+	};
+	i32 total_tool_pad = ((i32)geometry.tools.size() - 1) * pad;
+	i32 toolbar_usable_w = toolbar_w - total_tool_pad;
+	i32 tool_w = minimum(toolbar_usable_w / (i32)geometry.tools.size(), (i32)DPI(80));
+	i32 tool_x = width - margin_x - total_tool_pad - (i32)geometry.tools.size() * tool_w;
+	for (RECT& tool : geometry.tools) {
+		tool = { tool_x, geometry.title.top, tool_x + tool_w, geometry.title.bottom };
+		tool_x = tool.right + pad;
+	}
+	i32 values_top = geometry.title.bottom + pad;
+	geometry.values = {
+		.left = margin_x,
+		.top = values_top,
+		.right = width - margin_x,
+		.bottom = values_top + (i32)(row_count * row_height),
+	};
+	geometry.height = geometry.values.bottom + pad * 2;
+	return geometry;
 }
 
 i32 resize_controls(const State& state, bool resize = true) {
 	render_diagnostics::Scope diagnostic{ resize ? render_diagnostics::Event::card_resize_apply : render_diagnostics::Event::card_resize_plan };
 	auto& controls = state.controls;
 	RECT wnd_r; GetClientRect(state.wnd, &wnd_r);
-	auto w = RECTW(wnd_r), h = RECTH(wnd_r);
-	i32 title_h = DPI(30);
-	i32 margin_x = title_h;
-	i32 title_w = w * .5f;
-	i32 toolbar_w = (w - title_h * 2) - title_w;
-	i32 pad = title_h / 4;
+	const auto& tbl = *table::get_state(controls.tbl_values);
+	CardGeometry geometry = calculate_card_geometry(RECTW(wnd_r), RECTH(wnd_r), state.is_open,
+		tbl.rows.size(), tbl.theme.cells.get_row_h_in_pixels());
 
 	if (resize) {
 		render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_backdrop_move };
@@ -465,65 +525,27 @@ i32 resize_controls(const State& state, bool resize = true) {
 	}
 
 	if (!state.is_open) {
-		RECT title_r { 
-			.left = margin_x, 
-			.top = maximum((h - title_h) / 2, 0),
-			.right = w - title_r.left,
-			.bottom = title_r.top + title_h
-		};
 		if (resize) {
-			auto pin = rect_i32::create_from(title_r).cut_right(RECTH(title_r));
-			RECT pin_r = pin.to_RECT();
 			std::array<child_layout::MoveRequest, 2> child_moves{ {
-				{ controls.edo_title, title_r }, { controls.btn_pin, pin_r }
+				{ controls.edo_title, geometry.title }, { controls.btn_pin, geometry.pin }
 			} };
 			render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_children_batch };
 			child_layout::move_batch(child_moves);
 		}
-		return RECTH(title_r);
 	}
-	else {
-
-		RECT title_r { 
-			.left = margin_x, 
-			.top = title_h / 2,
-			.right = title_r.left + title_w, 
-			.bottom = title_r.top + title_h };
-
+	else if (resize) {
 		const std::array tools = _password_editor_tool_list();
-		const auto tool_cnt = tools.size();
+		static_assert(tools.size() == CardGeometry{}.tools.size());
 		std::array<child_layout::MoveRequest, tools.size() + 2> child_moves;
 		size_t child_count = 0;
-		auto total_tool_pad = (tool_cnt - 1) * pad;
-		auto toolbar_usable_w = toolbar_w - total_tool_pad;
-		auto max_tool_w = DPI(80);
-		auto tool_w = (i32)minimum(toolbar_usable_w / tool_cnt, max_tool_w);
-		auto tool_x = w - margin_x - total_tool_pad - tool_cnt * tool_w;
-		for (const auto& c : tools) {
-			RECT tool_r;
-			tool_r.left = tool_x;
-			tool_r.top = title_r.top;
-			tool_r.right = tool_x + tool_w;
-			tool_r.bottom = title_r.bottom;
-			if (resize) child_moves[child_count++] = { c, tool_r };
-			tool_x = tool_r.right + pad;
-		}
-		const auto& tbl = *table::get_state(controls.tbl_values);
-		RECT values_r {
-			.left = title_r.left,
-			.top = title_r.bottom + pad,
-			.right = w - values_r.left,
-			.bottom = values_r.top + (i32)(tbl.rows.size() * tbl.theme.cells.get_row_h_in_pixels())
-		};
-
-		if (resize) {
-			child_moves[child_count++] = { controls.edo_title, title_r };
-			child_moves[child_count++] = { controls.tbl_values, values_r };
-			render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_children_batch };
-			child_layout::move_batch(std::span(child_moves).first(child_count));
-		}
-		return values_r.bottom + pad * 2;
+		for (size_t index = 0; index < tools.size(); ++index)
+			child_moves[child_count++] = { tools[index], geometry.tools[index] };
+		child_moves[child_count++] = { controls.edo_title, geometry.title };
+		child_moves[child_count++] = { controls.tbl_values, geometry.values };
+		render_diagnostics::Scope move_diagnostic{ render_diagnostics::Event::card_children_batch };
+		child_layout::move_batch(std::span(child_moves).first(child_count));
 	}
+	return geometry.height;
 }
 
 auto get_state(HWND wnd) { return get_window_state<State>(wnd); }
@@ -550,7 +572,7 @@ LRESULT CALLBACK proc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_NCDESTROY:
 	{
 		free(&state);
-		set_window_state(wnd, nullptr);
+		set_window_state(wnd, nil);
 		goto defproc;
 	} break;
 	case WM_CREATE:

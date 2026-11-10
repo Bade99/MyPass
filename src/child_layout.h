@@ -33,7 +33,7 @@ static bool move_if_needed(HWND wnd, RECT bounds, bool repaint = true) {
 	UINT flags = position_flags(wnd, bounds, repaint);
 	if (!flags) return true;
 	if (flags & SWP_NOSIZE) {
-		auto moved = SetWindowPos(wnd, nullptr, bounds.left, bounds.top, 0, 0, flags);
+		auto moved = SetWindowPos(wnd, nil, bounds.left, bounds.top, 0, 0, flags);
 		if (moved && repaint) UpdateWindow(wnd);
 		return moved != 0;
 	}
@@ -58,7 +58,7 @@ static bool move_batch(std::span<MoveRequest> requests, bool repaint = true) {
 	if (batch) {
 		for (auto& request : requests) {
 			if (!request.flags) continue;
-			batch = DeferWindowPos(batch, request.wnd, nullptr, request.bounds.left, request.bounds.top,
+			batch = DeferWindowPos(batch, request.wnd, nil, request.bounds.left, request.bounds.top,
 				RECTW(request.bounds), RECTH(request.bounds), request.flags);
 			if (!batch) break;
 		}

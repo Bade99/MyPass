@@ -9,11 +9,11 @@
 #include "render_diagnostics.h"
 #include "child_layout.h"
 
-#ifdef _DEBUG
-#define EDITOR_DEBUG_SIGNUP_TORTURE_TEST 0
+#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
+#define EDITOR_DEBUG_SIGNUP_TORTURE_TEST 1
 #endif
 
-#if defined(_DEBUG) && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
+#if defined(_DEBUG) && !APP_PRODUCTION_BUILD && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
 #include <random>
 #endif
 
@@ -29,20 +29,136 @@ void stop_card_animation(State& state) {
 	state.card_layout.animation.moves.clear();
 	state.card_layout.animation.requested = false;
 	state.card_layout.animation.entering_card = nil;
+	state.card_layout.animation.sort_transition = false;
 }
 
 auto get_state(HWND wnd) { return get_window_state<State>(wnd); }
 
+void update_window_title(State& state) {
+	if (state.passwords_need_save) set_app_title(state.nc_parent, state.current_user, app_name, L"●");
+	else set_app_title(state.nc_parent, state.current_user, app_name);
+}
+
 void set_passwords_need_save(State& state, bool new_val) {
 	state.passwords_need_save = new_val;
-	str txt;
-	if (!state.current_user.empty()) txt = state.current_user;
-	if (state.passwords_need_save) txt += L" ●";
-	SetText_txt_app(state.nc_parent, txt.c_str(), app_name_with_version);
+	update_window_title(state);
+}
+
+str read_control_text(HWND wnd) {
+	i32 length = GetWindowTextLength(wnd);
+	str result((size_t)length + 1, L'\0');
+	result.resize(GetWindowText(wnd, result.data(), length + 1));
+	return result;
+}
+
+void sync_card_from_controls(CardSlot& card) {
+	if (!card.wnd) return;
+	auto& editor = *password_editor::get_state(card.wnd);
+	card.data.title = read_control_text(editor.controls.edo_title);
+	card.data.properties = editor.properties;
+	card.data.properties.flags = 0;
+	set_flag_bit(card.data.properties.flags, button::get_state(editor.controls.btn_pin)->selected, password_editor::ItemFlag::pin);
+	card.data.is_open = editor.is_open;
+	card.data.is_editing = editor.is_editing;
+	if (!card.rows_materialized) return;
+	auto& table = *table::get_state(editor.controls.tbl_values);
+	card.data.rows.clear();
+	card.data.rows.reserve(table.rows.size());
+	for (const auto& row : table.rows) {
+		auto& value = *password_editor::value_cell::get_state(row[1]);
+		CardRowData data{
+			.description = read_control_text(row[0]),
+			.value = read_control_text(value.controls.text),
+		};
+		set_flag_bit(data.flags, button::get_state(value.controls.btn_lock)->selected, password_editor::ValueCellFlag::lock);
+		card.data.rows.push_back(std::move(data));
+	}
+}
+
+void sync_mounted_cards(State& state) {
+	for (CardSlot& card : state.cards) sync_card_from_controls(card);
+}
+
+void capture_text_view(HWND wnd, CardTextViewState& view) {
+	auto& text = *edit_oneline::get_state(wnd);
+	view.history = std::move(text.history);
+	view.history_helper = text.history_helper;
+	view.history_helper.break_group();
+	view.selection = text.selection;
+	view.scroll = text.scroll;
+	view.trailing = text.caret.trailing;
+	view.valid = true;
+}
+
+void restore_text_view(HWND wnd, CardTextViewState& view) {
+	if (!view.valid) return;
+	auto& text = *edit_oneline::get_state(wnd);
+	text.history = std::move(view.history);
+	text.history_helper = view.history_helper;
+	text.selection = view.selection;
+	text.scroll = view.scroll;
+	text.caret.trailing = view.trailing;
+	view.valid = false;
+}
+
+void capture_card_view(CardSlot& card) {
+	auto& editor = *password_editor::get_state(card.wnd);
+	capture_text_view(editor.controls.edo_title, card.title_view);
+	if (!card.rows_materialized) return;
+	auto& table = *table::get_state(editor.controls.tbl_values);
+	card.row_views.resize(table.rows.size());
+	for (size_t index = 0; index < table.rows.size(); ++index) {
+		const auto& row = table.rows[index];
+		auto& value = *password_editor::value_cell::get_state(row[1]);
+		capture_text_view(row[0], card.row_views[index].description);
+		capture_text_view(value.controls.text, card.row_views[index].value);
+	}
+}
+
+void restore_card_row_views(CardSlot& card) {
+	auto& editor = *password_editor::get_state(card.wnd);
+	auto& table = *table::get_state(editor.controls.tbl_values);
+	for (size_t index = 0; index < minimum(card.row_views.size(), table.rows.size()); ++index) {
+		const auto& row = table.rows[index];
+		auto& value = *password_editor::value_cell::get_state(row[1]);
+		restore_text_view(row[0], card.row_views[index].description);
+		restore_text_view(value.controls.text, card.row_views[index].value);
+	}
+}
+
+void restore_card_view(CardSlot& card) {
+	auto& editor = *password_editor::get_state(card.wnd);
+	restore_text_view(editor.controls.edo_title, card.title_view);
+	if (card.rows_materialized) restore_card_row_views(card);
+}
+
+void materialize_card_rows(CardSlot& card) {
+	if (card.rows_materialized) return;
+	auto& editor = *password_editor::get_state(card.wnd);
+	auto& table_state = *table::get_state(editor.controls.tbl_values);
+	bool old_editor_suppression = editor.suppress_manager_notifications;
+	bool old_table_suppression = table_state.suppress_manager_notifications;
+	editor.suppress_manager_notifications = true;
+	table_state.suppress_manager_notifications = true;
+	{
+		render_diagnostics::Scope rows_diagnostic{ render_diagnostics::Event::card_populate_rows };
+		for (const CardRowData& row : card.data.rows) {
+			auto description = password_editor::empty_description_cell;
+			auto value = password_editor::empty_value_cell;
+			description.text = row.description.c_str();
+			value.text = row.value.c_str();
+			value.flags = row.flags;
+			password_editor::table_add_row(editor, &description, &value);
+		}
+	}
+	card.rows_materialized = true;
+	table_state.suppress_manager_notifications = old_table_suppression;
+	editor.suppress_manager_notifications = old_editor_suppression;
+	restore_card_row_views(card);
 }
 
 void on_password_editors_cnt_changed(State& state) {
-	ShowWindow(state.controls.btn_add_end, state.controls.password_editors.size() ? SW_SHOW : SW_HIDE);
+	ShowWindow(state.controls.btn_add_end, state.cards.empty() ? SW_HIDE : SW_SHOW);
 }
 
 static const auto on_password_editor_change = [](void* data, HWND wnd) {
@@ -56,84 +172,241 @@ static const auto on_password_editor_change = [](void* data, HWND wnd) {
 	auto updated_props = pw_ed_state.properties;
 	updated_props.date_modified = std::time(nil);
 	password_editor::set_properties(pw_ed, updated_props);
+	for (CardSlot& card : state.cards)
+		if (card.wnd == pw_ed) { card.data.properties = updated_props; break; }
 };
 
-struct Props { const utf16* title = nil; time_t date_created = 0, date_modified = 0; multiflag<password_editor::ItemFlag> flags = 0; };
-password_editor::State& add_password_editor(State& state, const Props& properties, size_t at_idx) {
-	auto wnd = create_window(state.controls.page, password_editor::wndclass, nil, WS_VISIBLE | WS_CHILD, WS_EX_CONTROLPARENT, 0, state.wnd);
+password_editor::State& mount_card(State& state, CardSlot& card) {
+	render_diagnostics::Scope diagnostic{ render_diagnostics::Event::card_mount };
+	HWND wnd;
+	{
+		render_diagnostics::Scope create_diagnostic{ render_diagnostics::Event::card_create_window };
+		wnd = create_window(state.controls.page, password_editor::wndclass, nil, WS_CHILD, WS_EX_CONTROLPARENT, 0, state.wnd);
+	}
+	card.wnd = wnd;
 
-	//TODO(fran): I have to manually move the btn_add_end to the end of the Z order so traversal through pressing tab remains correct, a better solution would actually be to put the password_editors inside yet another empty page container, so that they are placed inside of it, removing the need to update the z-order of btn_add_end which would be on a different layer of the hierarchy
-	SetWindowPos(state.controls.btn_add_end, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW);
-
-	password_editor::set_user_data(wnd, &state);
-	password_editor::set_properties(wnd, {.date_created = properties.date_created, .date_modified = properties.date_modified, .flags = properties.flags});
 	auto& res = *password_editor::get_state(wnd);
-	password_editor::set_stateful_functions(wnd, {
-		.on_change = { .state = &state, .function = on_password_editor_change  },
-		.on_layout_change = { .state = &state, .function = [](void* data) {
-			auto& state = *(State*)data;
-			state.card_layout.animation.requested = true;
-		} }
-	});
-	password_editor::set_functions(wnd, {
-		.on_delete = [](HWND pwd_ed, void* data) {
-			auto& state = *(State*)data;
-			stop_card_animation(state);
-			auto& vec = state.controls.password_editors;
-			for (const auto& [i, c] : vec | std::views::enumerate)
-				if (c == pwd_ed) {
-					on_password_editor_change(&state, password_editor::get_state(c)->controls.btn_del); //TODO(fran): small bug, we should actually check if the data in this editor was saved, if not then it shouldnt set need_save to true
-					std::erase(state.card_layout.search_pending_reveals, c);
-					DestroyWindow(c);
-					vec.erase(vec.begin() + i);
-					on_password_editors_cnt_changed(state);
-					state.card_layout.animation.requested = true;
-					ask_window_for_resize(state.wnd);
-					ask_window_for_repaint(state.wnd);
-					break;
-				}
-		}
-	});
-	AWDT(res.controls.edo_title, LANG_PWD_ED_TITLE);
-	edit_oneline::set_user_extra(res.controls.edo_title, &state);
-	edit_oneline::set_functions(res.controls.edo_title, { .on_change = on_password_editor_change });
+	auto& table_state = *table::get_state(res.controls.tbl_values);
+	res.suppress_manager_notifications = true;
+	table_state.suppress_manager_notifications = true;
+	{
+		render_diagnostics::Scope properties_diagnostic{ render_diagnostics::Event::card_bind_properties };
+		password_editor::set_user_data(wnd, &state);
+		password_editor::set_properties(wnd, card.data.properties);
+		password_editor::set_stateful_functions(wnd, {
+			.on_change = { .state = &state, .function = on_password_editor_change  },
+		});
+		password_editor::set_functions(wnd, {
+			.on_delete = [](HWND pwd_ed, void* data) {
+				auto& state = *(State*)data;
+				stop_card_animation(state);
+				for (size_t index = 0; index < state.cards.size(); ++index)
+					if (state.cards[index].wnd == pwd_ed) {
+						set_passwords_need_save(state, true);
+						std::erase(state.card_layout.search_pending_reveals, pwd_ed);
+						DestroyWindow(pwd_ed);
+						state.cards.erase(state.cards.begin() + index);
+						on_password_editors_cnt_changed(state);
+						state.card_layout.animation.requested = true;
+						ask_window_for_resize(state.wnd);
+						ask_window_for_repaint(state.wnd);
+						break;
+					}
+			}
+		});
+	}
+	{
+		render_diagnostics::Scope title_diagnostic{ render_diagnostics::Event::card_bind_title };
+		AWDT(res.controls.edo_title, LANG_PWD_ED_TITLE);
+		edit_oneline::set_user_extra(res.controls.edo_title, &state);
+		edit_oneline::set_functions(res.controls.edo_title, { .on_change = on_password_editor_change });
 
-	auto& vec = state.controls.password_editors;
-	auto at = at_idx < vec.size() ? vec.begin() + at_idx : vec.end();
-	vec.insert(at, wnd);
+		set_window_text(res.controls.edo_title, card.data.title.c_str(), false);
+	}
+	if (card.data.is_open) materialize_card_rows(card);
+	{
+		render_diagnostics::Scope state_diagnostic{ render_diagnostics::Event::card_bind_state };
+		password_editor::set_is_open(res, card.data.is_open);
+		password_editor::set_is_editing(res, card.data.is_editing);
+		table_state.suppress_manager_notifications = false;
+		res.suppress_manager_notifications = false;
+		password_editor::set_stateful_functions(wnd, {
+			.on_layout_change = { .state = &state, .function = [](void* data, HWND card_wnd) {
+				auto& state = *(State*)data;
+				for (CardSlot& card : state.cards)
+					if (card.wnd == card_wnd) {
+						if (password_editor::get_state(card_wnd)->is_open) materialize_card_rows(card);
+						break;
+					}
+				state.card_layout.animation.requested = true;
+			} }
+		});
+	}
+	return res;
+}
+
+void update_mounted_card_z_order(State& state) {
+	render_diagnostics::Scope diagnostic{ render_diagnostics::Event::card_z_order };
+	constexpr UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW;
+	HWND previous = state.controls.btn_add_start;
+	SetWindowPos(previous, HWND_TOP, 0, 0, 0, 0, flags);
+	for (CardSlot& card : state.cards)
+		if (card.wnd) {
+			SetWindowPos(card.wnd, previous, 0, 0, 0, 0, flags);
+			previous = card.wnd;
+		}
+	SetWindowPos(state.controls.btn_add_end, previous, 0, 0, 0, 0, flags);
+}
+
+//TODO(fran): Pool card windows (including row controls) instead of destroying/recreating them on large scrolls; rebinding must preserve each card's text, undo history, focus, and animation state.
+//TODO(fran): Extract viewport-based child-window mounting, unmounting, and z-order into a reusable component with measure/bind/release callbacks; keep card state, search, animations, and tab navigation in the editor until another consumer clarifies the shared API.
+void refresh_card_windows(State& state) {
+	if (state.card_layout.applying_layout || state.card_layout.refreshing_cards || !state.controls.page_space) return;
+	render_diagnostics::Scope diagnostic{ render_diagnostics::Event::card_viewport_refresh };
+	auto viewport = page::get_viewport(state.controls.page_space);
+	if (viewport.w <= 0 || viewport.h <= 0) return;
+	state.card_layout.refreshing_cards = true;
+	defer{ state.card_layout.refreshing_cards = false; };
+	i32 overscan = maximum(viewport.h / 2, (i32)DPI(120));
+	i32 viewport_top = maximum(0, viewport.y - overscan);
+	i32 viewport_bottom = viewport.y + viewport.h + overscan;
+	HWND focused = GetFocus();
+	bool mounted_set_changed = false;
+	for (CardSlot& card : state.cards) {
+		bool in_range = card.search_visible && card.bounds.right > card.bounds.left &&
+			card.bounds.bottom > viewport_top && card.bounds.top < viewport_bottom;
+		if (in_range && !card.wnd && !state.card_layout.search_reflow_pending &&
+			!(state.card_layout.animation.timeline.active && state.card_layout.animation.sort_transition)) {
+			mount_card(state, card);
+			mounted_set_changed = true;
+			{
+				render_diagnostics::Scope place_diagnostic{ render_diagnostics::Event::card_place_window };
+				SetWindowPos(card.wnd, nil, card.bounds.left, card.bounds.top,
+					RECTW(card.bounds), RECTH(card.bounds), SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+			}
+			{
+				render_diagnostics::Scope restore_diagnostic{ render_diagnostics::Event::card_restore_view };
+				restore_card_view(card);
+			}
+		}
+		if (in_range && card.wnd && !state.card_layout.search_reflow_pending &&
+			!(GetWindowLongPtr(card.wnd, GWL_STYLE) & WS_VISIBLE)) {
+			render_diagnostics::Scope show_diagnostic{ render_diagnostics::Event::card_show_window };
+			ShowWindow(card.wnd, SW_SHOW);
+		}
+		else if (!in_range && card.wnd && !state.card_layout.animation.timeline.active &&
+			focused != card.wnd && !IsChild(card.wnd, focused)) {
+			render_diagnostics::Scope unmount_diagnostic{ render_diagnostics::Event::card_unmount };
+			{
+				render_diagnostics::Scope sync_diagnostic{ render_diagnostics::Event::card_sync_data };
+				sync_card_from_controls(card);
+			}
+			{
+				render_diagnostics::Scope capture_diagnostic{ render_diagnostics::Event::card_capture_view };
+				capture_card_view(card);
+			}
+			{
+				render_diagnostics::Scope destroy_diagnostic{ render_diagnostics::Event::card_destroy_window };
+				DestroyWindow(card.wnd);
+			}
+			card.wnd = nil;
+			card.rows_materialized = false;
+			mounted_set_changed = true;
+		}
+	}
+	if (mounted_set_changed) update_mounted_card_z_order(state);
+}
+
+void scroll_editor_rect_into_view(State& state, RECT bounds) {
+	auto viewport = page::get_viewport(state.controls.page_space);
+	i32 position = viewport.y;
+	if (bounds.top < viewport.y) position = bounds.top;
+	else if (bounds.bottom > viewport.y + viewport.h)
+		position = RECTH(bounds) > viewport.h ? bounds.top : bounds.bottom - viewport.h;
+	if (position != viewport.y) page::scroll_to(state.controls.page_space, position);
+}
+
+void prepare_card_tab_navigation(State& state, HWND focused, HWND dialog_root, bool backwards, MSG& message) {
+	if (state.card_layout.search_reflow_pending) return;
+	LRESULT dialog_code = SendMessage(focused, WM_GETDLGCODE, VK_TAB, (LPARAM)&message);
+	if (dialog_code & (DLGC_WANTTAB | DLGC_WANTALLKEYS)) return;
+
+	HWND next = GetNextDlgTabItem(dialog_root, focused, backwards);
+	i64 current_index = -1;
+	if (focused == state.controls.btn_add_end && backwards) current_index = (i64)state.cards.size();
+	else if (focused != state.controls.btn_add_start || backwards) {
+		for (size_t index = 0; index < state.cards.size(); ++index)
+			if (state.cards[index].wnd &&
+				(focused == state.cards[index].wnd || IsChild(state.cards[index].wnd, focused))) {
+				current_index = (i64)index;
+				break;
+			}
+		if (current_index >= 0 && next &&
+			(next == state.cards[current_index].wnd || IsChild(state.cards[current_index].wnd, next))) return;
+	}
+
+	if (current_index >= 0 || focused == state.controls.btn_add_start) {
+		i64 step = backwards ? -1 : 1;
+		for (i64 index = current_index + step; index >= 0 && index < (i64)state.cards.size(); index += step) {
+			CardSlot& card = state.cards[index];
+			if (!card.search_visible) continue;
+			bool is_open = card.wnd ? password_editor::get_state(card.wnd)->is_open : card.data.is_open;
+			bool is_editing = card.wnd ? password_editor::get_state(card.wnd)->is_editing : card.data.is_editing;
+			if (!is_open || !is_editing) continue;
+
+			scroll_editor_rect_into_view(state, card.bounds);
+			refresh_card_windows(state);
+			return;
+		}
+	}
+	if (next && (next == state.controls.btn_add_start ||
+		(next == state.controls.btn_add_end && IsWindowVisible(next)))) {
+		RECT bounds = get_window_rect_at(next, state.controls.page);
+		if (bounds.left >= 0) scroll_editor_rect_into_view(state, bounds);
+	}
+}
+
+password_editor::State& add_password_editor(State& state, CardData card, size_t at_idx) {
+	auto at = state.cards.begin() + minimum(at_idx, state.cards.size());
+	auto& inserted = *state.cards.insert(at, CardSlot{ .data = std::move(card) });
+	auto& res = mount_card(state, inserted);
+	update_mounted_card_z_order(state);
 	on_password_editors_cnt_changed(state);
-	if (properties.title) set_window_text(res.controls.edo_title, properties.title, false);
 	ask_window_for_resize(state.wnd);
 	ask_window_for_repaint(state.wnd);
 	return res;
 }
 
 void add_preset_password_editor(State& state, size_t at_idx) {
-	Props properties{ .title = L"", .date_created = std::time(nil), .date_modified = properties.date_created };
-	auto& password_editor = add_password_editor(state, properties, at_idx);
+	CardData card;
+	card.properties.date_created = std::time(nil);
+	card.properties.date_modified = card.properties.date_created;
 	auto usr_txt = RS(LANG_PWD_ED_TBL_USER);
 	auto pwd_txt = RS(LANG_PWD_ED_TBL_PASSWORD);
-	auto usr = password_editor::empty_description_cell; usr.text = usr_txt.c_str();
-	auto pwd = password_editor::empty_description_cell; pwd.text = pwd_txt.c_str();
-	auto val = password_editor::empty_value_cell;
-	password_editor::table_add_row(password_editor, &usr, &val);
-	password_editor::table_add_row(password_editor, &pwd, &val);
-	password_editor::set_is_open(password_editor, true);
-	password_editor::set_is_editing(password_editor, true);
+	card.rows.push_back({ .description = usr_txt });
+	card.rows.push_back({ .description = pwd_txt });
+	card.is_open = true;
+	card.is_editing = true;
+	auto& password_editor = add_password_editor(state, std::move(card), at_idx);
 	state.card_layout.animation.entering_card = password_editor.wnd;
 	state.card_layout.animation.requested = true;
 	ask_window_for_resize(state.wnd);
 	ask_window_for_repaint(state.wnd);
 }
 
-#if defined(_DEBUG) && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
+void resize_controls(State& state, bool animate_cards = false);
+
+#if defined(_DEBUG) && !APP_PRODUCTION_BUILD && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
 void add_signup_torture_test_cards(State& state) {
-	constexpr auto card_count = 250;
+	constexpr auto card_count = 1000;
 	std::mt19937 random{ 0x5a17u };
 	std::uniform_int_distribution<i32> text_length{ 10, 20 };
 	std::uniform_int_distribution<i32> row_count{ 2, 5 };
 	std::uniform_int_distribution<i32> pin_chance{ 0, 9 };
 	std::uniform_int_distribution<i32> password_chance{ 0, 1 };
+	constexpr time64 history_seconds = 5 * 365 * 24 * 60 * 60;
+	time64 now = std::time(nil);
+	std::uniform_int_distribution<time64> creation_time{ now - history_seconds, now };
 	constexpr str_view alphabet = L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 	std::uniform_int_distribution<size_t> character_index{ 0, alphabet.size() - 1 };
 	const auto random_text = [&]() {
@@ -142,28 +415,28 @@ void add_signup_torture_test_cards(State& state) {
 		return result;
 	};
 
-	time_t created = std::time(nil);
 	for (i32 card_index = 0; card_index < card_count; ++card_index) {
-		str title = random_text();
-		Props properties{
-			.title = title.c_str(),
+		CardData card;
+		card.title = random_text();
+		time64 created = creation_time(random);
+		std::uniform_int_distribution<time64> modification_time{ created, now };
+		card.properties = {
 			.date_created = created,
-			.date_modified = created,
+			.date_modified = modification_time(random),
 			.flags = pin_chance(random) == 0 ? password_editor::ItemFlag::pin : 0,
 		};
-		auto& card = add_password_editor(state, properties, -1);
 		i32 rows = row_count(random);
 		for (i32 row_index = 0; row_index < rows; ++row_index) {
-			str description_text = random_text();
-			str value_text = random_text();
-			auto description = password_editor::empty_description_cell;
-			description.text = description_text.c_str();
-			auto value = password_editor::empty_value_cell;
-			value.text = value_text.c_str();
-			value.flags = password_chance(random) ? password_editor::ValueCellFlag::lock : 0;
-			password_editor::table_add_row(card, &description, &value);
+			card.rows.push_back({
+				.description = random_text(),
+				.value = random_text(),
+				.flags = password_chance(random) ? password_editor::ValueCellFlag::lock : 0,
+			});
 		}
+		state.cards.push_back({ .data = std::move(card) });
 	}
+	on_password_editors_cnt_changed(state);
+	resize_controls(state);
 }
 #endif
 
@@ -178,15 +451,15 @@ struct CardLayout {
 CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_padding) {
 	CardLayout layout;
 	auto& controls = state.controls;
-	layout.moves.reserve(controls.password_editors.size() + 2);
+	layout.moves.reserve(state.cards.size() + 2);
 
 	i32 offset_y = 0;
 	i32 button_dimension = DPI(30);
 	i32 button_x = (width - button_dimension) / 2;
 	i32 backdrop_extent = DPI(10);
 	bool any_visible = false;
-	for (auto card : controls.password_editors)
-		if (IsWindowVisible(card)) { any_visible = true; break; }
+	for (const CardSlot& card : state.cards)
+		if (card.search_visible) { any_visible = true; break; }
 
 	if (any_visible) {
 		i32 button_start_y = spacing - button_dimension / 2;
@@ -195,14 +468,17 @@ CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_p
 		layout.backdrop_bounds.top = button_start_y + button_dimension / 2;
 		layout.backdrop_bounds.right = width - width_padding + backdrop_extent;
 		offset_y = button_start_y + button_dimension + spacing;
-		//TODO(fran): defer descendant layout for offscreen cards during width changes, then refresh it before a card enters the viewport; preserve scrolling and keyboard focus.
-		//TODO(fran): pool HWND-backed cards for the visible viewport plus overscan, rebinding them as the page scrolls.
-		//Keep card data independent of HWND identity and preserve search, focus/tab order, animations, and saving.
-		for (auto card : controls.password_editors) {
-			if (!IsWindowVisible(card)) continue;
-			const auto& card_state = *password_editor::get_state(card);
-			i32 card_height = password_editor::resize_controls(card_state, false);
-			layout.add_move(card, { width_padding, offset_y, width - 2 * width_padding, card_height });
+		for (CardSlot& card : state.cards) {
+			if (!card.search_visible) { card.bounds = {}; continue; }
+			i32 card_height;
+			if (card.wnd) {
+				const auto& card_state = *password_editor::get_state(card.wnd);
+				card_height = password_editor::resize_controls(card_state, false);
+			}
+			else card_height = password_editor::calculate_card_geometry(width - 2 * width_padding, 0,
+				card.data.is_open, card.data.rows.size(), (i32)password_editor::card_row_height.to_px()).height;
+			card.bounds = { width_padding, offset_y, width - width_padding, offset_y + card_height };
+			if (card.wnd) layout.moves.push_back({ card.wnd, card.bounds });
 			offset_y += card_height + spacing;
 		}
 		layout.add_move(controls.btn_add_end, { button_x, offset_y, button_dimension, button_dimension });
@@ -210,6 +486,7 @@ CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_p
 		offset_y += button_dimension;
 	}
 	else {
+		for (CardSlot& card : state.cards) card.bounds = {};
 		layout.add_move(controls.btn_add_start, { button_x, spacing, button_dimension, button_dimension });
 		i32 width_pad = width * pad_percent;
 		layout.backdrop_bounds = { width_pad, spacing - backdrop_extent,
@@ -219,6 +496,36 @@ CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_p
 	}
 	layout.page_height = offset_y + spacing;
 	return layout;
+}
+
+void prepare_incoming_animation_cards(State& state, CardLayout& target, const std::vector<RECT>& previous_bounds) {
+	auto viewport = page::get_viewport(state.controls.page_space);
+	if (viewport.w <= 0 || viewport.h <= 0) return;
+	i32 overscan = maximum(viewport.h / 2, (i32)DPI(120));
+	i32 range_top = maximum(0, viewport.y - overscan);
+	i32 range_bottom = viewport.y + viewport.h + overscan;
+	bool mounted_set_changed = false;
+	for (size_t index = 0; index < state.cards.size(); ++index) {
+		CardSlot& card = state.cards[index];
+		if (card.wnd || !card.search_visible || card.bounds.bottom <= range_top || card.bounds.top >= range_bottom) continue;
+		RECT from = card.bounds;
+		const RECT& previous = previous_bounds[index];
+		if (previous.right > previous.left) {
+			if (previous.bottom <= viewport.y) from.top = viewport.y - RECTH(from);
+			else if (previous.top >= viewport.y + viewport.h) from.top = viewport.y + viewport.h;
+			else from.top = previous.top;
+		}
+		else if (card.bounds.top < viewport.y + viewport.h / 2) from.top = viewport.y - RECTH(from);
+		else from.top = viewport.y + viewport.h;
+		from.bottom = from.top + RECTH(card.bounds);
+		mount_card(state, card);
+		SetWindowPos(card.wnd, nil, from.left, from.top, RECTW(from), RECTH(from),
+			SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+		restore_card_view(card);
+		target.moves.push_back({ card.wnd, card.bounds });
+		mounted_set_changed = true;
+	}
+	if (mounted_set_changed) update_mounted_card_z_order(state);
 }
 
 void apply_card_layout(State& state, CardLayout& layout, bool redraw_backdrop = false, bool force_page_update = true) {
@@ -251,7 +558,10 @@ void tick_card_animation(State& state) {
 	layout.page_height = lerp(transition.from_page_height, eased, transition.to_page_height);
 	layout.backdrop_bounds = lerp(transition.from_backdrop_bounds, eased, transition.to_backdrop_bounds);
 	apply_card_layout(state, layout, true, false);
-	if (progress >= 1.f) stop_card_animation(state);
+	if (progress >= 1.f) {
+		stop_card_animation(state);
+		refresh_card_windows(state);
+	}
 }
 
 void CALLBACK card_animation_timer_proc(HWND wnd, UINT, UINT_PTR, DWORD) {
@@ -317,8 +627,9 @@ void start_card_animation(State& state, CardLayout& target) {
 	tick_card_animation(state);
 }
 
-void resize_controls(State& state, bool animate_cards = false) {
+void resize_controls(State& state, bool animate_cards) {
 	render_diagnostics::Scope diagnostic{ render_diagnostics::Event::editor_resize };
+	state.card_layout.applying_layout = true;
 	RECT r; GetClientRect(state.wnd, &r);
 	auto w = RECTW(r), h = RECTH(r);
 	i32 spacing = DPI(15); //TODO: add to theme
@@ -380,7 +691,13 @@ void resize_controls(State& state, bool animate_cards = false) {
 		child_layout::move_if_needed(controls.page_space, page_space, false);
 	}
 
+	std::vector<RECT> previous_card_bounds;
+	if (animate_cards) {
+		previous_card_bounds.reserve(state.cards.size());
+		for (const CardSlot& card : state.cards) previous_card_bounds.push_back(card.bounds);
+	}
 	auto target = measure_card_layout(state, w, spacing, w_pad);
+	if (!previous_card_bounds.empty()) prepare_incoming_animation_cards(state, target, previous_card_bounds);
 	if (animate_cards) start_card_animation(state, target);
 	else {
 		stop_card_animation(state);
@@ -391,6 +708,8 @@ void resize_controls(State& state, bool animate_cards = false) {
 	RECT client_bounds; GetClientRect(state.wnd, &client_bounds);
 	state.card_layout.animation.client_width = RECTW(client_bounds);
 	state.card_layout.animation.client_height = RECTH(client_bounds);
+	state.card_layout.applying_layout = false;
+	refresh_card_windows(state);
 }
 
 void finish_search_reflow(State& state) {
@@ -455,27 +774,28 @@ void add_controls(State& state) {
 			auto& state = *(State*)user_data;
 			bool visibility_changed = false;
 			state.card_layout.search_pending_reveals.clear();
-			auto update_visibility = [&](HWND card, bool visible) {
-				bool currently_visible = IsWindowVisible(card);
-				if (currently_visible == visible) return;
+			auto update_visibility = [&](CardSlot& card, bool visible) {
+				bool currently_visible = card.wnd && IsWindowVisible(card.wnd);
+				if (card.search_visible == visible && (!card.wnd || currently_visible == visible)) return;
+				card.search_visible = visible;
 				visibility_changed = true;
-				if (visible) state.card_layout.search_pending_reveals.push_back(card);
-				else ShowWindow(card, SW_HIDE);
+				if (card.wnd) {
+					if (visible) state.card_layout.search_pending_reveals.push_back(card.wnd);
+					else ShowWindow(card.wnd, SW_HIDE);
+				}
 			};
 			if (!match_len || !match || !*match) // search bar has been cleared, show everything
-				for (auto p : state.controls.password_editors)
-					update_visibility(p, true);
+				for (CardSlot& card : state.cards)
+					update_visibility(card, true);
 			else
-				for (auto p : state.controls.password_editors) {
-					auto& pw_ed = *password_editor::get_state(p);
-					utf16 title[64];
-					i32 title_len = GetWindowText(pw_ed.controls.edo_title, title, ARRAYSIZE(title));
-
-					if (!title_len) { update_visibility(p, true); continue; } //always keep ones that are still being edited
+				for (CardSlot& card : state.cards) {
+					if (card.wnd) card.data.title = read_control_text(password_editor::get_state(card.wnd)->controls.edo_title);
+					i32 title_len = (i32)minimum(card.data.title.size(), (size_t)63);
+					if (!title_len) { update_visibility(card, true); continue; } //always keep ones that are still being edited
 				
 					DWORD search_flags = LINGUISTIC_IGNOREDIACRITIC | LINGUISTIC_IGNORECASE | FIND_FROMSTART;
-					bool found = FindNLSStringEx(LOCALE_NAME_USER_DEFAULT, search_flags, title, title_len, match, match_len, nil, nil, nil, 0) != -1;
-					update_visibility(p, found);
+					bool found = FindNLSStringEx(LOCALE_NAME_USER_DEFAULT, search_flags, card.data.title.data(), title_len, match, match_len, nil, nil, nil, 0) != -1;
+					update_visibility(card, found);
 				}
 			//TODO(fran): decide whether we want to hide the items that dont match, or just move them to the bottom of the list to be shown as less priority, could even be rendered in semi transparent or something to indicate that they dont match, kinda pointless though, if I do that I have to block input to them too since editing something while it's semi invisible is not good ux
 			if (!visibility_changed && !state.card_layout.search_reflow_pending) return;
@@ -523,81 +843,26 @@ void add_controls(State& state) {
 
 		combobox::set_cur_sel(state.controls.combo_sort, (size_t)item.value);
 
-		struct SortAlphabetic { HWND wnd; str title; };
-		struct SortDate { HWND wnd; time_t date; };
-
-		auto& vec = state.controls.password_editors;
-		switch (item.value) {
-		case SortOption::alphabetic_az:
-		case SortOption::alphabetic_za:
-		{
-			std::vector<SortAlphabetic> to_sort_pinned;
-			std::vector<SortAlphabetic> to_sort; to_sort.reserve(vec.size());
-			for (auto p : vec) {
-				auto& controls = password_editor::get_state(p)->controls;
-				bool pin = button::get_state(controls.btn_pin)->selected;
-				auto title = controls.edo_title;
-				auto len = GetWindowTextLength(title) + 1;
-				SortAlphabetic element;
-				element.wnd = p;
-				element.title.resize_and_overwrite(len,
-					[=](utf16* buf, size_t) { return GetWindowText(title, buf, len); });
-				if (pin) to_sort_pinned.push_back(std::move(element));
-				else to_sort.push_back(std::move(element));
+		sync_mounted_cards(state);
+		//TODO(fran): benchmark direct sorting against separate pinned/unpinned groups and lightweight index/pointer entries, including the cost of reordering the model.
+		std::stable_sort(state.cards.begin(), state.cards.end(), [option = item.value](const CardSlot& first, const CardSlot& second) {
+			bool first_pinned = first.data.properties.flags & password_editor::ItemFlag::pin;
+			bool second_pinned = second.data.properties.flags & password_editor::ItemFlag::pin;
+			if (first_pinned != second_pinned) return first_pinned;
+			switch (option) {
+			case SortOption::alphabetic_az: return _wcsicmp(first.data.title.c_str(), second.data.title.c_str()) < 0;
+			case SortOption::alphabetic_za: return _wcsicmp(first.data.title.c_str(), second.data.title.c_str()) > 0;
+			case SortOption::date_modified_newest: return first.data.properties.date_modified > second.data.properties.date_modified;
+			case SortOption::date_modified_oldest: return first.data.properties.date_modified < second.data.properties.date_modified;
+			case SortOption::date_created_newest: return first.data.properties.date_created > second.data.properties.date_created;
+			case SortOption::date_created_oldest: return first.data.properties.date_created < second.data.properties.date_created;
+			default: Assert(0); return false;
 			}
-			auto sorting_function = (item.value == SortOption::alphabetic_az) ?
-				[](const SortAlphabetic& a, const SortAlphabetic& b) {
-				return _wcsicmp(a.title.c_str(), b.title.c_str()) < 0;
-				} :
-				[](const SortAlphabetic& a, const SortAlphabetic& b) {
-					return _wcsicmp(a.title.c_str(), b.title.c_str()) > 0;
-				};
-			std::sort(to_sort_pinned.begin(), to_sort_pinned.end(), sorting_function);
-			std::sort(to_sort.begin(), to_sort.end(), sorting_function);
-			for (const auto& [i, value] : to_sort_pinned | std::views::enumerate) vec[i] = value.wnd;
-			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i + to_sort_pinned.size()] = value.wnd;
-		} break;
-		case SortOption::date_modified_newest:
-		case SortOption::date_modified_oldest:
-		{
-			std::vector<SortDate> to_sort_pinned;
-			std::vector<SortDate> to_sort; to_sort.reserve(vec.size());
-			for (auto p : vec) {
-				auto& state = *password_editor::get_state(p);
-				bool pin = button::get_state(state.controls.btn_pin)->selected;
-				if (pin) to_sort_pinned.emplace_back(p, state.properties.date_modified);
-				else to_sort.emplace_back(p, state.properties.date_modified);
-			}
-			auto sorting_function = (item.value == SortOption::date_modified_newest) ?
-				[](SortDate a, SortDate b) { return a.date > b.date; } :
-				[](SortDate a, SortDate b) { return a.date < b.date; };
-			std::sort(to_sort_pinned.begin(), to_sort_pinned.end(), sorting_function);
-			std::sort(to_sort.begin(), to_sort.end(), sorting_function);
-			for (const auto& [i, value] : to_sort_pinned | std::views::enumerate) vec[i] = value.wnd;
-			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i + to_sort_pinned.size()] = value.wnd;
-		} break;
-		case SortOption::date_created_newest:
-		case SortOption::date_created_oldest:
-		{
-			std::vector<SortDate> to_sort_pinned;
-			std::vector<SortDate> to_sort; to_sort.reserve(vec.size());
-			for (auto p : vec) {
-				auto& state = *password_editor::get_state(p);
-				bool pin = button::get_state(state.controls.btn_pin)->selected;
-				if (pin) to_sort_pinned.emplace_back(p, state.properties.date_created);
-				else to_sort.emplace_back(p, state.properties.date_created);
-			}
-			auto sorting_function = (item.value == SortOption::date_created_newest) ?
-				[](SortDate a, SortDate b) { return a.date > b.date; } :
-				[](SortDate a, SortDate b) { return a.date < b.date; };
-			std::sort(to_sort_pinned.begin(), to_sort_pinned.end(), sorting_function);
-			std::sort(to_sort.begin(), to_sort.end(), sorting_function);
-			for (const auto& [i, value] : to_sort_pinned | std::views::enumerate) vec[i] = value.wnd;
-			for (const auto& [i, value] : to_sort | std::views::enumerate) vec[i + to_sort_pinned.size()] = value.wnd;
-		} break;
-		default: Assert(0);
-		}
+		});
+		update_mounted_card_z_order(state);
+		state.sorting = item.value;
 		state.card_layout.animation.requested = true;
+		state.card_layout.animation.sort_transition = true;
 		ask_window_for_resize(state.wnd);
 	});
 	combobox::set_function_render_combobox(controls.combo_sort, [](HDC dc, rect_i32 r, combobox::RenderFlags flags, void* element, void* user_extra) {
@@ -688,6 +953,9 @@ void add_controls(State& state) {
 	for (auto ctl : controls.all_fixed) SetWindowFont(ctl, (WPARAM)fonts.General, true);
 
 	resize_controls(state);
+	page::set_on_viewport_changed(controls.page_space, [](void* data, rect_i32) {
+		refresh_card_windows(*(State*)data);
+	}, &state);
 }
 
 #define showpasswords_menu_base_addr	200
@@ -709,7 +977,7 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 
 	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_SAVE, LANG_MENU_SAVE, bmps.save, bmps.save);
 
-	#ifdef _DEBUG
+	#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, _t("Save V0"), bmps.save, bmps.save);
 	#endif
 
@@ -809,59 +1077,24 @@ ReadEntireFileResult load_file_user(str username, bool load_backup = false) {
 	return res;
 }
 
-void get_controls_data_for_saving(State& state, raw_buffer& out) {
+void append_card_data_for_saving(State& state, raw_buffer& out) {
 	//data structure: editors count (u64) | each editor
 	// editor: title (str, all str are null terminated utf16) | date created (u64) | date modified (u64) | multiflag (u32) | table row count (u64) | each table row
 	//  table row: desc (str) | val (str) | multiflag (u32)
-	auto append_control_text_to_buffer = [](raw_buffer& out, HWND wnd) {
-		auto old_len_bytes = out.size();
-		auto added_len = GetWindowTextLength(wnd) + 1;
-		auto added_len_bytes = added_len * sizeof(cstr);
-		
-		//TODO(fran): boolean to strip the text, though it will need another copy if stripping is needed unfortunately. Currently we instead do stripping when reading the data instead of when writing it
+	//TODO(fran): row and card counts still use architecture-dependent size_t; normalize their serialized widths.
 
-		out.resize_and_overwrite(old_len_bytes + added_len_bytes,
-			[&](char* buf, size_t new_size) {
-				GetWindowText(wnd, (cstr*)(buf + old_len_bytes), added_len);
-				return new_size;
-			}
-		);
-	};
-
-	//TODO(fran): we have arch dependent sizes for types, size_t time_t, normalize to 64bit and 32bit depending on needs
-
-	append_to_buffer(out, state.controls.password_editors.size());
-	for (auto& e : state.controls.password_editors) {
-		//TODO(fran): we may want to move the data extraction logic inside password_editor. Though that would mean that either it would also need to be aware of the data format we expect; or we would need to create an intermediate data format that we would then parse into the final output
-		auto& ed = *password_editor::get_state(e);
-		auto title = ed.controls.edo_title;
-		
-		append_control_text_to_buffer(out, title);
-		
-		multiflag<password_editor::ItemFlag> pwed_flags = 0;
-		//TODO(fran): should we maintain ed.properties.flags up to date and use it directly instead?
-		bool pin = button::get_state(ed.controls.btn_pin)->selected;
-		set_flag_bit(pwed_flags, pin, password_editor::ItemFlag::pin);
-
-		append_to_buffer(out, ed.properties.date_created);
-		append_to_buffer(out, ed.properties.date_modified);
-		append_to_buffer(out, pwed_flags);
-
-		auto& tbl = *table::get_state(ed.controls.tbl_values);
-
-		append_to_buffer(out, tbl.rows.size());
-		for (auto& r : tbl.rows) {
-			auto& description_cell = r[0];
-			append_control_text_to_buffer(out, description_cell);
-			
-			auto& value_cell = *password_editor::value_cell::get_state(r[1]);
-			append_control_text_to_buffer(out, value_cell.controls.text);
-
-			multiflag<password_editor::ValueCellFlag> flags = 0;
-			bool lock = button::get_state(value_cell.controls.btn_lock)->selected;
-			set_flag_bit(flags, lock, password_editor::ValueCellFlag::lock);
-
-			append_to_buffer(out, flags);
+	sync_mounted_cards(state);
+	append_to_buffer(out, state.cards.size());
+	for (const CardSlot& card : state.cards) {
+		append_to_buffer(out, card.data.title);
+		append_to_buffer(out, card.data.properties.date_created);
+		append_to_buffer(out, card.data.properties.date_modified);
+		append_to_buffer(out, card.data.properties.flags);
+		append_to_buffer(out, card.data.rows.size());
+		for (const CardRowData& row : card.data.rows) {
+			append_to_buffer(out, row.description);
+			append_to_buffer(out, row.value);
+			append_to_buffer(out, row.flags);
 		}
 	}
 }
@@ -904,7 +1137,7 @@ raw_buffer generate_save_data_v1(State& state) {
 
 	raw_buffer data;
 	append_to_buffer(data, header);
-	get_controls_data_for_saving(state, data);
+	append_card_data_for_saving(state, data);
 
 	// Pad with extra garbage bytes to get blocks of 16 bytes for encryption
 	auto size_for_encryption = sizeof(header) + next_multiple_of_16(data.size() - sizeof(header));
@@ -945,53 +1178,48 @@ void terminate_string_view(const T& str) {
 
 void cleanup_password_editors_v1(State& state) {
 	// If while loading password editors we find a corrupted section then we destroy any controls that were created in the process
-	auto& vec = state.controls.password_editors;
-	for (auto& ed : vec) DestroyWindow(ed);
-	vec.clear();
+	for (CardSlot& card : state.cards) if (card.wnd) DestroyWindow(card.wnd);
+	state.cards.clear();
+	on_password_editors_cnt_changed(state);
 }
 
-bool create_password_editors_v1(State& state, RawBufferReader& data) {
-	struct PasswordEditorV1 {
-		str_view title;
-		time64 date_created;
-		time64 date_modified;
-		multiflag<password_editor::ItemFlag> flags;
-	};
-
-	struct PasswordEditorRowV1 {
-		str_view description, value;
-		multiflag<password_editor::ValueCellFlag> flags = 0;
-	};
-
+bool read_password_editors_v1(RawBufferReader& data, std::vector<PasswordEditorV1View>& cards) {
 	u64 editor_cnt;
 	if (!data.read(editor_cnt)) return false; //TODO(fran): for complex data reading it may be a good idea to use exceptions to make the code simpler and avoid if checks all over
 	for (u64 e = 0; e < editor_cnt; e++) {
-		PasswordEditorV1 editor;
-		if (!(data.read(editor.title) && data.read(editor.date_created) && data.read(editor.date_modified) && data.read(editor.flags)))
+		PasswordEditorV1View card{};
+		if (!(data.read(card.title) && data.read(card.date_created) && data.read(card.date_modified) && data.read(card.flags)))
 			return false;
-		Props properties{
-			.title = editor.title.data(),
-			.date_created = editor.date_created, 
-			.date_modified = editor.date_modified, 
-			.flags = editor.flags 
-		};
-
-		auto password_editor = add_password_editor(state, properties, -1);
-
 		u64 row_cnt;
 		if (!data.read(row_cnt)) return false;
 		for (u64 r = 0; r < row_cnt; r++) {
-			PasswordEditorRowV1 row;
+			PasswordEditorRowV1View row{};
 			if (!(data.read(row.description) && data.read(row.value) && data.read(row.flags))) return false;
-
-			auto description_cell = password_editor::empty_description_cell;
-			auto value_cell = password_editor::empty_value_cell;
-			description_cell.text = strip(const_cast<utf16*>(row.description.data())); //TODO(fran): I think we should strip on data save not data load
-			value_cell.text = row.value.data(); // We dont strip the value/secret cell
-			value_cell.flags = row.flags;
-			password_editor::table_add_row(password_editor, &description_cell, &value_cell);
+			card.rows.push_back(row);
 		}
+		cards.push_back(std::move(card));
 	}
+	return true;
+}
+
+bool create_password_editors_v1(State& state, RawBufferReader& data) {
+	std::vector<PasswordEditorV1View> cards;
+	if (!read_password_editors_v1(data, cards)) return false;
+	for (const PasswordEditorV1View& view : cards) {
+		CardData card;
+		card.title = view.title;
+		card.properties = { .date_created = view.date_created, .date_modified = view.date_modified, .flags = view.flags };
+		card.rows.reserve(view.rows.size());
+		for (const PasswordEditorRowV1View& row : view.rows) {
+			card.rows.push_back({
+				.description = strip(const_cast<utf16*>(row.description.data())), //TODO(fran): I think we should strip on data save not data load
+				.value = str(row.value), // We dont strip the value/secret cell
+				.flags = row.flags,
+			});
+		}
+		state.cards.push_back({ .data = std::move(card) });
+	}
+	on_password_editors_cnt_changed(state);
 	resize_controls(state);
 	return true;
 }
@@ -1220,7 +1448,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				save_passwords(state);
 				return 0;
 			} break;
-			#ifdef _DEBUG
+			#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 			case SHOWPASSWORDS_MENU_SAVE_V0:
 			{
 				save_passwords_v0(state);
@@ -1310,10 +1538,11 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			if (start_attempt == login::AttemptResult::success) {
 				if (start->signup) {
 					set_passwords_need_save(state, true);
-					#if defined(_DEBUG) && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
+					#if defined(_DEBUG) && !APP_PRODUCTION_BUILD && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
 					add_signup_torture_test_cards(state);
 					#endif
 				}
+				update_window_title(state);
 				set_app_shortcuts(state.wnd, ED_SHORTCUTS);
 				generate_salt(state.salt); // New salt to be used for all future saves during the current session
 				u32 key[8];
@@ -1332,6 +1561,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_STATE_RESET:
 	{
 		state.current_user.clear();
+		set_passwords_need_save(state, false);
 		SetWindowText(state.controls.transition_v0.edit_passwords, nil);//TODO(fran): yet again, we need to zero the mem also
 		return 0;
 	} break;

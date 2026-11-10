@@ -10,7 +10,7 @@
 /**----------------------API-----------------------:
   * 
   * wndclass;                                                        Window class name for CreateWindow.
-  * void set_functions(HWND table_wnd, const Functions& functions);  Set custom callback functions to perform various actions, nullptr values are ignored.
+  * void set_functions(HWND table_wnd, const Functions& functions);  Set custom callback functions to perform various actions, nil values are ignored.
   * void set_theme(HWND table_wnd, const Theme& theme);              Set custom theme for bk, borders and interior cells.
   * void set_column_cnt(HWND table_wnd, u32 column_cnt);             Set number of columns.
   * 
@@ -55,7 +55,7 @@ namespace table {
 		auto& controls = state.rows;
 		RECT wnd_r; GetClientRect(state.wnd, &wnd_r);
 		auto w = RECTW(wnd_r), h = RECTH(wnd_r);
-		auto cell_h = DPI(state.theme.cells.row_h);
+		auto cell_h = state.theme.cells.get_row_h_in_pixels();
 		auto col_cnt = state.column_cnt;
 
 		auto cols_w = calc_cell_widths(state.theme.cells.columns_w, col_cnt, w);
@@ -106,7 +106,7 @@ namespace table {
 		{
 			state.uninit();
 			free(&state);
-			set_window_state(wnd, nullptr);
+			set_window_state(wnd, nil);
 			goto defproc;
 		} break;
 		case WM_SIZE:
@@ -157,6 +157,7 @@ namespace table {
 
 	void set_theme(HWND table_wnd, const Theme& theme) {
 		State& state = *get_state(table_wnd); Assert(&state);
+		Assert(theme.cells.row_h.type == UINumber::Type::px || theme.cells.row_h.type == UINumber::Type::dpi);
 		auto [repaint, resize] = state.theme.copy_from(theme);
 		if (repaint) ask_window_for_repaint(state.wnd);
 		if (resize)  ask_window_for_resize(state.wnd);
@@ -189,8 +190,10 @@ namespace table {
 			}
 			insert_after = cell;
 		}
-		ask_window_for_repaint(state.manager_parent);
-		ask_window_for_resize(state.manager_parent);
+		if (!state.suppress_manager_notifications) {
+			ask_window_for_repaint(state.manager_parent);
+			ask_window_for_resize(state.manager_parent);
+		}
 	}
 
 	template<typename... Args>

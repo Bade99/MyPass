@@ -105,7 +105,7 @@ RECT get_scrollbar_work_area(State& state) {
 }
 
 i32 get_max_sb_pos(const State& state) {
-	i32 res = state.range_max - state.page_sz;
+	i32 res = maximum(0, state.range_max - state.page_sz);
 	return res;
 }
 
@@ -114,33 +114,39 @@ i32 clamp_pos(const State& state, i32 pos) {
 	return res;
 }
 
+f32 get_scrollbar_work_extent(State& state, RECT work_rc) {
+	return (f32)maximum(0, is_vertical(state) ? RECTH(work_rc) : RECTW(work_rc));
+}
+
+f32 get_scrollbar_thumb_extent(State& state, f32 work_extent) {
+	f32 page_ratio = clamp01(safe_ratio0<f32>(state.page_sz, state.range_max));
+	if (!page_ratio) return 0;
+	i32 cursor_metric = is_vertical(state) ? SM_CYCURSOR : SM_CXCURSOR;
+	f32 minimum_extent = (f32)GetSystemMetricsForDpi(cursor_metric, get_effective_dpi(state.wnd));
+	return minimum(work_extent, maximum(page_ratio * work_extent, minimum_extent));
+}
+
 /**
   * Result is in client coordinates
   */
 RECT calc_scrollbar(State& state) {
 	RECT work_rc = get_scrollbar_work_area(state);
-
-	f32 sb_pos = safe_ratio0<f32>(state.pos, state.range_max);
-	f32 sb_sz = clamp01(safe_ratio0<f32>(state.page_sz, state.range_max));
 	bool vertical = is_vertical(state);
-	f32 work_extent = vertical ? RECTH(work_rc) : RECTW(work_rc);
-	f32 sb_lenght = sb_sz * work_extent;
-
-	f32 cursor_height = GetSystemMetricsForDpi(SM_CYCURSOR, get_effective_dpi(state.wnd));
-	if (sb_sz != 0) sb_lenght = maximum(sb_lenght, cursor_height);
+	f32 work_extent = get_scrollbar_work_extent(state, work_rc);
+	f32 thumb_extent = get_scrollbar_thumb_extent(state, work_extent);
+	f32 travel = work_extent - thumb_extent;
+	f32 thumb_offset = safe_ratio0<f32>(clamp_pos(state, state.pos), get_max_sb_pos(state)) * travel;
 
 	RECT sb_rc;
 	if (vertical) {
 		sb_rc.left = work_rc.left;
 		sb_rc.right = work_rc.right;
-		sb_rc.top = (i32)(work_rc.top + sb_pos * work_extent);
-		if (sb_rc.top + sb_lenght > work_rc.bottom) sb_rc.top = work_rc.bottom - sb_lenght;
-		sb_rc.bottom = (i32)(sb_rc.top + sb_lenght);
+		sb_rc.top = (i32)(work_rc.top + thumb_offset);
+		sb_rc.bottom = (i32)(sb_rc.top + thumb_extent);
 	}
 	else {
-		sb_rc.left = (i32)(work_rc.left + sb_pos * work_extent);
-		if (sb_rc.left + sb_lenght > work_rc.right) sb_rc.left = work_rc.right - sb_lenght;
-		sb_rc.right = (i32)(sb_rc.left + sb_lenght);
+		sb_rc.left = (i32)(work_rc.left + thumb_offset);
+		sb_rc.right = (i32)(sb_rc.left + thumb_extent);
 		sb_rc.top = work_rc.top;
 		sb_rc.bottom = work_rc.bottom;
 	}
@@ -298,6 +304,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		POINT mouse = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
 		RECT client_rc; GetClientRect(state.wnd, &client_rc);
 		if (!test_pt_rc(mouse, client_rc)) return 0;
+		state.mouse_over_bar = test_pt_rc(mouse, calc_scrollbar(state));
+		state.mouse_over_control = true;
 		
 		if (state.mouse_over_bar) {
 			//Click happened inside the bar, so we want to capture the mouse movement in case the user starts moving the mouse trying to scroll
@@ -367,25 +375,24 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			RECT sb_work_area = get_scrollbar_work_area(state);
 
 			i32 mouse_location;
-			f32 sb_extent;
 			bool vertical = is_vertical(state);
 			if (vertical) {
 				mouse_location = mouse.y;
-				sb_extent = RECTH(sb_work_area);
 			}
 			else {
 				mouse_location = mouse.x;
-				sb_extent = RECTW(sb_work_area);
 			}
 
 			f32 displacement = mouse_location - state.mouse_start_p; //pixels
-			f32 p_ratio = safe_ratio0(displacement, sb_extent); //percentage of total pixel size of work area
-			state.pos = clamp_pos(state, state.stored_pos + (i32)(state.range_max * p_ratio)); //min to max range
-
-			//Notify parent
-			SendMessage(get_parent_to_notify(state), vertical ? WM_VSCROLL : WM_HSCROLL, MAKELONG(SB_THUMBTRACK, state.pos), (LPARAM)state.wnd);
-
-			ask_window_for_repaint(state.wnd);
+			f32 work_extent = get_scrollbar_work_extent(state, sb_work_area);
+			f32 travel = work_extent - get_scrollbar_thumb_extent(state, work_extent);
+			f32 p_ratio = safe_ratio0(displacement, travel);
+			i32 new_pos = clamp_pos(state, state.stored_pos + (i32)(get_max_sb_pos(state) * p_ratio));
+			if (new_pos != state.pos) {
+				state.pos = new_pos;
+				SendMessage(get_parent_to_notify(state), vertical ? WM_VSCROLL : WM_HSCROLL, MAKELONG(SB_THUMBTRACK, state.pos), (LPARAM)state.wnd);
+				ask_window_for_repaint(state.wnd);
+			}
 		}
 
 		bool state_change = previous_mouse_over_bar != state.mouse_over_bar || previous_tracking_bar != state.tracking_bar || previous_mouse_over_control != state.mouse_over_control;

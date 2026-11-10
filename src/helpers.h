@@ -576,23 +576,23 @@ static BOOL SetMenuItemString(HMENU hmenu, UINT item, BOOL fByPositon, const TCH
   * DPI
   */
 
-template<bool use_debug_override = true>
+template<bool use_test_override = true>
 static u32 get_effective_dpi(HWND wnd = nil) {
-#ifdef _DEBUG
-	constexpr f32 debug_dpi_scale = 0;
-	if constexpr (use_debug_override && debug_dpi_scale > 0.f) return (u32)(96.f * debug_dpi_scale + .5f);
+#if !APP_PRODUCTION_BUILD
+	constexpr f32 test_dpi_scale = 0;
+	if constexpr (use_test_override && test_dpi_scale > 0.f) return (u32)(96.f * test_dpi_scale + .5f);
 #endif
 	return wnd ? GetDpiForWindow(wnd) : GetDpiForSystem();
 }
 
-template<bool use_debug_override = true>
+template<bool use_test_override = true>
 static f32 dpi_scale(f32 val) {
-	return val * (get_effective_dpi<use_debug_override>() / 96.f/*default dpi*/);
+	return val * (get_effective_dpi<use_test_override>() / 96.f/*default dpi*/);
 }
-template<bool use_debug_override = true>
-static f32 DPI(f32 val) { return dpi_scale<use_debug_override>(val); }
-template<bool use_debug_override = true>
-static i32 rdpi(f32 val) { return (i32)roundf(DPI<use_debug_override>(val)); }
+template<bool use_test_override = true>
+static f32 DPI(f32 val) { return dpi_scale<use_test_override>(val); }
+template<bool use_test_override = true>
+static i32 rdpi(f32 val) { return (i32)roundf(DPI<use_test_override>(val)); }
 
 
 struct UINumber {
@@ -676,7 +676,7 @@ static void init_wndclass(const cstr* class_name, WNDPROC proc, UINT extra_style
 	wcex.cbWndExtra = sizeof(void*);
 	wcex.hInstance = inst;
 	wcex.hIcon = nil;
-	wcex.hCursor = LoadCursor(nullptr, default_cursor);
+	wcex.hCursor = LoadCursor(nil, default_cursor);
 	wcex.hbrBackground = nil;
 	wcex.lpszMenuName = nil;
 	wcex.lpszClassName = class_name;
@@ -805,31 +805,19 @@ static HWND get_parent_of_class(HWND child, const cstr* parent_class) {
 	return res;
 }
 
-static void SetText_txt_app(HWND wnd, const TCHAR* new_txt, const TCHAR* new_appname, bool txt_first = true) {
-	str title_window;
-	if (!new_txt || !*new_txt) {
-		title_window = new_appname ? new_appname : _t("");
-	}
-	elif (!new_appname || !*new_appname) {
-		title_window = new_txt;
-	}
-	else {
-		if (!txt_first) {
-			auto tmp = new_txt;
-			new_txt = new_appname;
-			new_appname = tmp;
-		}
-		title_window = new_txt;
-		title_window += L" - ";
-		title_window += new_appname;
-	}
+static void set_app_title(HWND wnd, str_view title, str_view app_name, str_view separator = _t("-")) {
+	str window_title;
+	if (title.empty()) window_title = app_name;
+	elif (app_name.empty()) window_title = title;
+	else window_title = str(title) + L" " + str(separator) + L" " + str(app_name);
+
 	int current_length = GetWindowTextLength(wnd);
-	if (current_length >= 0 && (size_t)current_length == title_window.size()) {
+	if (current_length >= 0 && (size_t)current_length == window_title.size()) {
 		str current_title((size_t)current_length + 1, 0);
-		if (GetWindowText(wnd, current_title.data(), current_length + 1) == current_length &&
-			title_window == current_title.c_str()) return;
+		if (GetWindowText(wnd, current_title.data(), current_length + 1) == current_length && window_title == current_title.c_str())
+			return;
 	}
-	SetWindowText(wnd, title_window.c_str());
+	SetWindowText(wnd, window_title.c_str());
 }
 
 /**

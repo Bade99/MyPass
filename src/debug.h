@@ -30,6 +30,13 @@ namespace debug {
 		render_diagnostics::Event::text_paint,
 	};
 	static constexpr std::array paint_events{
+		render_diagnostics::Event::editor_resize,
+		render_diagnostics::Event::card_viewport_refresh,
+		render_diagnostics::Event::card_mount,
+		render_diagnostics::Event::card_create_window,
+		render_diagnostics::Event::card_populate_rows,
+		render_diagnostics::Event::card_place_window,
+		render_diagnostics::Event::card_unmount,
 		render_diagnostics::Event::text_paint,
 		render_diagnostics::Event::button_paint,
 		render_diagnostics::Event::caption_paint,
@@ -75,7 +82,7 @@ namespace debug {
 		auto theme = themes.base_table;
 		theme.brushes.border.normal = colors.ControlTxt_Disabled;
 		theme.cells = {
-			.row_h = row_height,
+			.row_h = UINumber{ .value = (f32)row_height },
 			.columns_w = {
 				UINumber{ .type = UINumber::Type::dyn }, UINumber{ .value = 50 },
 				UINumber{ .value = 75 }, UINumber{ .value = 75 }
@@ -89,6 +96,33 @@ namespace debug {
 			table::add_row(table_state, render_diagnostics::event_name(event), _t(""), _t(""), _t(""));
 	#endif
 		return metrics;
+	}
+
+	HWND create_user_objects_table(HWND parent) {
+		HWND stats = create_window(parent, table::wndclass, nil, WS_CHILD);
+		set_window_manager_parent(stats, parent);
+		table::set_functions(stats, {
+			.create_control = [](u32, HWND cell_parent, const void* text) -> HWND {
+				HWND cell = create_window(cell_parent, edit_oneline::wndclass, (const cstr*)text, WS_VISIBLE | WS_CHILD | WS_DISABLED);
+				edit_oneline::set_theme(cell, static_text_theme());
+				return cell;
+			},
+		});
+		table::set_column_cnt(stats, 4);
+		auto theme = themes.base_table;
+		theme.brushes.border.normal = colors.ControlTxt_Disabled;
+		theme.cells = {
+			.row_h = UINumber{ .value = 22 },
+			.columns_w = {
+				UINumber{ .type = UINumber::Type::dyn }, UINumber{ .type = UINumber::Type::dyn },
+				UINumber{ .type = UINumber::Type::dyn }, UINumber{ .type = UINumber::Type::dyn }
+			}
+		};
+		table::set_theme(stats, theme);
+		auto& table_state = *table::get_state(stats);
+		table::add_row(table_state, _t("App"), _t("Debug"), _t("Total"), _t("Max USER Objs"));
+		table::add_row(table_state, _t(""), _t(""), _t(""), _t(""));
+		return stats;
 	}
 
 	#if RENDER_DIAGNOSTICS_ENABLED
@@ -132,7 +166,7 @@ namespace debug {
 		HWND edit_speed_wnd;
 		HWND static_cache_memory_wnd;
 		HWND static_cache_hits_wnd;
-		HWND static_user_objects_wnd;
+		HWND user_objects_table;
 		HWND static_focus_wnd;
 		HWND static_resize_summary_wnd;
 		HWND resize_metrics_table;
@@ -152,6 +186,7 @@ namespace debug {
 		u64 displayed_cache_misses;
 		bool cache_stats_initialized;
 		DWORD displayed_user_objects;
+		DWORD displayed_debug_windows;
 		bool user_objects_initialized;
 		LONGLONG displayed_resize_start;
 		bool resize_stats_initialized;
@@ -201,12 +236,27 @@ namespace debug {
 		void update_user_object_stats() {
 			static const DWORD limit = user_object_limit();
 			auto count = GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS);
-			if (user_objects_initialized && displayed_user_objects == count) return;
-			str text = !count ? _t("USER objects: unavailable") :
-				limit ? std::format(_t("USER objects: {} / {}"), count, limit) :
-				std::format(_t("USER objects: {} / ?"), count);
-			SetWindowText(controls.static_user_objects_wnd, text.c_str());
+			DWORD debug_windows = 0;
+			if (HWND root = GetAncestor(wnd, GA_ROOT); root) {
+				debug_windows = 1;
+				EnumChildWindows(root, [](HWND, LPARAM data) -> BOOL {
+					++*(DWORD*)data;
+					return TRUE;
+				}, (LPARAM)&debug_windows);
+			}
+			if (user_objects_initialized && displayed_user_objects == count && displayed_debug_windows == debug_windows) return;
+			auto app_estimate = count >= debug_windows ? count - debug_windows : 0;
+			const auto& values = table::get_state(controls.user_objects_table)->rows[1];
+			str app_text = count ? std::format(_t("~{}"), app_estimate) : _t("?");
+			str debug_text = std::format(_t("~{}"), debug_windows);
+			str total_text = count ? std::format(_t("{}"), count) : _t("?");
+			str limit_text = limit ? std::format(_t("{}"), limit) : _t("?");
+			SetWindowText(values[0], app_text.c_str());
+			SetWindowText(values[1], debug_text.c_str());
+			SetWindowText(values[2], total_text.c_str());
+			SetWindowText(values[3], limit_text.c_str());
 			displayed_user_objects = count;
+			displayed_debug_windows = debug_windows;
 			user_objects_initialized = true;
 		}
 
@@ -284,7 +334,7 @@ namespace debug {
 			for (HWND control : { controls.bitmap_selector, controls.size_selector, controls.bitmap_preview,
 				controls.static_bitmap_info, controls.static_speed_wnd, controls.edit_speed_wnd,
 				controls.static_cache_memory_wnd, controls.static_cache_hits_wnd,
-				controls.static_user_objects_wnd, controls.static_focus_wnd })
+				controls.user_objects_table, controls.static_focus_wnd })
 				ShowWindow(control, controls_tab ? SW_SHOW : SW_HIDE);
 			ShowWindow(controls.static_resize_summary_wnd, controls_tab ? SW_HIDE : SW_SHOW);
 			ShowWindow(controls.resize_metrics_table, controls_tab ? SW_HIDE : SW_SHOW);
@@ -344,10 +394,9 @@ namespace debug {
 			edit_oneline::set_theme(controls.static_focus_wnd, static_theme);
 			controls.static_cache_memory_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
 			controls.static_cache_hits_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
-			controls.static_user_objects_wnd = create_window(wnd, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_DISABLED);
+			controls.user_objects_table = create_user_objects_table(wnd);
 			edit_oneline::set_theme(controls.static_cache_memory_wnd, static_theme);
 			edit_oneline::set_theme(controls.static_cache_hits_wnd, static_theme);
-			edit_oneline::set_theme(controls.static_user_objects_wnd, static_theme);
 
 			controls.bitmap_selector = create_window(wnd, combobox::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
 			controls.size_selector = create_window(wnd, combobox::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
@@ -476,7 +525,7 @@ namespace debug {
 			MoveWindow(controls.paint_metrics_table, paint_table);
 
 			rect_i32 static_focus_wnd = bounds.cut_bottom(DPI(30));
-			rect_i32 user_objects = bounds.cut_bottom(DPI(26));
+			rect_i32 user_objects = bounds.cut_bottom(DPI(44));
 			user_objects.apply_padding(pad, 0);
 			rect_i32 cache_hits = bounds.cut_bottom(DPI(26));
 			cache_hits.apply_padding(pad, 0);
@@ -523,7 +572,7 @@ namespace debug {
 			MoveWindow(controls.edit_speed_wnd, speed_edit);
 			MoveWindow(controls.static_cache_memory_wnd, cache_memory);
 			MoveWindow(controls.static_cache_hits_wnd, cache_hits);
-			MoveWindow(controls.static_user_objects_wnd, user_objects);
+			MoveWindow(controls.user_objects_table, user_objects);
 			MoveWindow(controls.static_focus_wnd, static_focus_wnd);
 			MoveWindow(controls.bitmap_selector, bitmap_selector);
 			MoveWindow(controls.size_selector, size_selector);

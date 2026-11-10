@@ -13,7 +13,7 @@
 #pragma comment (lib,"Gdiplus.lib")
 #endif
 
-#ifdef _DEBUG
+#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 #define COBJMACROS
 
 #include <Objbase.h>
@@ -108,7 +108,7 @@ HRESULT WriteBitmap(HBITMAP bitmap, const cstr* pathname) {
 	return hr;
 }
 #else
-HRESULT WriteBitmap(HBITMAP bitmap, const cstr* pathname = _t("")) {};
+constexpr HRESULT WriteBitmap(HBITMAP bitmap, const cstr* pathname = _t("")) { return 0; };
 #endif
 
 void GetRoundRectPath(Gdiplus::GraphicsPath* path, RECT r, float diameter) {
@@ -173,7 +173,7 @@ namespace urender {
 		bmi.bmiHeader.biBitCount = 32;
 		bmi.bmiHeader.biCompression = BI_RGB;
 
-		return CreateDIBSection(nullptr, &bmi, DIB_RGB_COLORS, (void**)pixels, nullptr, 0);
+		return CreateDIBSection(nil, &bmi, DIB_RGB_COLORS, (void**)pixels, nil, 0);
 	}
 
 	struct MaskFilterAxis {

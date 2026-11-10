@@ -94,7 +94,7 @@ struct Theme {
 		u32 border_thickness = U32MAX;
 		UINumber border_radius{ .value = F32INFINITY };
 	} dimensions;
-	HFONT font = nullptr;
+	HFONT font = nil;
 
 	bool copy_from(const Theme& src) {
 		bool repaint = false;

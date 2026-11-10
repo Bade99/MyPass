@@ -2,7 +2,12 @@
 #include "win_sdk.h"
 #include "platform.h"
 
-#ifndef RENDER_DIAGNOSTICS_ENABLED
+#if APP_PRODUCTION_BUILD
+#ifdef RENDER_DIAGNOSTICS_ENABLED
+#undef RENDER_DIAGNOSTICS_ENABLED
+#endif
+#define RENDER_DIAGNOSTICS_ENABLED 0
+#elif !defined(RENDER_DIAGNOSTICS_ENABLED)
 #define RENDER_DIAGNOSTICS_ENABLED APP_DIAGNOSTICS_ENABLED
 #endif
 
@@ -28,6 +33,21 @@ constexpr bool directwrite_gdi() { return mode() == Mode::directwrite_gdi; }
 	op(window_nonclient_recalc,) \
 	op(window_resize,) \
 	op(editor_resize,) \
+	op(card_viewport_refresh,) \
+	op(card_mount,) \
+	op(card_create_window,) \
+	op(card_bind_properties,) \
+	op(card_bind_title,) \
+	op(card_populate_rows,) \
+	op(card_bind_state,) \
+	op(card_place_window,) \
+	op(card_restore_view,) \
+	op(card_show_window,) \
+	op(card_z_order,) \
+	op(card_unmount,) \
+	op(card_sync_data,) \
+	op(card_capture_view,) \
+	op(card_destroy_window,) \
 	op(card_resize_plan,) \
 	op(card_resize_apply,) \
 	op(card_move,) \
@@ -112,14 +132,7 @@ void begin_paint_session() {
 	current.active = true;
 }
 
-void end_paint_session() {
-	auto& current = paint_session();
-	if (!current.active) return;
-	LARGE_INTEGER counter{};
-	QueryPerformanceCounter(&counter);
-	current.wall_ticks = counter.QuadPart - current.start;
-	current.active = false;
-}
+void end_paint_session();
 
 void begin_resize_session() {
 	auto& current = session();
@@ -151,27 +164,27 @@ void record_time(Session& current, Event event, LONGLONG elapsed) {
 }
 
 void append_report_to_file(const std::wstring& report) {
-	PWSTR roaming_folder = nullptr;
-	if (FAILED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &roaming_folder)) || !roaming_folder) {
+	PWSTR roaming_folder = nil;
+	if (FAILED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nil, &roaming_folder)) || !roaming_folder) {
 		OutputDebugStringW(L"[render] Could not locate Roaming AppData for the log.\n");
 		return;
 	}
 	std::wstring folder = roaming_folder;
 	CoTaskMemFree(roaming_folder);
 	folder += L"\\MyPass";
-	if (!CreateDirectoryW(folder.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
+	if (!CreateDirectoryW(folder.c_str(), nil) && GetLastError() != ERROR_ALREADY_EXISTS) {
 		OutputDebugStringW(L"[render] Could not create the MyPass log folder.\n");
 		return;
 	}
 
-	int byte_count = WideCharToMultiByte(CP_UTF8, 0, report.data(), (int)report.size(), nullptr, 0, nullptr, nullptr);
+	int byte_count = WideCharToMultiByte(CP_UTF8, 0, report.data(), (int)report.size(), nil, 0, nil, nil);
 	if (byte_count <= 0) return;
 	std::string utf8((size_t)byte_count, '\0');
-	if (!WideCharToMultiByte(CP_UTF8, 0, report.data(), (int)report.size(), utf8.data(), byte_count, nullptr, nullptr)) return;
+	if (!WideCharToMultiByte(CP_UTF8, 0, report.data(), (int)report.size(), utf8.data(), byte_count, nil, nil)) return;
 
 	std::wstring path = folder + L"\\render-diagnostics.log";
 	HANDLE file = CreateFileW(path.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
-		nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+		nil, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nil);
 	if (file == INVALID_HANDLE_VALUE) {
 		OutputDebugStringW(L"[render] Could not open the diagnostics log.\n");
 		return;
@@ -179,21 +192,16 @@ void append_report_to_file(const std::wstring& report) {
 	size_t offset = 0;
 	while (offset < utf8.size()) {
 		DWORD written = 0;
-		if (!WriteFile(file, utf8.data() + offset, (DWORD)(utf8.size() - offset), &written, nullptr) || !written) break;
+		if (!WriteFile(file, utf8.data() + offset, (DWORD)(utf8.size() - offset), &written, nil) || !written) break;
 		offset += written;
 	}
 	CloseHandle(file);
 	if (offset != utf8.size()) OutputDebugStringW(L"[render] Could not append the complete diagnostics report.\n");
 }
 
-void end_resize_session() {
-	auto& current = session();
-	if (!current.active) return;
-	current.active = false;
-	LARGE_INTEGER counter{}, frequency{};
-	QueryPerformanceCounter(&counter);
+void append_session_report(const Session& current, const wchar_t* wall_label) {
+	LARGE_INTEGER frequency{};
 	QueryPerformanceFrequency(&frequency);
-	current.wall_ticks = counter.QuadPart - current.start;
 	const wchar_t* mode_name = L"directwrite";
 	switch (mode()) {
 	case Mode::directwrite_gdi: mode_name = L"directwrite-gdi"; break;
@@ -207,10 +215,10 @@ void end_resize_session() {
 	const wchar_t* build_name = L"Release";
 	#endif
 	wchar_t line[256]{};
-	swprintf_s(line, L"[render] %04u-%02u-%02u %02u:%02u:%02u.%03u mode=%ls build=%ls move_size_wall=%.2f ms\n",
+	swprintf_s(line, L"[render] %04u-%02u-%02u %02u:%02u:%02u.%03u mode=%ls build=%ls %ls=%.2f ms\n",
 		timestamp.wYear, timestamp.wMonth, timestamp.wDay, timestamp.wHour, timestamp.wMinute,
-		timestamp.wSecond, timestamp.wMilliseconds, mode_name, build_name,
-		1000.0 * (counter.QuadPart - current.start) / frequency.QuadPart);
+		timestamp.wSecond, timestamp.wMilliseconds, mode_name, build_name, wall_label,
+		1000.0 * current.wall_ticks / frequency.QuadPart);
 	std::wstring report = line;
 	for (size_t index = 0; index < (size_t)Event::count; index++) {
 		const auto& metric = current.metrics[index];
@@ -227,6 +235,26 @@ void end_resize_session() {
 	report += L"\n";
 	OutputDebugStringW(report.c_str());
 	append_report_to_file(report);
+}
+
+void end_resize_session() {
+	auto& current = session();
+	if (!current.active) return;
+	LARGE_INTEGER counter{};
+	QueryPerformanceCounter(&counter);
+	current.wall_ticks = counter.QuadPart - current.start;
+	current.active = false;
+	append_session_report(current, L"move_size_wall");
+}
+
+void end_paint_session() {
+	auto& current = paint_session();
+	if (!current.active) return;
+	LARGE_INTEGER counter{};
+	QueryPerformanceCounter(&counter);
+	current.wall_ticks = counter.QuadPart - current.start;
+	current.active = false;
+	append_session_report(current, L"paint_wall");
 }
 
 struct Scope {

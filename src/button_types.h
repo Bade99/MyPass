@@ -31,10 +31,10 @@ struct Theme {
 		UINumber image_padding {.value = F32INFINITY};
 		UINumber image_ideal_size {.value = F32INFINITY};
 	}dimensions;
-	HFONT font     = nullptr;
-	HICON icon     = nullptr;
-	HBITMAP bmp    = nullptr;
-	HCURSOR cursor = nullptr;
+	HFONT font     = nil;
+	HICON icon     = nil;
+	HBITMAP bmp    = nil;
+	HCURSOR cursor = nil;
 
 	bool copy_from(const Theme& src) {
 		bool repaint = false;

@@ -3,7 +3,7 @@
 /**
   * My Custom Settings
   */
-#ifdef _DEBUG
+#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 //TODO(fran): change to logging
 #define _SHOWCONSOLE
 //#define _DEBUG_HWND_MESSAGES //Stop execution when a window receives a message it isn't handling
@@ -11,6 +11,11 @@
 //#define _SHOWCONSOLE
 #endif
 
+#if APP_PRODUCTION_BUILD
+#undef _SHOWCONSOLE
+#undef _DEBUG_HWND_MESSAGES
+#undef ENABLE_DEBUG_ASSERTIONS
+#endif
 
 /**
   * Logging
@@ -24,7 +29,7 @@
 /**
   * Assert
   */
-#ifdef _DEBUG
+#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 #define ENABLE_DEBUG_ASSERTIONS
 #endif
 
@@ -97,7 +102,7 @@ template<typename F> Defer<F> operator+(DeferDummy, F&& f) { return make_defer<F
 /**
   * Control
   */
-#ifdef _DEBUG
+#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 #define _control_create_function__get_state \
 	TCHAR test[50]; \
 	auto cnt = GetClassName(wnd, test, ARRAYSIZE(test)); \
