@@ -60,6 +60,7 @@ auto create_scrollable_area(HWND parent, const scrollbar::Theme& scrollbar_theme
 	return res;
 }
 
+//TODO(fran): Use a logical content height and scroll offset for pages over 32767 px; Windows clamps the child HWND's height and position, so viewport-mounted children must be rebased instead of moving one oversized window.
 void set_wnd_size(HWND scrollable_area, i32 h) {
 	State& state = *get_state(scrollable_area);
 	if (&state) {
