@@ -259,6 +259,7 @@ void update_mounted_card_z_order(State& state) {
 }
 
 //TODO(fran): Pool card windows (including row controls) instead of destroying/recreating them on large scrolls; rebinding must preserve each card's text, undo history, focus, and animation state.
+//TODO(fran): Extract viewport-based child-window mounting, unmounting, and z-order into a reusable component with measure/bind/release callbacks; keep card state, search, animations, and tab navigation in the editor until another consumer clarifies the shared API.
 void refresh_card_windows(State& state) {
 	if (state.card_layout.applying_layout || state.card_layout.refreshing_cards || !state.controls.page_space) return;
 	render_diagnostics::Scope diagnostic{ render_diagnostics::Event::card_viewport_refresh };
