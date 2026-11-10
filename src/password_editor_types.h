@@ -44,7 +44,7 @@ namespace password_editor {
 	union StatefulFunctions {
 		struct {
 			StatefulFunction<func_onchange> on_change;
-			StatefulFunction<> on_layout_change;
+			StatefulFunction<func_onchange> on_layout_change;
 		};
 		StatefulFunction<> all[2]{ 0 };
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
@@ -70,6 +70,7 @@ namespace password_editor {
 		bool is_open;
 		bool is_editing;
 		bool reveal_open_controls_on_resize;
+		bool suppress_manager_notifications;
 
 		void* user_data;
 	};

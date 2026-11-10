@@ -63,6 +63,7 @@ namespace table {
 		Functions functions;
 		std::vector<std::array<HWND, MAX_COLUMNS>> rows;
 		u32 column_cnt;
+		bool suppress_manager_notifications;
 
 		void init() {
 			rows = decltype(rows)();

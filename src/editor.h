@@ -57,6 +57,7 @@ void sync_card_from_controls(CardSlot& card) {
 	set_flag_bit(card.data.properties.flags, button::get_state(editor.controls.btn_pin)->selected, password_editor::ItemFlag::pin);
 	card.data.is_open = editor.is_open;
 	card.data.is_editing = editor.is_editing;
+	if (!card.rows_materialized) return;
 	auto& table = *table::get_state(editor.controls.tbl_values);
 	card.data.rows.clear();
 	card.data.rows.reserve(table.rows.size());
@@ -100,6 +101,7 @@ void restore_text_view(HWND wnd, CardTextViewState& view) {
 void capture_card_view(CardSlot& card) {
 	auto& editor = *password_editor::get_state(card.wnd);
 	capture_text_view(editor.controls.edo_title, card.title_view);
+	if (!card.rows_materialized) return;
 	auto& table = *table::get_state(editor.controls.tbl_values);
 	card.row_views.resize(table.rows.size());
 	for (size_t index = 0; index < table.rows.size(); ++index) {
@@ -110,9 +112,8 @@ void capture_card_view(CardSlot& card) {
 	}
 }
 
-void restore_card_view(CardSlot& card) {
+void restore_card_row_views(CardSlot& card) {
 	auto& editor = *password_editor::get_state(card.wnd);
-	restore_text_view(editor.controls.edo_title, card.title_view);
 	auto& table = *table::get_state(editor.controls.tbl_values);
 	for (size_t index = 0; index < minimum(card.row_views.size(), table.rows.size()); ++index) {
 		const auto& row = table.rows[index];
@@ -120,6 +121,37 @@ void restore_card_view(CardSlot& card) {
 		restore_text_view(row[0], card.row_views[index].description);
 		restore_text_view(value.controls.text, card.row_views[index].value);
 	}
+}
+
+void restore_card_view(CardSlot& card) {
+	auto& editor = *password_editor::get_state(card.wnd);
+	restore_text_view(editor.controls.edo_title, card.title_view);
+	if (card.rows_materialized) restore_card_row_views(card);
+}
+
+void materialize_card_rows(CardSlot& card) {
+	if (card.rows_materialized) return;
+	auto& editor = *password_editor::get_state(card.wnd);
+	auto& table_state = *table::get_state(editor.controls.tbl_values);
+	bool old_editor_suppression = editor.suppress_manager_notifications;
+	bool old_table_suppression = table_state.suppress_manager_notifications;
+	editor.suppress_manager_notifications = true;
+	table_state.suppress_manager_notifications = true;
+	{
+		render_diagnostics::Scope rows_diagnostic{ render_diagnostics::Event::card_populate_rows };
+		for (const CardRowData& row : card.data.rows) {
+			auto description = password_editor::empty_description_cell;
+			auto value = password_editor::empty_value_cell;
+			description.text = row.description.c_str();
+			value.text = row.value.c_str();
+			value.flags = row.flags;
+			password_editor::table_add_row(editor, &description, &value);
+		}
+	}
+	card.rows_materialized = true;
+	table_state.suppress_manager_notifications = old_table_suppression;
+	editor.suppress_manager_notifications = old_editor_suppression;
+	restore_card_row_views(card);
 }
 
 void on_password_editors_cnt_changed(State& state) {
@@ -142,56 +174,76 @@ static const auto on_password_editor_change = [](void* data, HWND wnd) {
 };
 
 password_editor::State& mount_card(State& state, CardSlot& card) {
-	auto wnd = create_window(state.controls.page, password_editor::wndclass, nil, WS_CHILD, WS_EX_CONTROLPARENT, 0, state.wnd);
+	render_diagnostics::Scope diagnostic{ render_diagnostics::Event::card_mount };
+	HWND wnd;
+	{
+		render_diagnostics::Scope create_diagnostic{ render_diagnostics::Event::card_create_window };
+		wnd = create_window(state.controls.page, password_editor::wndclass, nil, WS_CHILD, WS_EX_CONTROLPARENT, 0, state.wnd);
+	}
 	card.wnd = wnd;
 
-	password_editor::set_user_data(wnd, &state);
-	password_editor::set_properties(wnd, card.data.properties);
 	auto& res = *password_editor::get_state(wnd);
-	password_editor::set_stateful_functions(wnd, {
-		.on_change = { .state = &state, .function = on_password_editor_change  },
-		.on_layout_change = { .state = &state, .function = [](void* data) {
-			auto& state = *(State*)data;
-			state.card_layout.animation.requested = true;
-		} }
-	});
-	password_editor::set_functions(wnd, {
-		.on_delete = [](HWND pwd_ed, void* data) {
-			auto& state = *(State*)data;
-			stop_card_animation(state);
-			for (size_t index = 0; index < state.cards.size(); ++index)
-				if (state.cards[index].wnd == pwd_ed) {
-					set_passwords_need_save(state, true);
-					std::erase(state.card_layout.search_pending_reveals, pwd_ed);
-					DestroyWindow(pwd_ed);
-					state.cards.erase(state.cards.begin() + index);
-					on_password_editors_cnt_changed(state);
-					state.card_layout.animation.requested = true;
-					ask_window_for_resize(state.wnd);
-					ask_window_for_repaint(state.wnd);
-					break;
-				}
-		}
-	});
-	AWDT(res.controls.edo_title, LANG_PWD_ED_TITLE);
-	edit_oneline::set_user_extra(res.controls.edo_title, &state);
-	edit_oneline::set_functions(res.controls.edo_title, { .on_change = on_password_editor_change });
-
-	set_window_text(res.controls.edo_title, card.data.title.c_str(), false);
-	for (const CardRowData& row : card.data.rows) {
-		auto description = password_editor::empty_description_cell;
-		auto value = password_editor::empty_value_cell;
-		description.text = row.description.c_str();
-		value.text = row.value.c_str();
-		value.flags = row.flags;
-		password_editor::table_add_row(res, &description, &value);
+	auto& table_state = *table::get_state(res.controls.tbl_values);
+	res.suppress_manager_notifications = true;
+	table_state.suppress_manager_notifications = true;
+	{
+		render_diagnostics::Scope properties_diagnostic{ render_diagnostics::Event::card_bind_properties };
+		password_editor::set_user_data(wnd, &state);
+		password_editor::set_properties(wnd, card.data.properties);
+		password_editor::set_stateful_functions(wnd, {
+			.on_change = { .state = &state, .function = on_password_editor_change  },
+		});
+		password_editor::set_functions(wnd, {
+			.on_delete = [](HWND pwd_ed, void* data) {
+				auto& state = *(State*)data;
+				stop_card_animation(state);
+				for (size_t index = 0; index < state.cards.size(); ++index)
+					if (state.cards[index].wnd == pwd_ed) {
+						set_passwords_need_save(state, true);
+						std::erase(state.card_layout.search_pending_reveals, pwd_ed);
+						DestroyWindow(pwd_ed);
+						state.cards.erase(state.cards.begin() + index);
+						on_password_editors_cnt_changed(state);
+						state.card_layout.animation.requested = true;
+						ask_window_for_resize(state.wnd);
+						ask_window_for_repaint(state.wnd);
+						break;
+					}
+			}
+		});
 	}
-	password_editor::set_is_open(res, card.data.is_open);
-	password_editor::set_is_editing(res, card.data.is_editing);
+	{
+		render_diagnostics::Scope title_diagnostic{ render_diagnostics::Event::card_bind_title };
+		AWDT(res.controls.edo_title, LANG_PWD_ED_TITLE);
+		edit_oneline::set_user_extra(res.controls.edo_title, &state);
+		edit_oneline::set_functions(res.controls.edo_title, { .on_change = on_password_editor_change });
+
+		set_window_text(res.controls.edo_title, card.data.title.c_str(), false);
+	}
+	if (card.data.is_open) materialize_card_rows(card);
+	{
+		render_diagnostics::Scope state_diagnostic{ render_diagnostics::Event::card_bind_state };
+		password_editor::set_is_open(res, card.data.is_open);
+		password_editor::set_is_editing(res, card.data.is_editing);
+		table_state.suppress_manager_notifications = false;
+		res.suppress_manager_notifications = false;
+		password_editor::set_stateful_functions(wnd, {
+			.on_layout_change = { .state = &state, .function = [](void* data, HWND card_wnd) {
+				auto& state = *(State*)data;
+				for (CardSlot& card : state.cards)
+					if (card.wnd == card_wnd) {
+						if (password_editor::get_state(card_wnd)->is_open) materialize_card_rows(card);
+						break;
+					}
+				state.card_layout.animation.requested = true;
+			} }
+		});
+	}
 	return res;
 }
 
 void update_mounted_card_z_order(State& state) {
+	render_diagnostics::Scope diagnostic{ render_diagnostics::Event::card_z_order };
 	constexpr UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW;
 	HWND previous = state.controls.btn_add_start;
 	SetWindowPos(previous, HWND_TOP, 0, 0, 0, 0, flags);
@@ -203,8 +255,10 @@ void update_mounted_card_z_order(State& state) {
 	SetWindowPos(state.controls.btn_add_end, previous, 0, 0, 0, 0, flags);
 }
 
+//TODO(fran): Pool card windows (including row controls) instead of destroying/recreating them on large scrolls; rebinding must preserve each card's text, undo history, focus, and animation state.
 void refresh_card_windows(State& state) {
 	if (state.card_layout.applying_layout || state.card_layout.refreshing_cards || !state.controls.page_space) return;
+	render_diagnostics::Scope diagnostic{ render_diagnostics::Event::card_viewport_refresh };
 	auto viewport = page::get_viewport(state.controls.page_space);
 	if (viewport.w <= 0 || viewport.h <= 0) return;
 	state.card_layout.refreshing_cards = true;
@@ -220,18 +274,38 @@ void refresh_card_windows(State& state) {
 		if (in_range && !card.wnd && !state.card_layout.search_reflow_pending) {
 			mount_card(state, card);
 			mounted_set_changed = true;
-			SetWindowPos(card.wnd, nil, card.bounds.left, card.bounds.top,
-				RECTW(card.bounds), RECTH(card.bounds), SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
-			restore_card_view(card);
+			{
+				render_diagnostics::Scope place_diagnostic{ render_diagnostics::Event::card_place_window };
+				SetWindowPos(card.wnd, nil, card.bounds.left, card.bounds.top,
+					RECTW(card.bounds), RECTH(card.bounds), SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+			}
+			{
+				render_diagnostics::Scope restore_diagnostic{ render_diagnostics::Event::card_restore_view };
+				restore_card_view(card);
+			}
 		}
 		if (in_range && card.wnd && !state.card_layout.search_reflow_pending &&
-			!(GetWindowLongPtr(card.wnd, GWL_STYLE) & WS_VISIBLE)) ShowWindow(card.wnd, SW_SHOW);
+			!(GetWindowLongPtr(card.wnd, GWL_STYLE) & WS_VISIBLE)) {
+			render_diagnostics::Scope show_diagnostic{ render_diagnostics::Event::card_show_window };
+			ShowWindow(card.wnd, SW_SHOW);
+		}
 		else if (!in_range && card.wnd && !state.card_layout.animation.timeline.active &&
 			focused != card.wnd && !IsChild(card.wnd, focused)) {
-			sync_card_from_controls(card);
-			capture_card_view(card);
-			DestroyWindow(card.wnd);
+			render_diagnostics::Scope unmount_diagnostic{ render_diagnostics::Event::card_unmount };
+			{
+				render_diagnostics::Scope sync_diagnostic{ render_diagnostics::Event::card_sync_data };
+				sync_card_from_controls(card);
+			}
+			{
+				render_diagnostics::Scope capture_diagnostic{ render_diagnostics::Event::card_capture_view };
+				capture_card_view(card);
+			}
+			{
+				render_diagnostics::Scope destroy_diagnostic{ render_diagnostics::Event::card_destroy_window };
+				DestroyWindow(card.wnd);
+			}
 			card.wnd = nil;
+			card.rows_materialized = false;
 			mounted_set_changed = true;
 		}
 	}

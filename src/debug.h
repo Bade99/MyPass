@@ -30,6 +30,13 @@ namespace debug {
 		render_diagnostics::Event::text_paint,
 	};
 	static constexpr std::array paint_events{
+		render_diagnostics::Event::editor_resize,
+		render_diagnostics::Event::card_viewport_refresh,
+		render_diagnostics::Event::card_mount,
+		render_diagnostics::Event::card_create_window,
+		render_diagnostics::Event::card_populate_rows,
+		render_diagnostics::Event::card_place_window,
+		render_diagnostics::Event::card_unmount,
 		render_diagnostics::Event::text_paint,
 		render_diagnostics::Event::button_paint,
 		render_diagnostics::Event::caption_paint,

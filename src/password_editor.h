@@ -154,15 +154,17 @@ void on_internal_state_change(State& state) {
 	auto& tbl = *table::get_state(controls.tbl_values);
 	for (const auto& row : tbl.rows)
 		set_row_editing_enabled(row, enable_editing);
-	ask_window_for_resize(state.manager_parent);
-	ask_window_for_repaint(state.manager_parent);
+	if (!state.suppress_manager_notifications) {
+		ask_window_for_resize(state.manager_parent);
+		ask_window_for_repaint(state.manager_parent);
+	}
 }
 
 void set_is_open(State& state, bool is_open) {
 	if (state.is_open != is_open) {
 		state.is_open = is_open;
 		state.reveal_open_controls_on_resize = is_open;
-		if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
+		if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change(state.wnd);
 		on_internal_state_change(state);
 		if (is_open) ask_window_for_repaint(state.controls.tbl_values);
 	}
@@ -201,7 +203,8 @@ void table_insert_row(State& state, size_t at_idx, DescriptionCell* description,
 	RECT table_bounds; GetClientRect(tbl.wnd, &table_bounds);
 	if (RECTW(table_bounds) > 0) table::resize_controls(tbl);
 	set_row_editing_enabled(tbl.rows[at_idx], state.is_open && state.is_editing);
-	if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
+	if (!state.suppress_manager_notifications && state.stateful_functions.on_layout_change)
+		state.stateful_functions.on_layout_change(state.wnd);
 }
 
 void table_add_row(State& state, DescriptionCell* description, ValueCell* value) {
@@ -216,7 +219,7 @@ void table_delete_row(State& state, HWND containing_wnd) {
 	if (tbl.rows.size() == old_row_count) return;
 	RECT table_bounds; GetClientRect(tbl.wnd, &table_bounds);
 	if (RECTW(table_bounds) > 0) table::resize_controls(tbl);
-	if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change();
+	if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change(state.wnd);
 }
 
 void on_row_editor_enter_key_pressed(void*, HWND edit_wnd) {

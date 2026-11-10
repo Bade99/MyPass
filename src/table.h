@@ -190,8 +190,10 @@ namespace table {
 			}
 			insert_after = cell;
 		}
-		ask_window_for_repaint(state.manager_parent);
-		ask_window_for_resize(state.manager_parent);
+		if (!state.suppress_manager_notifications) {
+			ask_window_for_repaint(state.manager_parent);
+			ask_window_for_resize(state.manager_parent);
+		}
 	}
 
 	template<typename... Args>

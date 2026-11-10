@@ -147,6 +147,7 @@ struct CardRowTextViewState {
 struct CardSlot {
 	CardData data;
 	HWND wnd = nil;
+	bool rows_materialized = false;
 	bool search_visible = true;
 	RECT bounds{};
 	CardTextViewState title_view;

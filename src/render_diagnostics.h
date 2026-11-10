@@ -28,6 +28,21 @@ constexpr bool directwrite_gdi() { return mode() == Mode::directwrite_gdi; }
 	op(window_nonclient_recalc,) \
 	op(window_resize,) \
 	op(editor_resize,) \
+	op(card_viewport_refresh,) \
+	op(card_mount,) \
+	op(card_create_window,) \
+	op(card_bind_properties,) \
+	op(card_bind_title,) \
+	op(card_populate_rows,) \
+	op(card_bind_state,) \
+	op(card_place_window,) \
+	op(card_restore_view,) \
+	op(card_show_window,) \
+	op(card_z_order,) \
+	op(card_unmount,) \
+	op(card_sync_data,) \
+	op(card_capture_view,) \
+	op(card_destroy_window,) \
 	op(card_resize_plan,) \
 	op(card_resize_apply,) \
 	op(card_move,) \
@@ -112,14 +127,7 @@ void begin_paint_session() {
 	current.active = true;
 }
 
-void end_paint_session() {
-	auto& current = paint_session();
-	if (!current.active) return;
-	LARGE_INTEGER counter{};
-	QueryPerformanceCounter(&counter);
-	current.wall_ticks = counter.QuadPart - current.start;
-	current.active = false;
-}
+void end_paint_session();
 
 void begin_resize_session() {
 	auto& current = session();
@@ -186,14 +194,9 @@ void append_report_to_file(const std::wstring& report) {
 	if (offset != utf8.size()) OutputDebugStringW(L"[render] Could not append the complete diagnostics report.\n");
 }
 
-void end_resize_session() {
-	auto& current = session();
-	if (!current.active) return;
-	current.active = false;
-	LARGE_INTEGER counter{}, frequency{};
-	QueryPerformanceCounter(&counter);
+void append_session_report(const Session& current, const wchar_t* wall_label) {
+	LARGE_INTEGER frequency{};
 	QueryPerformanceFrequency(&frequency);
-	current.wall_ticks = counter.QuadPart - current.start;
 	const wchar_t* mode_name = L"directwrite";
 	switch (mode()) {
 	case Mode::directwrite_gdi: mode_name = L"directwrite-gdi"; break;
@@ -207,10 +210,10 @@ void end_resize_session() {
 	const wchar_t* build_name = L"Release";
 	#endif
 	wchar_t line[256]{};
-	swprintf_s(line, L"[render] %04u-%02u-%02u %02u:%02u:%02u.%03u mode=%ls build=%ls move_size_wall=%.2f ms\n",
+	swprintf_s(line, L"[render] %04u-%02u-%02u %02u:%02u:%02u.%03u mode=%ls build=%ls %ls=%.2f ms\n",
 		timestamp.wYear, timestamp.wMonth, timestamp.wDay, timestamp.wHour, timestamp.wMinute,
-		timestamp.wSecond, timestamp.wMilliseconds, mode_name, build_name,
-		1000.0 * (counter.QuadPart - current.start) / frequency.QuadPart);
+		timestamp.wSecond, timestamp.wMilliseconds, mode_name, build_name, wall_label,
+		1000.0 * current.wall_ticks / frequency.QuadPart);
 	std::wstring report = line;
 	for (size_t index = 0; index < (size_t)Event::count; index++) {
 		const auto& metric = current.metrics[index];
@@ -227,6 +230,26 @@ void end_resize_session() {
 	report += L"\n";
 	OutputDebugStringW(report.c_str());
 	append_report_to_file(report);
+}
+
+void end_resize_session() {
+	auto& current = session();
+	if (!current.active) return;
+	LARGE_INTEGER counter{};
+	QueryPerformanceCounter(&counter);
+	current.wall_ticks = counter.QuadPart - current.start;
+	current.active = false;
+	append_session_report(current, L"move_size_wall");
+}
+
+void end_paint_session() {
+	auto& current = paint_session();
+	if (!current.active) return;
+	LARGE_INTEGER counter{};
+	QueryPerformanceCounter(&counter);
+	current.wall_ticks = counter.QuadPart - current.start;
+	current.active = false;
+	append_session_report(current, L"paint_wall");
 }
 
 struct Scope {
