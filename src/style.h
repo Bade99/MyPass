@@ -44,6 +44,7 @@ str get_app_fontname() {
 }
 
 struct Themes {
+	editor::Theme base_editor;
 	button::Theme base_btn;
 	tabs::Theme base_tabs;
 	button::Theme login_btn;
@@ -125,6 +126,29 @@ void load_styles() {
 	auto arrow_cursor = LoadCursor(nil, IDC_ARROW);
 	auto hand_cursor = LoadCursor(nil, IDC_HAND);
 	UINumber percent50 = { .type = UINumber::Type::percent, .value = 50 };
+
+	themes.base_editor = [&]()->auto {
+		editor::Theme theme{};
+		theme.brushes.bk.normal = colors.ControlBk;
+		theme.brushes.card.normal = colors.Card_Bk_Soft;
+		theme.dimensions.card_spacing = { .value = 15 };
+		theme.dimensions.horizontal_padding = { .value = 20 };
+		theme.dimensions.add_button_size = { .value = 30 };
+		theme.dimensions.backdrop_extent = { .value = 10 };
+		theme.dimensions.backdrop_radius = { .value = 10 };
+		theme.dimensions.empty_backdrop_padding = { .type = UINumber::Type::percent, .value = 5 };
+		theme.dimensions.scroll_margin = { .value = 15 };
+		theme.dimensions.transition_icon_width = { .value = 20 };
+		theme.dimensions.transition_title_height = { .value = 40 };
+		theme.dimensions.transition_label_width_reduction = { .value = 8 };
+		theme.dimensions.transition_label_height = { .value = 30 };
+		theme.dimensions.transition_marker_width = { .value = 6 };
+		theme.dimensions.search_max_width = { .type = UINumber::Type::chars, .value = 35 };
+		theme.dimensions.search_height = { .value = 30 };
+		theme.dimensions.sort_width = { .type = UINumber::Type::percent, .value = 90 };
+		theme.dimensions.sort_wrap_threshold = { .type = UINumber::Type::percent, .value = 150 };
+		return theme;
+	}();
 
 	themes.base_table = [&]()->auto {
 		table::Theme base_table{};
