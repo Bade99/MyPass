@@ -33,12 +33,14 @@ void stop_card_animation(State& state) {
 
 auto get_state(HWND wnd) { return get_window_state<State>(wnd); }
 
+void update_window_title(State& state) {
+	if (state.passwords_need_save) set_app_title(state.nc_parent, state.current_user, app_name, L"●");
+	else set_app_title(state.nc_parent, state.current_user, app_name);
+}
+
 void set_passwords_need_save(State& state, bool new_val) {
 	state.passwords_need_save = new_val;
-	str txt;
-	if (!state.current_user.empty()) txt = state.current_user;
-	if (state.passwords_need_save) txt += L" ●";
-	SetText_txt_app(state.nc_parent, txt.c_str(), app_name_with_version);
+	update_window_title(state);
 }
 
 str read_control_text(HWND wnd) {
@@ -1496,6 +1498,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 					add_signup_torture_test_cards(state);
 					#endif
 				}
+				update_window_title(state);
 				set_app_shortcuts(state.wnd, ED_SHORTCUTS);
 				generate_salt(state.salt); // New salt to be used for all future saves during the current session
 				u32 key[8];
@@ -1514,6 +1517,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_STATE_RESET:
 	{
 		state.current_user.clear();
+		set_passwords_need_save(state, false);
 		SetWindowText(state.controls.transition_v0.edit_passwords, nil);//TODO(fran): yet again, we need to zero the mem also
 		return 0;
 	} break;

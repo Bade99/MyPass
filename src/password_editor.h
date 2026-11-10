@@ -128,16 +128,18 @@ void set_row_editing_enabled(const std::array<HWND, table::MAX_COLUMNS>& row, bo
 	PostMessage(row[1], WM_ENABLE_REQUEST, enabled, 0);
 }
 
+void create_open_controls(State& state);
+
 void on_internal_state_change(State& state) {
 	auto& controls = state.controls;
 	button::set_selected(controls.btn_card, state.is_open);
-	button::set_selected(controls.btn_edit, state.is_editing);
+	if (controls.btn_edit) button::set_selected(controls.btn_edit, state.is_editing);
 
 	bool pin = button::get_state(controls.btn_pin)->selected;
 
 	for (const auto& c : _password_editor_tool_list(controls.tbl_values)) {
 		bool show = state.is_open ? !state.reveal_open_controls_on_resize : pin && c == controls.btn_pin;
-		ShowWindow(c, show ? SW_SHOW : SW_HIDE);
+		if (c) ShowWindow(c, show ? SW_SHOW : SW_HIDE);
 	}
 
 	EnableWindow(controls.btn_pin, state.is_open);
@@ -147,7 +149,7 @@ void on_internal_state_change(State& state) {
 	button::Theme btn{ .brushes = {.bk = {.clicked = enable_editing ? colors.Control_BkPush_Strong : colors.Control_BkPush_Soft} } };
 	button::set_theme(controls.btn_card, btn);
 
-	SendMessage(controls.btn_edit, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)(enable_editing ? bmps.cancel : bmps.edit));
+	if (controls.btn_edit) SendMessage(controls.btn_edit, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)(enable_editing ? bmps.cancel : bmps.edit));
 		
 	//TODO: may be better to ask the table to do this child disabling logic by itself
 	//Also this is too restrictive, we want to send a message to the individual cells to disable themselves, so they can decide what needs disabling and what not, eg a 'copy field' button should always stay enabled
@@ -164,6 +166,7 @@ void set_is_open(State& state, bool is_open) {
 	if (state.is_open != is_open) {
 		state.is_open = is_open;
 		state.reveal_open_controls_on_resize = is_open;
+		if (is_open && !state.controls.btn_dates) create_open_controls(state);
 		if (state.stateful_functions.on_layout_change) state.stateful_functions.on_layout_change(state.wnd);
 		on_internal_state_change(state);
 		if (is_open) ask_window_for_repaint(state.controls.tbl_values);
@@ -239,24 +242,9 @@ void on_row_editor_enter_key_pressed(void*, HWND edit_wnd) {
 	}
 }
 
-void create_controls(State& state) {
-	//TODO(fran): this is an interesting case where I would not want password_editor itself to be an hwnd at all, just a manager for this btn_card which should be the main hwnd from which others are created inside of. Can I just have this object not exist and be just a handler, or maybe a worse solution would be have it be a subclass of button?
+void create_open_controls(State& state) {
 	auto& controls = state.controls;
-	controls.btn_card = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD, WS_EX_CONTROLPARENT);
-	button::set_theme(controls.btn_card, themes.password_editor_card_btn);
-	button::set_user_data(controls.btn_card, &state);
-	button::set_functions(controls.btn_card, {
-		.on_click = [](void* data, HWND wnd) {
-			auto& state = *(State*)data;
-			set_is_open(state, !state.is_open);
-		}
-	});
-	
-	controls.edo_title = create_window(controls.btn_card, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
-	auto hollow_brush = (HBRUSH)GetStockObject(HOLLOW_BRUSH);
-	edit_oneline::set_theme(controls.edo_title, themes.clear_editoneline);
-
-	controls.btn_dates = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
+	controls.btn_dates = create_window(controls.btn_card, button::wndclass, nil, WS_CHILD | BS_BITMAP);
 	SendMessage(controls.btn_dates, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.calendar);
 	button::set_theme(controls.btn_dates, themes.password_editor_toolbar_btn_static);
 	controls.tooltip_btn_dates = add_mouseover_tooltip(controls.btn_dates,
@@ -264,22 +252,7 @@ void create_controls(State& state) {
 		{.multiline = true, .delay_ms = 200, .duration_ms = 15000}
 	);
 
-	controls.btn_pin = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
-	SendMessage(controls.btn_pin, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.pin);
-	button::set_theme(controls.btn_pin, themes.table_toolbar_btn);
-	add_mouseover_tooltip(controls.btn_pin, LANG_PWD_ED_PIN);
-	button::set_user_data(controls.btn_pin, &state);
-	button::set_functions(controls.btn_pin, {
-		.on_click = [](void* data, HWND wnd) {
-			auto& state = *(State*)data;
-			auto& btn = *button::get_state(state.controls.btn_pin);
-			button::set_selected(btn.wnd, !btn.selected);
-			set_flag_bit(state.properties.flags, btn.selected, password_editor::ItemFlag::pin);
-			if (state.stateful_functions.on_change) state.stateful_functions.on_change(state.controls.btn_pin);
-		}
-	});
-
-	controls.btn_edit = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
+	controls.btn_edit = create_window(controls.btn_card, button::wndclass, nil, WS_CHILD | BS_BITMAP);
 	SendMessage(controls.btn_edit, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.edit);
 	button::set_theme(controls.btn_edit, themes.table_toolbar_btn);
 	add_mouseover_tooltip(controls.btn_edit, LANG_PWD_ED_EDIT);
@@ -291,7 +264,7 @@ void create_controls(State& state) {
 		}
 	});
 
-	controls.btn_add = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
+	controls.btn_add = create_window(controls.btn_card, button::wndclass, nil, WS_CHILD | BS_BITMAP);
 	button::set_theme(controls.btn_add, themes.password_editor_toolbar_btn);
 	SendMessage(controls.btn_add, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.add);
 	add_mouseover_tooltip(controls.btn_add, LANG_PWD_ED_ADD);
@@ -307,8 +280,8 @@ void create_controls(State& state) {
 			set_is_editing(state, true);
 		}
 	});
-	
-	controls.btn_del = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
+
+	controls.btn_del = create_window(controls.btn_card, button::wndclass, nil, WS_CHILD | BS_BITMAP);
 	SendMessage(controls.btn_del, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.bin);
 	button::set_theme(controls.btn_del, themes.password_editor_toolbar_btn_danger);
 	add_mouseover_tooltip(controls.btn_del, LANG_PWD_ED_DELETE);
@@ -317,6 +290,42 @@ void create_controls(State& state) {
 		.on_click = [](void* data, HWND wnd) {
 			auto& state = *(State*)data;
 			state.functions.on_delete(state.wnd, state.user_data);
+		}
+	});
+
+	for (HWND button : { controls.btn_dates, controls.btn_edit, controls.btn_add, controls.btn_del })
+		SetWindowFont(button, fonts.General, true);
+}
+
+void create_controls(State& state) {
+	//TODO(fran): this is an interesting case where I would not want password_editor itself to be an hwnd at all, just a manager for this btn_card which should be the main hwnd from which others are created inside of. Can I just have this object not exist and be just a handler, or maybe a worse solution would be have it be a subclass of button?
+	auto& controls = state.controls;
+	controls.btn_card = create_window(state.wnd, button::wndclass, nil, WS_VISIBLE | WS_CHILD, WS_EX_CONTROLPARENT);
+	button::set_theme(controls.btn_card, themes.password_editor_card_btn);
+	button::set_user_data(controls.btn_card, &state);
+	button::set_functions(controls.btn_card, {
+		.on_click = [](void* data, HWND wnd) {
+			auto& state = *(State*)data;
+			set_is_open(state, !state.is_open);
+		}
+	});
+
+	controls.edo_title = create_window(controls.btn_card, edit_oneline::wndclass, nil, WS_VISIBLE | WS_CHILD | WS_TABSTOP);
+	auto hollow_brush = (HBRUSH)GetStockObject(HOLLOW_BRUSH);
+	edit_oneline::set_theme(controls.edo_title, themes.clear_editoneline);
+
+	controls.btn_pin = create_window(controls.btn_card, button::wndclass, nil, WS_VISIBLE | WS_CHILD | BS_BITMAP);
+	SendMessage(controls.btn_pin, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmps.pin);
+	button::set_theme(controls.btn_pin, themes.table_toolbar_btn);
+	add_mouseover_tooltip(controls.btn_pin, LANG_PWD_ED_PIN);
+	button::set_user_data(controls.btn_pin, &state);
+	button::set_functions(controls.btn_pin, {
+		.on_click = [](void* data, HWND wnd) {
+			auto& state = *(State*)data;
+			auto& btn = *button::get_state(state.controls.btn_pin);
+			button::set_selected(btn.wnd, !btn.selected);
+			set_flag_bit(state.properties.flags, btn.selected, password_editor::ItemFlag::pin);
+			if (state.stateful_functions.on_change) state.stateful_functions.on_change(state.controls.btn_pin);
 		}
 	});
 
@@ -443,7 +452,7 @@ void create_controls(State& state) {
 	table::set_theme(controls.tbl_values, tbl_theme);
 
 	for (const auto& c : controls.all)
-		if (c != controls.edo_title && c != controls.tooltip_btn_dates) 
+		if (c && c != controls.edo_title && c != controls.tooltip_btn_dates)
 			SetWindowFont(c, fonts.General, true);
 	SetWindowFont(controls.edo_title, fonts.GeneralBold, true);
 

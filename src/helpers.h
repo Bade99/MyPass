@@ -805,31 +805,19 @@ static HWND get_parent_of_class(HWND child, const cstr* parent_class) {
 	return res;
 }
 
-static void SetText_txt_app(HWND wnd, const TCHAR* new_txt, const TCHAR* new_appname, bool txt_first = true) {
-	str title_window;
-	if (!new_txt || !*new_txt) {
-		title_window = new_appname ? new_appname : _t("");
-	}
-	elif (!new_appname || !*new_appname) {
-		title_window = new_txt;
-	}
-	else {
-		if (!txt_first) {
-			auto tmp = new_txt;
-			new_txt = new_appname;
-			new_appname = tmp;
-		}
-		title_window = new_txt;
-		title_window += L" - ";
-		title_window += new_appname;
-	}
+static void set_app_title(HWND wnd, str_view title, str_view app_name, str_view separator = _t("-")) {
+	str window_title;
+	if (title.empty()) window_title = app_name;
+	elif (app_name.empty()) window_title = title;
+	else window_title = str(title) + L" " + str(separator) + L" " + str(app_name);
+
 	int current_length = GetWindowTextLength(wnd);
-	if (current_length >= 0 && (size_t)current_length == title_window.size()) {
+	if (current_length >= 0 && (size_t)current_length == window_title.size()) {
 		str current_title((size_t)current_length + 1, 0);
-		if (GetWindowText(wnd, current_title.data(), current_length + 1) == current_length &&
-			title_window == current_title.c_str()) return;
+		if (GetWindowText(wnd, current_title.data(), current_length + 1) == current_length && window_title == current_title.c_str())
+			return;
 	}
-	SetWindowText(wnd, title_window.c_str());
+	SetWindowText(wnd, window_title.c_str());
 }
 
 /**
