@@ -403,6 +403,9 @@ void add_signup_torture_test_cards(State& state) {
 	std::uniform_int_distribution<i32> row_count{ 2, 5 };
 	std::uniform_int_distribution<i32> pin_chance{ 0, 9 };
 	std::uniform_int_distribution<i32> password_chance{ 0, 1 };
+	constexpr time_t history_seconds = 5 * 365 * 24 * 60 * 60;
+	time_t now = std::time(nil);
+	std::uniform_int_distribution<time_t> creation_time{ now - history_seconds, now };
 	constexpr str_view alphabet = L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 	std::uniform_int_distribution<size_t> character_index{ 0, alphabet.size() - 1 };
 	const auto random_text = [&]() {
@@ -411,13 +414,14 @@ void add_signup_torture_test_cards(State& state) {
 		return result;
 	};
 
-	time_t created = std::time(nil);
 	for (i32 card_index = 0; card_index < card_count; ++card_index) {
 		CardData card;
 		card.title = random_text();
+		time_t created = creation_time(random);
+		std::uniform_int_distribution<time_t> modification_time{ created, now };
 		card.properties = {
 			.date_created = created,
-			.date_modified = created,
+			.date_modified = modification_time(random),
 			.flags = pin_chance(random) == 0 ? password_editor::ItemFlag::pin : 0,
 		};
 		i32 rows = row_count(random);
