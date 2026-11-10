@@ -48,6 +48,10 @@ struct State {
 	StatefulFunction<OnViewportChanged> on_viewport_changed;
 
 	SmoothScroll scroller;
+	struct ScrollIntoView {
+		i32 from = 0, to = 0;
+		bool active = false;
+	} scroll_into_view;
 
 	void init() {
 		new (&scroller) SmoothScroll{};

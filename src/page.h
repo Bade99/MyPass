@@ -93,6 +93,7 @@ void set_wnd_size(HWND scrollable_area, i32 h) {
 void apply_scroll_position(HWND wnd, f32 previous_offset, f32 offset) {
 	State& state = *get_state(wnd);
 	AssertAll(state.controls.all);
+	state.scroll_into_view.active = false;
 	RECT r = get_window_rect_at(state.controls.content_area, state.wnd);
 	RECT parent_r; GetClientRect(state.wnd, &parent_r);
 	i32 parent_h = RECTH(parent_r);
@@ -106,10 +107,9 @@ void apply_scroll_position(HWND wnd, f32 previous_offset, f32 offset) {
 	notify_viewport_changed(state);
 }
 
-void scroll_to(HWND wnd, i32 position) {
+void set_scroll_position(HWND wnd, i32 position) {
 	State& state = *get_state(wnd);
 	AssertAll(state.controls.all);
-	state.scroller.cancel();
 	RECT content = get_window_rect_at(state.controls.content_area, wnd);
 	RECT viewport; GetClientRect(wnd, &viewport);
 	i32 max_scroll = maximum(RECTH(content) - RECTH(viewport), 0);
@@ -122,6 +122,59 @@ void scroll_to(HWND wnd, i32 position) {
 	MoveWindow(state.controls.content_area, content.left, new_y, RECTW(content), RECTH(content), TRUE);
 	SendMessage(state.controls.v_scroll, scrollbar::custom_message::SET_POS, -new_y, 0);
 	notify_viewport_changed(state);
+}
+
+void cancel_scroll_into_view(HWND wnd) { get_state(wnd)->scroll_into_view.active = false; }
+
+void scroll_to(HWND wnd, i32 position) {
+	State& state = *get_state(wnd);
+	state.scroll_into_view.active = false;
+	state.scroller.cancel();
+	set_scroll_position(wnd, position);
+}
+
+i32 scroll_position_for_rect(RECT bounds, rect_i32 viewport, i32 margin) {
+	if (RECTH(bounds) <= viewport.h)
+		margin = minimum(margin, maximum((viewport.h - RECTH(bounds)) / 2, 0));
+	bounds.top -= margin;
+	bounds.bottom += margin;
+	i32 position = viewport.y;
+	if (bounds.top < viewport.y) position = bounds.top;
+	else if (bounds.bottom > viewport.y + viewport.h)
+		position = RECTH(bounds) > viewport.h ? bounds.top : bounds.bottom - viewport.h;
+	return position;
+}
+
+void scroll_rect_into_view(HWND wnd, RECT bounds, i32 margin = 0) {
+	auto viewport = get_viewport(wnd);
+	i32 position = scroll_position_for_rect(bounds, viewport, margin);
+	if (position != viewport.y) scroll_to(wnd, position);
+}
+
+bool begin_scroll_rect_into_view(HWND wnd, RECT bounds, i32 margin = 0) {
+	State& state = *get_state(wnd);
+	state.scroller.cancel();
+	auto viewport = get_viewport(wnd);
+	auto& transition = state.scroll_into_view;
+	transition.from = viewport.y;
+	transition.to = scroll_position_for_rect(bounds, viewport, margin);
+	transition.active = transition.from != transition.to;
+	return transition.active;
+}
+
+void apply_scroll_into_view(HWND wnd, f32 progress) {
+	auto& transition = get_state(wnd)->scroll_into_view;
+	if (!transition.active) return;
+	i32 position = lerp(transition.from, progress, transition.to);
+	if (position != get_viewport(wnd).y) set_scroll_position(wnd, position);
+}
+
+void finish_scroll_into_view(HWND wnd) {
+	auto& transition = get_state(wnd)->scroll_into_view;
+	if (!transition.active) return;
+	i32 position = transition.to;
+	transition.active = false;
+	set_scroll_position(wnd, position);
 }
 
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -165,7 +218,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			AssertAll(state.controls.all);
 			i32 step = wheel_scroll_step(wparam, RECTH(get_client_rect(state.wnd)),
 				maximum(1, avg_str_dim(fonts.General, 1).cy), state.scroller.wheel_remainder);
-			if (step) state.scroller.start(step);
+			if (step) {
+				cancel_scroll_into_view(state.wnd);
+				state.scroller.start(step);
+			}
 			return 0;
 		}
 		else return DefWindowProc(hwnd, msg, wparam, lparam);//propagates msg to the parent
@@ -196,6 +252,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			elif(operation == SB_PAGEDOWN) step = -RECTH(get_client_rect(state.wnd));
 			elif(operation == SB_PAGEUP) step = RECTH(get_client_rect(state.wnd));
 			else Assert(0);
+			cancel_scroll_into_view(state.wnd);
 			state.scroller.start(step);
 			return 0;
 		} break;

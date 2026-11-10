@@ -94,6 +94,7 @@ struct CardLayoutAnimation {
 	i32 from_page_height = 0, to_page_height = 0;
 	i32 client_width = 0, client_height = 0;
 	HWND entering_card = nil;
+	HWND scroll_card = nil;
 	bool requested = false;
 	bool sort_transition = false;
 };
@@ -101,6 +102,7 @@ struct CardLayoutAnimation {
 struct CardLayoutState {
 	CardLayoutAnimation animation;
 	RECT backdrop_bounds{};
+	HWND scroll_into_view_card = nil;
 	std::vector<HWND> search_pending_reveals;
 	bool search_reflow_pending = false;
 	bool applying_layout = false;
