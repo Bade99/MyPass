@@ -18,7 +18,20 @@
 #include "reflection.h"
 #include "version.h"
 
-#ifndef APP_DIAGNOSTICS_ENABLED
+#ifndef APP_PRODUCTION_BUILD
+#define APP_PRODUCTION_BUILD 0
+#endif
+
+#if APP_PRODUCTION_BUILD != 0 && APP_PRODUCTION_BUILD != 1
+#error "APP_PRODUCTION_BUILD must be 0 or 1"
+#endif
+
+#if APP_PRODUCTION_BUILD
+#ifdef APP_DIAGNOSTICS_ENABLED
+#undef APP_DIAGNOSTICS_ENABLED
+#endif
+#define APP_DIAGNOSTICS_ENABLED 0
+#elif !defined(APP_DIAGNOSTICS_ENABLED)
 #define APP_DIAGNOSTICS_ENABLED 1
 #endif
 
@@ -132,9 +145,9 @@ struct _str {
 
 	type& operator[](size_t i) const { return str[i]; }
 
-	type* begin() const { return this->sz ? &(*this)[0] : nullptr; }
+	type* begin() const { return this->sz ? &(*this)[0] : nil; }
 
-	type* end() const { return this->sz ? this->str + this->cnt() : nullptr; }
+	type* end() const { return this->sz ? this->str + this->cnt() : nil; }
 };
 
 typedef _str<utf16> utf16_str;

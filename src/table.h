@@ -10,7 +10,7 @@
 /**----------------------API-----------------------:
   * 
   * wndclass;                                                        Window class name for CreateWindow.
-  * void set_functions(HWND table_wnd, const Functions& functions);  Set custom callback functions to perform various actions, nullptr values are ignored.
+  * void set_functions(HWND table_wnd, const Functions& functions);  Set custom callback functions to perform various actions, nil values are ignored.
   * void set_theme(HWND table_wnd, const Theme& theme);              Set custom theme for bk, borders and interior cells.
   * void set_column_cnt(HWND table_wnd, u32 column_cnt);             Set number of columns.
   * 
@@ -106,7 +106,7 @@ namespace table {
 		{
 			state.uninit();
 			free(&state);
-			set_window_state(wnd, nullptr);
+			set_window_state(wnd, nil);
 			goto defproc;
 		} break;
 		case WM_SIZE:

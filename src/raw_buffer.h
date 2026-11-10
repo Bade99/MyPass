@@ -113,7 +113,7 @@ struct RawBufferReader {
 		// Writer inserts zero padding so each string starts at alignof(CharT).
 		const auto padding = detail::get_alignment_padding(pos, alignof(CharT));
 		if (padding > remaining()) return false;
-		#ifdef _DEBUG
+		#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 		for (std::size_t i = 0; i < padding; i++)
 			Assert(bytes[pos + i] == 0);
 		#endif

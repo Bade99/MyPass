@@ -2,7 +2,12 @@
 #include "win_sdk.h"
 #include "platform.h"
 
-#ifndef RENDER_DIAGNOSTICS_ENABLED
+#if APP_PRODUCTION_BUILD
+#ifdef RENDER_DIAGNOSTICS_ENABLED
+#undef RENDER_DIAGNOSTICS_ENABLED
+#endif
+#define RENDER_DIAGNOSTICS_ENABLED 0
+#elif !defined(RENDER_DIAGNOSTICS_ENABLED)
 #define RENDER_DIAGNOSTICS_ENABLED APP_DIAGNOSTICS_ENABLED
 #endif
 
@@ -159,27 +164,27 @@ void record_time(Session& current, Event event, LONGLONG elapsed) {
 }
 
 void append_report_to_file(const std::wstring& report) {
-	PWSTR roaming_folder = nullptr;
-	if (FAILED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &roaming_folder)) || !roaming_folder) {
+	PWSTR roaming_folder = nil;
+	if (FAILED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nil, &roaming_folder)) || !roaming_folder) {
 		OutputDebugStringW(L"[render] Could not locate Roaming AppData for the log.\n");
 		return;
 	}
 	std::wstring folder = roaming_folder;
 	CoTaskMemFree(roaming_folder);
 	folder += L"\\MyPass";
-	if (!CreateDirectoryW(folder.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
+	if (!CreateDirectoryW(folder.c_str(), nil) && GetLastError() != ERROR_ALREADY_EXISTS) {
 		OutputDebugStringW(L"[render] Could not create the MyPass log folder.\n");
 		return;
 	}
 
-	int byte_count = WideCharToMultiByte(CP_UTF8, 0, report.data(), (int)report.size(), nullptr, 0, nullptr, nullptr);
+	int byte_count = WideCharToMultiByte(CP_UTF8, 0, report.data(), (int)report.size(), nil, 0, nil, nil);
 	if (byte_count <= 0) return;
 	std::string utf8((size_t)byte_count, '\0');
-	if (!WideCharToMultiByte(CP_UTF8, 0, report.data(), (int)report.size(), utf8.data(), byte_count, nullptr, nullptr)) return;
+	if (!WideCharToMultiByte(CP_UTF8, 0, report.data(), (int)report.size(), utf8.data(), byte_count, nil, nil)) return;
 
 	std::wstring path = folder + L"\\render-diagnostics.log";
 	HANDLE file = CreateFileW(path.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
-		nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+		nil, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nil);
 	if (file == INVALID_HANDLE_VALUE) {
 		OutputDebugStringW(L"[render] Could not open the diagnostics log.\n");
 		return;
@@ -187,7 +192,7 @@ void append_report_to_file(const std::wstring& report) {
 	size_t offset = 0;
 	while (offset < utf8.size()) {
 		DWORD written = 0;
-		if (!WriteFile(file, utf8.data() + offset, (DWORD)(utf8.size() - offset), &written, nullptr) || !written) break;
+		if (!WriteFile(file, utf8.data() + offset, (DWORD)(utf8.size() - offset), &written, nil) || !written) break;
 		offset += written;
 	}
 	CloseHandle(file);

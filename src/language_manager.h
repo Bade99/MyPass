@@ -326,7 +326,7 @@ private:
 
 	size_t TrackWindow(HWND hwnd)
 	{
-		if (GetWindowThreadProcessId(hwnd, nullptr) != GetCurrentThreadId()) return 0;
+		if (GetWindowThreadProcessId(hwnd, nil) != GetCurrentThreadId()) return 0;
 		if (auto tracked = this->TrackedWindows.find(hwnd); tracked != this->TrackedWindows.end()) return tracked->second;
 		if (!SetWindowSubclass(hwnd, WindowSubclassProc, 0, reinterpret_cast<DWORD_PTR>(this))) return 0;
 		size_t registration = ++this->next_window_registration;

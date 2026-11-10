@@ -126,7 +126,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 		login_cl.validate();
 		_deserialize_struct(editor_cl, to_deserialize);
 		editor_cl.validate();
-		#ifndef _DEBUG // While debugging always use default struct colors to make it easier to try different ones
+		#if !defined(_DEBUG) || APP_PRODUCTION_BUILD // While testing, use default struct colors to make it easier to try different ones
 		_deserialize_struct(colors, to_deserialize);
 		#endif
 		default_colors_if_not_set(&colors);
@@ -215,7 +215,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 	// Main message loop:
 	MSG msg;
 	BOOL bRet;
-	while ((bRet = GetMessage(&msg, nullptr, 0, 0)) != 0)
+	while ((bRet = GetMessage(&msg, nil, 0, 0)) != 0)
 	{
 		Assert(bRet != -1);// There was an error
 		switch (msg.message) {

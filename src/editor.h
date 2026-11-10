@@ -9,11 +9,11 @@
 #include "render_diagnostics.h"
 #include "child_layout.h"
 
-#ifdef _DEBUG
+#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 #define EDITOR_DEBUG_SIGNUP_TORTURE_TEST 0
 #endif
 
-#if defined(_DEBUG) && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
+#if defined(_DEBUG) && !APP_PRODUCTION_BUILD && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
 #include <random>
 #endif
 
@@ -391,7 +391,7 @@ void add_preset_password_editor(State& state, size_t at_idx) {
 
 void resize_controls(State& state, bool animate_cards = false);
 
-#if defined(_DEBUG) && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
+#if defined(_DEBUG) && !APP_PRODUCTION_BUILD && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
 void add_signup_torture_test_cards(State& state) {
 	constexpr auto card_count = 250;
 	std::mt19937 random{ 0x5a17u };
@@ -931,7 +931,7 @@ void add_menus(State& state) { //TODO(fran): this should be a toolbar (maybe), t
 
 	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_SAVE, LANG_MENU_SAVE, bmps.save, bmps.save);
 
-	#ifdef _DEBUG
+	#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 	append_item_to_menu(menu_file, SHOWPASSWORDS_MENU_SAVE_V0, _t("Save V0"), bmps.save, bmps.save);
 	#endif
 
@@ -1402,7 +1402,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 				save_passwords(state);
 				return 0;
 			} break;
-			#ifdef _DEBUG
+			#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 			case SHOWPASSWORDS_MENU_SAVE_V0:
 			{
 				save_passwords_v0(state);
@@ -1492,7 +1492,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			if (start_attempt == login::AttemptResult::success) {
 				if (start->signup) {
 					set_passwords_need_save(state, true);
-					#if defined(_DEBUG) && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
+					#if defined(_DEBUG) && !APP_PRODUCTION_BUILD && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
 					add_signup_torture_test_cards(state);
 					#endif
 				}

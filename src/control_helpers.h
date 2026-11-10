@@ -13,7 +13,7 @@ static HWND get_dialog_root(HWND wnd) {
 
 	// TODO(fran): create the concept of work regions, you can mark any hwnd as a work region (should be placed in my common window header)
 	// This will then change to, go up the parent hierarchy till you find an hwnd tagged as work region, use that as the root, if otherwise you find the nonclient window of the desktop window, you go back one layer of the hierarchy and use that one.
-	#ifdef _DEBUG
+	#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 	cstr name[50]; GetClassName(root, name, ARRAYSIZE(name)); wprintf(L"root name: %s\n", name);
 	#endif
 

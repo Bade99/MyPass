@@ -7,7 +7,7 @@ constexpr auto& wndclass = wndclass_name("editor");
 
 constexpr auto pad_percent = .05f;
 
-#ifdef _DEBUG
+#if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 constexpr auto debug_text_view = true;
 #else
 constexpr auto debug_text_view = false;

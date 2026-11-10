@@ -429,7 +429,7 @@ void create_controls(State& state) {
 
 					return state.wnd;
 				}
-				default: Assert(0); return nullptr;
+				default: Assert(0); return nil;
 			}
 		}
 	};
@@ -563,7 +563,7 @@ LRESULT CALLBACK proc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_NCDESTROY:
 	{
 		free(&state);
-		set_window_state(wnd, nullptr);
+		set_window_state(wnd, nil);
 		goto defproc;
 	} break;
 	case WM_CREATE:
