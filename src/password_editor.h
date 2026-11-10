@@ -181,7 +181,7 @@ void set_is_editing(State& state, bool is_editing) {
 }
 
 str format_dates_tooltip(State& state) {
-	auto format_datetime = [](time_t date) {
+	auto format_datetime = [](time64 date) {
 		using namespace std::chrono;
 		constexpr auto date_format = L"{:%Y/%m/%d %H:%M}"; //TODO(fran): config so the user can set the date format they want, depending on the system or any other locale based calculation is not good enough
 		auto date_string = std::format( date_format, zoned_time{ current_zone(), sys_seconds{ seconds(date) } });

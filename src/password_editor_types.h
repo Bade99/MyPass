@@ -56,7 +56,7 @@ namespace password_editor {
 	};
 
 	struct Properties {
-		time_t date_created, date_modified;
+		time64 date_created, date_modified;
 		multiflag<ItemFlag> flags;
 	};
 

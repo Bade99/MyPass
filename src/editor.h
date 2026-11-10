@@ -10,7 +10,7 @@
 #include "child_layout.h"
 
 #if defined(_DEBUG) && !APP_PRODUCTION_BUILD
-#define EDITOR_DEBUG_SIGNUP_TORTURE_TEST 0
+#define EDITOR_DEBUG_SIGNUP_TORTURE_TEST 1
 #endif
 
 #if defined(_DEBUG) && !APP_PRODUCTION_BUILD && EDITOR_DEBUG_SIGNUP_TORTURE_TEST
@@ -403,9 +403,9 @@ void add_signup_torture_test_cards(State& state) {
 	std::uniform_int_distribution<i32> row_count{ 2, 5 };
 	std::uniform_int_distribution<i32> pin_chance{ 0, 9 };
 	std::uniform_int_distribution<i32> password_chance{ 0, 1 };
-	constexpr time_t history_seconds = 5 * 365 * 24 * 60 * 60;
-	time_t now = std::time(nil);
-	std::uniform_int_distribution<time_t> creation_time{ now - history_seconds, now };
+	constexpr time64 history_seconds = 5 * 365 * 24 * 60 * 60;
+	time64 now = std::time(nil);
+	std::uniform_int_distribution<time64> creation_time{ now - history_seconds, now };
 	constexpr str_view alphabet = L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 	std::uniform_int_distribution<size_t> character_index{ 0, alphabet.size() - 1 };
 	const auto random_text = [&]() {
@@ -417,8 +417,8 @@ void add_signup_torture_test_cards(State& state) {
 	for (i32 card_index = 0; card_index < card_count; ++card_index) {
 		CardData card;
 		card.title = random_text();
-		time_t created = creation_time(random);
-		std::uniform_int_distribution<time_t> modification_time{ created, now };
+		time64 created = creation_time(random);
+		std::uniform_int_distribution<time64> modification_time{ created, now };
 		card.properties = {
 			.date_created = created,
 			.date_modified = modification_time(random),
@@ -1080,7 +1080,7 @@ void append_card_data_for_saving(State& state, raw_buffer& out) {
 	//data structure: editors count (u64) | each editor
 	// editor: title (str, all str are null terminated utf16) | date created (u64) | date modified (u64) | multiflag (u32) | table row count (u64) | each table row
 	//  table row: desc (str) | val (str) | multiflag (u32)
-	//TODO(fran): we have arch dependent sizes for types, size_t time_t, normalize to 64bit and 32bit depending on needs
+	//TODO(fran): row and card counts still use architecture-dependent size_t; normalize their serialized widths.
 
 	sync_mounted_cards(state);
 	append_to_buffer(out, state.cards.size());
