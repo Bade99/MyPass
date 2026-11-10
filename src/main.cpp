@@ -277,7 +277,11 @@ int APIENTRY wWinMain(HINSTANCE hInstance,HINSTANCE,LPWSTR,int)
 		{
 			if (!(app_shortcuts.table && TranslateAccelerator(app_shortcuts.listener_wnd ? app_shortcuts.listener_wnd : msg.hwnd, app_shortcuts.table, &msg))) {
 				bool needs_dialog_parsing = msg.message == WM_KEYDOWN && msg.wParam == VK_TAB; //TODO(fran): controls that use tab, eg multiline text editor, need to process WM_GETDLGCODE and return DLGC_WANTTAB
-				if (!needs_dialog_parsing || !IsDialogMessage(get_dialog_root(msg.hwnd), &msg)) {
+				HWND dialog_root = needs_dialog_parsing ? get_dialog_root(msg.hwnd) : nil;
+				if (needs_dialog_parsing && IsChild(editor_wnd, msg.hwnd) && IsChild(dialog_root, msg.hwnd))
+					editor::prepare_card_tab_navigation(*editor::get_state(dialog_root), msg.hwnd, dialog_root,
+						GetKeyState(VK_SHIFT) < 0, msg);
+				if (!needs_dialog_parsing || !IsDialogMessage(dialog_root, &msg)) {
 					TranslateMessage(&msg);
 					DispatchMessage(&msg);
 				}

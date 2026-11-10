@@ -105,6 +105,24 @@ void apply_scroll_position(HWND wnd, f32 previous_offset, f32 offset) {
 	notify_viewport_changed(state);
 }
 
+void scroll_to(HWND wnd, i32 position) {
+	State& state = *get_state(wnd);
+	AssertAll(state.controls.all);
+	state.scroller.cancel();
+	RECT content = get_window_rect_at(state.controls.content_area, wnd);
+	RECT viewport; GetClientRect(wnd, &viewport);
+	i32 max_scroll = maximum(RECTH(content) - RECTH(viewport), 0);
+	i32 new_y = -clamp(0, position, max_scroll);
+	state.scroller.offset = (f32)new_y;
+	if (new_y == content.top) {
+		SendMessage(state.controls.v_scroll, scrollbar::custom_message::SET_POS, -new_y, 0);
+		return;
+	}
+	MoveWindow(state.controls.content_area, content.left, new_y, RECTW(content), RECTH(content), TRUE);
+	SendMessage(state.controls.v_scroll, scrollbar::custom_message::SET_POS, -new_y, 0);
+	notify_viewport_changed(state);
+}
+
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	//static int __cnt; printf("%d:PAGE:%s\n", __cnt++, msgToString(msg));
 	State& state = *get_state(hwnd);
@@ -160,23 +178,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		case SB_THUMBTRACK:
 		case SB_THUMBPOSITION: //INFO: can be used to detect the end of a SB_THUMBTRACK sequence
 		{
-			state.scroller.cancel();
 			auto new_scroll = (HWND)lparam == state.controls.v_scroll
 				? (i32)SendMessage(state.controls.v_scroll, scrollbar::custom_message::GET_POS, 0, 0)
 				: (i32)HIWORD(wparam);
-			//TODO(fran): move into common logic with smooth_scroll
-			RECT r = get_window_rect_at(state.controls.content_area, state.wnd);
-			RECT parent_r; GetWindowRect(state.wnd, &parent_r);
-			i32 parent_h = RECTH(parent_r);
-			i32 current_h = RECTH(r);
-			const i32 min_scroll_y = 0; //prevent scrolling to go above of the page boundaries
-			i32 max_scroll_y = maximum(current_h - parent_h, 0); //prevent scrolling to go below of the page boundaries
-
-			i32 new_y = -clamp(min_scroll_y, (i32)(new_scroll), max_scroll_y);
-
-			MoveWindow(state.controls.content_area, r.left, new_y, RECTW(r), RECTH(r), TRUE);
-			state.scroller.offset = (f32)new_y;
-			notify_viewport_changed(state);
+			scroll_to(state.wnd, new_scroll);
 		} break;
 		case SB_LINEDOWN:
 		case SB_LINEUP:

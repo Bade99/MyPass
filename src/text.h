@@ -1954,10 +1954,10 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	case WM_CANCELMODE:
 	{
 		//Stop mouse capture, and similar input related things
-		ReleaseCapture();
+		if (GetCapture() == state.wnd) ReleaseCapture();
 		state.on_mouse_tracking = false;
 		//Sent, for example, when the window gets disabled
-		return DefWindowProc(hwnd, msg, wparam, lparam);
+		return 0;
 	} break;
 	case WM_NCHITTEST:
 	{
@@ -2012,7 +2012,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_LBUTTONUP:
 	{
-		ReleaseCapture();
+		if (GetCapture() == state.wnd) ReleaseCapture();
 		state.on_mouse_tracking = false;
 	} break;
 	case WM_RBUTTONUP:

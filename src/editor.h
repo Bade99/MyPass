@@ -238,6 +238,55 @@ void refresh_card_windows(State& state) {
 	if (mounted_set_changed) update_mounted_card_z_order(state);
 }
 
+void scroll_editor_rect_into_view(State& state, RECT bounds) {
+	auto viewport = page::get_viewport(state.controls.page_space);
+	i32 position = viewport.y;
+	if (bounds.top < viewport.y) position = bounds.top;
+	else if (bounds.bottom > viewport.y + viewport.h)
+		position = RECTH(bounds) > viewport.h ? bounds.top : bounds.bottom - viewport.h;
+	if (position != viewport.y) page::scroll_to(state.controls.page_space, position);
+}
+
+void prepare_card_tab_navigation(State& state, HWND focused, HWND dialog_root, bool backwards, MSG& message) {
+	if (state.card_layout.search_reflow_pending) return;
+	LRESULT dialog_code = SendMessage(focused, WM_GETDLGCODE, VK_TAB, (LPARAM)&message);
+	if (dialog_code & (DLGC_WANTTAB | DLGC_WANTALLKEYS)) return;
+
+	HWND next = GetNextDlgTabItem(dialog_root, focused, backwards);
+	i64 current_index = -1;
+	if (focused == state.controls.btn_add_end && backwards) current_index = (i64)state.cards.size();
+	else if (focused != state.controls.btn_add_start || backwards) {
+		for (size_t index = 0; index < state.cards.size(); ++index)
+			if (state.cards[index].wnd &&
+				(focused == state.cards[index].wnd || IsChild(state.cards[index].wnd, focused))) {
+				current_index = (i64)index;
+				break;
+			}
+		if (current_index >= 0 && next &&
+			(next == state.cards[current_index].wnd || IsChild(state.cards[current_index].wnd, next))) return;
+	}
+
+	if (current_index >= 0 || focused == state.controls.btn_add_start) {
+		i64 step = backwards ? -1 : 1;
+		for (i64 index = current_index + step; index >= 0 && index < (i64)state.cards.size(); index += step) {
+			CardSlot& card = state.cards[index];
+			if (!card.search_visible) continue;
+			bool is_open = card.wnd ? password_editor::get_state(card.wnd)->is_open : card.data.is_open;
+			bool is_editing = card.wnd ? password_editor::get_state(card.wnd)->is_editing : card.data.is_editing;
+			if (!is_open || !is_editing) continue;
+
+			scroll_editor_rect_into_view(state, card.bounds);
+			refresh_card_windows(state);
+			return;
+		}
+	}
+	if (next && (next == state.controls.btn_add_start ||
+		(next == state.controls.btn_add_end && IsWindowVisible(next)))) {
+		RECT bounds = get_window_rect_at(next, state.controls.page);
+		if (bounds.left >= 0) scroll_editor_rect_into_view(state, bounds);
+	}
+}
+
 password_editor::State& add_password_editor(State& state, CardData card, size_t at_idx) {
 	auto at = state.cards.begin() + minimum(at_idx, state.cards.size());
 	auto& inserted = *state.cards.insert(at, CardSlot{ .data = std::move(card) });
