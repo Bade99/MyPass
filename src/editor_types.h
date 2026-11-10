@@ -95,6 +95,7 @@ struct CardLayoutAnimation {
 	i32 client_width = 0, client_height = 0;
 	HWND entering_card = nil;
 	bool requested = false;
+	bool sort_transition = false;
 };
 
 struct CardLayoutState {

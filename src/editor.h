@@ -29,6 +29,7 @@ void stop_card_animation(State& state) {
 	state.card_layout.animation.moves.clear();
 	state.card_layout.animation.requested = false;
 	state.card_layout.animation.entering_card = nil;
+	state.card_layout.animation.sort_transition = false;
 }
 
 auto get_state(HWND wnd) { return get_window_state<State>(wnd); }
@@ -273,7 +274,8 @@ void refresh_card_windows(State& state) {
 	for (CardSlot& card : state.cards) {
 		bool in_range = card.search_visible && card.bounds.right > card.bounds.left &&
 			card.bounds.bottom > viewport_top && card.bounds.top < viewport_bottom;
-		if (in_range && !card.wnd && !state.card_layout.search_reflow_pending) {
+		if (in_range && !card.wnd && !state.card_layout.search_reflow_pending &&
+			!(state.card_layout.animation.timeline.active && state.card_layout.animation.sort_transition)) {
 			mount_card(state, card);
 			mounted_set_changed = true;
 			{
@@ -491,6 +493,34 @@ CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_p
 	return layout;
 }
 
+void prepare_sort_animation_cards(State& state, CardLayout& target, const std::vector<RECT>& previous_bounds) {
+	auto viewport = page::get_viewport(state.controls.page_space);
+	if (viewport.w <= 0 || viewport.h <= 0) return;
+	i32 overscan = maximum(viewport.h / 2, (i32)DPI(120));
+	i32 range_top = maximum(0, viewport.y - overscan);
+	i32 range_bottom = viewport.y + viewport.h + overscan;
+	bool mounted_set_changed = false;
+	for (size_t index = 0; index < state.cards.size(); ++index) {
+		CardSlot& card = state.cards[index];
+		if (card.wnd || !card.search_visible || card.bounds.bottom <= range_top || card.bounds.top >= range_bottom) continue;
+		RECT from = card.bounds;
+		const RECT& previous = previous_bounds[index];
+		if (previous.right > previous.left) {
+			if (previous.bottom <= viewport.y) from.top = viewport.y - RECTH(from);
+			else if (previous.top >= viewport.y + viewport.h) from.top = viewport.y + viewport.h;
+			else from.top = previous.top;
+			from.bottom = from.top + RECTH(card.bounds);
+		}
+		mount_card(state, card);
+		SetWindowPos(card.wnd, nil, from.left, from.top, RECTW(from), RECTH(from),
+			SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+		restore_card_view(card);
+		target.moves.push_back({ card.wnd, card.bounds });
+		mounted_set_changed = true;
+	}
+	if (mounted_set_changed) update_mounted_card_z_order(state);
+}
+
 void apply_card_layout(State& state, CardLayout& layout, bool redraw_backdrop = false, bool force_page_update = true) {
 	state.card_layout.backdrop_bounds = layout.backdrop_bounds;
 	RECT page_bounds; GetClientRect(state.controls.page, &page_bounds);
@@ -654,7 +684,13 @@ void resize_controls(State& state, bool animate_cards) {
 		child_layout::move_if_needed(controls.page_space, page_space, false);
 	}
 
+	std::vector<RECT> previous_card_bounds;
+	if (animate_cards && state.card_layout.animation.sort_transition) {
+		previous_card_bounds.reserve(state.cards.size());
+		for (const CardSlot& card : state.cards) previous_card_bounds.push_back(card.bounds);
+	}
 	auto target = measure_card_layout(state, w, spacing, w_pad);
+	if (!previous_card_bounds.empty()) prepare_sort_animation_cards(state, target, previous_card_bounds);
 	if (animate_cards) start_card_animation(state, target);
 	else {
 		stop_card_animation(state);
@@ -819,6 +855,7 @@ void add_controls(State& state) {
 		update_mounted_card_z_order(state);
 		state.sorting = item.value;
 		state.card_layout.animation.requested = true;
+		state.card_layout.animation.sort_transition = true;
 		ask_window_for_resize(state.wnd);
 	});
 	combobox::set_function_render_combobox(controls.combo_sort, [](HDC dc, rect_i32 r, combobox::RenderFlags flags, void* element, void* user_extra) {
