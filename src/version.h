@@ -1,6 +1,6 @@
 #pragma once
 
-#define PRODUCT_VERSION 1,1,0
+#define PRODUCT_VERSION 1,1,1
 
 #define VERSION_STRING_PARTS(major, minor, patch) #major "." #minor "." #patch
 #define VERSION_STRING_APPLY(format, args) format args
