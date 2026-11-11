@@ -21,7 +21,7 @@ struct Theme {
 	} brushes;
 	union Dimensions {
 		struct {
-			UINumber card_spacing{};
+			UINumber card_spacing;
 			UINumber horizontal_padding;
 			UINumber add_button_size;
 			UINumber backdrop_extent;
