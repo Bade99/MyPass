@@ -19,44 +19,34 @@ struct Theme {
 		BrushGroup all[2];
 	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 	} brushes;
-	struct {
-		UINumber card_spacing{ .value = F32INFINITY };
-		UINumber horizontal_padding{ .value = F32INFINITY };
-		UINumber add_button_size{ .value = F32INFINITY };
-		UINumber backdrop_extent{ .value = F32INFINITY };
-		UINumber backdrop_radius{ .value = F32INFINITY };
-		UINumber empty_backdrop_padding{ .value = F32INFINITY };
-		UINumber scroll_margin{ .value = F32INFINITY };
-		UINumber transition_icon_width{ .value = F32INFINITY };
-		UINumber transition_title_height{ .value = F32INFINITY };
-		UINumber transition_label_width_reduction{ .value = F32INFINITY };
-		UINumber transition_label_height{ .value = F32INFINITY };
-		UINumber transition_marker_width{ .value = F32INFINITY };
-		UINumber search_max_width{ .value = F32INFINITY };
-		UINumber search_height{ .value = F32INFINITY };
-		UINumber sort_width{ .value = F32INFINITY };
-		UINumber sort_wrap_threshold{ .value = F32INFINITY };
+	union Dimensions {
+		struct {
+			UINumber card_spacing{};
+			UINumber horizontal_padding;
+			UINumber add_button_size;
+			UINumber backdrop_extent;
+			UINumber backdrop_radius;
+			UINumber empty_backdrop_padding;
+			UINumber scroll_margin;
+			UINumber transition_icon_width;
+			UINumber transition_title_height;
+			UINumber transition_label_width_reduction;
+			UINumber transition_label_height;
+			UINumber transition_marker_width;
+			UINumber search_max_width;
+			UINumber search_height;
+			UINumber sort_width;
+			UINumber sort_wrap_threshold;
+		};
+		UINumber all[16];
+		Dimensions() : all{} { for (auto& dimension : all) dimension.value = F32INFINITY; }
+	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 	} dimensions;
 
 	bool copy_from(const Theme& src) {
 		bool repaint = false;
 		_theme_copy_all_brushes(src.brushes, this->brushes);
-		_theme_copy_uinumber(src.dimensions.card_spacing, this->dimensions.card_spacing);
-		_theme_copy_uinumber(src.dimensions.horizontal_padding, this->dimensions.horizontal_padding);
-		_theme_copy_uinumber(src.dimensions.add_button_size, this->dimensions.add_button_size);
-		_theme_copy_uinumber(src.dimensions.backdrop_extent, this->dimensions.backdrop_extent);
-		_theme_copy_uinumber(src.dimensions.backdrop_radius, this->dimensions.backdrop_radius);
-		_theme_copy_uinumber(src.dimensions.empty_backdrop_padding, this->dimensions.empty_backdrop_padding);
-		_theme_copy_uinumber(src.dimensions.scroll_margin, this->dimensions.scroll_margin);
-		_theme_copy_uinumber(src.dimensions.transition_icon_width, this->dimensions.transition_icon_width);
-		_theme_copy_uinumber(src.dimensions.transition_title_height, this->dimensions.transition_title_height);
-		_theme_copy_uinumber(src.dimensions.transition_label_width_reduction, this->dimensions.transition_label_width_reduction);
-		_theme_copy_uinumber(src.dimensions.transition_label_height, this->dimensions.transition_label_height);
-		_theme_copy_uinumber(src.dimensions.transition_marker_width, this->dimensions.transition_marker_width);
-		_theme_copy_uinumber(src.dimensions.search_max_width, this->dimensions.search_max_width);
-		_theme_copy_uinumber(src.dimensions.search_height, this->dimensions.search_height);
-		_theme_copy_uinumber(src.dimensions.sort_width, this->dimensions.sort_width);
-		_theme_copy_uinumber(src.dimensions.sort_wrap_threshold, this->dimensions.sort_wrap_threshold);
+		repaint |= _theme_copy_all_dimensions(src.dimensions, this->dimensions);
 		return repaint;
 	}
 };

@@ -25,8 +25,11 @@ namespace table {
 			BrushGroup all[2];
 		private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 		} brushes;
-		struct {
-			u32 border_thickness = U32MAX;
+		union Dimensions {
+			struct { UINumber border_thickness; };
+			UINumber all[1];
+			Dimensions() : all{} { for (auto& dimension : all) dimension.value = F32INFINITY; }
+		private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 		} dimensions;
 		RowTheme cells;
 
@@ -35,11 +38,9 @@ namespace table {
 			for (u32 i = 0; auto& b : this->brushes.all)
 				res.repaint |= b.copy_from(src.brushes.all[i++]);
 
-			if (src.dimensions.border_thickness != U32MAX) {
-				this->dimensions.border_thickness = src.dimensions.border_thickness;
-				res.repaint = true;
-				res.resize = true;
-			}
+			bool dimensions_changed = _theme_copy_all_dimensions(src.dimensions, this->dimensions);
+			res.repaint |= dimensions_changed;
+			res.resize |= dimensions_changed;
 
 			if (copy_cell_theme) {
 				res.repaint = true;

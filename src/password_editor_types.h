@@ -15,9 +15,12 @@ namespace password_editor {
 			BrushGroup all[2];
 		private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 		} brushes;
-		struct {
-			u32 border_thickness = U32MAX;
-		}dimensions;
+		union Dimensions {
+			struct { UINumber border_thickness; };
+			UINumber all[1];
+			Dimensions() : all{} { for (auto& dimension : all) dimension.value = F32INFINITY; }
+		private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
+		} dimensions;
 	};
 
 	union Controls {

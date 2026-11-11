@@ -635,6 +635,18 @@ struct UINumber {
 	}
 };
 
+template<size_t count>
+static bool copy_ui_dimensions(UINumber (&dest)[count], const UINumber (&src)[count]) {
+	bool changed = false;
+	for (size_t index = 0; index < count; ++index)
+		if (src[index].value != F32INFINITY &&
+			(src[index].type != dest[index].type || src[index].value != dest[index].value)) {
+			dest[index] = src[index];
+			changed = true;
+		}
+	return changed;
+}
+
 static i32 wheel_scroll_step(WPARAM wparam, i32 viewport_height, i32 line_height, f32& remainder) {
 	UINT scroll_lines = 3;
 	SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);

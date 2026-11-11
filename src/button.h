@@ -272,7 +272,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) 
 		}
 		if (GetFocus() == state.wnd) { 
 			borderbr = GetStockBrush(WHITE_BRUSH);
-			dimensions.border_thickness = DPI(3);
+			dimensions.border_thickness = { .type = UINumber::Type::dpi, .value = 3 };
 		}
 		SetBkColor(dc, ColorFromBrush(bkbr));
 		HBRUSH oldbr = SelectBrush(dc, bkbr); defer{ SelectBrush(dc, oldbr); };

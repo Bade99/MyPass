@@ -356,7 +356,7 @@ namespace debug {
 			auto hollow_br = GetStockBrush(HOLLOW_BRUSH);
 			for (auto& br : t.brushes.border.all) br = color_btn_border;
 			for (auto& br : t.brushes.foreground.all) br = hollow_br;
-			t.dimensions.border_thickness = 1;
+			t.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 1 };
 
 			auto static_theme = static_text_theme();
 

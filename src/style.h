@@ -154,13 +154,13 @@ void load_styles() {
 		table::Theme base_table{};
 		base_table.brushes.bk.normal = colors.ControlBk;
 		base_table.brushes.border.normal = colors.ControlTxt;
-		base_table.dimensions.border_thickness = 1;
+		base_table.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 1 };
 		return base_table;
 	}();
 	
 	themes.base_btn = [&]()->auto {
 		button::Theme base_btn{};
-		base_btn.dimensions.border_thickness = 1;
+		base_btn.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 1 };
 		base_btn.dimensions.image_padding = { .type = UINumber::Type::percent, .value = 20 };
 		base_btn.dimensions.image_ideal_size = { .type = UINumber::Type::dpi, .value = 32 };
 		base_btn.brushes.bk.normal = colors.ControlBk;
@@ -192,7 +192,7 @@ void load_styles() {
 
 	themes.base_editoneline = [&]()->auto {
 		auto t = themes.base_editoneline;
-		t.dimensions.border_thickness = 1;
+		t.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 1 };
 		t.brushes.foreground.normal = colors.ControlTxt;
 		t.brushes.foreground.disabled = colors.ControlTxt_Disabled;
 		t.brushes.bk.normal = colors.ControlBkColored;
@@ -207,7 +207,7 @@ void load_styles() {
 
 	themes.clear_editoneline = [&]()->auto {
 		auto clear_editoneline = themes.base_editoneline;
-		clear_editoneline.dimensions.border_thickness = 0;
+		clear_editoneline.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 0 };
 		clear_editoneline.brushes.foreground.disabled = clear_editoneline.brushes.foreground.normal;
 		clear_editoneline.brushes.placeholder.normal = colors.ControlTxt_Disabled_Strong;
 		for (auto& b : clear_editoneline.brushes.bk.all) b = hollow_brush;
@@ -217,7 +217,7 @@ void load_styles() {
 
 	themes.login_editoneline = [&]()->auto {
 		auto t = themes.base_editoneline;
-		t.dimensions.border_thickness = 0;
+		t.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 0 };
 		t.dimensions.border_radius = themes.base_btn.dimensions.border_radius;
 		t.font = fonts.General;
 		return t;
@@ -235,7 +235,7 @@ void load_styles() {
 	themes.login_btn = [&]()->auto {
 		auto t = themes.base_btn;
 		t.brushes.bk.normal = colors.ControlBkPush;
-		t.dimensions.border_thickness = 0;
+		t.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 0 };
 		t.dimensions.border_radius = percent50;
 		t.font = fonts.GeneralBold;
 		return t;
@@ -296,7 +296,7 @@ void load_styles() {
 
 	themes.password_editor_card_btn = [&]()->auto {
 		auto t = themes.base_btn;
-		t.dimensions.border_thickness = 0;
+		t.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 0 };
 		t.brushes.bk.normal = colors.Search_Bk;
 		t.brushes.bk.clicked = colors.Control_BkPush_Soft;
 		return t;
@@ -334,7 +334,7 @@ void load_styles() {
 		auto table_toolbar_btn = themes.login_btn;
 		table_toolbar_btn.brushes.bk.normal = hollow_brush;
 		table_toolbar_btn.brushes.bk.disabled = hollow_brush;
-		table_toolbar_btn.dimensions.border_thickness = 0;
+		table_toolbar_btn.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 0 };
 		table_toolbar_btn.dimensions.border_radius = percent50;
 		return table_toolbar_btn;
 	}();
@@ -345,7 +345,7 @@ void load_styles() {
 		t.brushes.bk.disabled = hollow_brush;
 		t.brushes.bk.mouseover = colors.Btn_Delete_BkMouseOver;
 		t.brushes.bk.clicked = colors.Btn_Delete_BkPush;
-		t.dimensions.border_thickness = 0;
+		t.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 0 };
 		t.dimensions.border_radius = percent50;
 		return t;
 	}();
@@ -385,13 +385,13 @@ void load_styles() {
 	themes.base_toast = [&]()->auto {
 		toast::Theme base_toast{};
 
-		base_toast.success.dimensions.border_thickness = 0;
+		base_toast.success.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 0 };
 		base_toast.success.dimensions.border_radius = themes.base_btn.dimensions.border_radius;
 		for (auto& b : base_toast.success.brushes.foreground.all) b = colors.ControlTxt;
 		for (auto& b : base_toast.success.brushes.bk.all) b = colors.Toast_Success;
 		base_toast.success.font = fonts.GeneralBold;
 
-		base_toast.failure.dimensions.border_thickness = 0;
+		base_toast.failure.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 0 };
 		base_toast.failure.dimensions.border_radius = themes.base_btn.dimensions.border_radius;
 		for (auto& b : base_toast.failure.brushes.foreground.all) b = colors.ControlTxt;
 		for (auto& b : base_toast.failure.brushes.bk.all) b = colors.Toast_Failure;
@@ -403,7 +403,7 @@ void load_styles() {
 	themes.base_scrollbar = [&]()->auto {
 		auto t = themes.base_scrollbar;
 
-		t.dimensions.border_thickness = 1;
+		t.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 1 };
 		t.dimensions.border_radius = percent50;
 		for (auto& b : t.brushes.bk.all) b = colors.ScrollbarBk;
 		for (auto& b : t.brushes.border.all) b = hollow_brush;

@@ -4,7 +4,6 @@
 //TODO(fran): full app undo / repo support(add card, remove card, add row, etc)
 //TODO(fran): Resizing while in the v0 transition state: cards and other elements render well but the background doesnt seem to get properly cleared and also it looks like gelatin
 //TODO(fran): ability to overscroll past the last card
-//TODO(fran): when opening a card it should be scrolled into view
 //TODO(fran): Password Editor Table Default Text : email is more common than username(currently it's username and password, so instead of renaming it every time when using the app I just use username for the email) (allow the user to edit what the default table contains?)
 //TODO(fran): Tabs: to be able to separate passwords into sections
 //TODO(fran): Password Editor Table: combobox for the first column of the table, with optional default values you can assign to the cell(still allows free text), default values: mail, username, password, security question, recovery code, note

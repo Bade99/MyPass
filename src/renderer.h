@@ -464,7 +464,7 @@ namespace urender {
 		render_diagnostics::Scope diagnostic{ render_diagnostics::Event::background };
 		auto w = RECTW(r), h = RECTH(r);
 		auto min_dim = minimum(w, h);
-		auto borderSize = dimensions.border_thickness;
+		i32 borderSize = maximum(0, (i32)dimensions.border_thickness.to_px((u32)maximum(min_dim, 0)));
 		if (dimensions.border_radius.value) {
 			auto radius = dimensions.border_radius.to_px(min_dim);
 			urender::draw_round_rectangle(dc, r, radius, bk);
