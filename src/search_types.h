@@ -55,9 +55,14 @@ namespace search {
 			BrushGroup all[2];
 		private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 		} brushes;
-		struct {
-			u32 border_thickness = U32MAX;
-			UINumber border_radius{ .value = F32INFINITY };
+		union Dimensions {
+			struct {
+				UINumber border_thickness;
+				UINumber border_radius;
+			};
+			UINumber all[2];
+			Dimensions() : all{} { for (auto& dimension : all) dimension.value = F32INFINITY; }
+		private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
 		} dimensions;
 
 		struct {
@@ -80,8 +85,7 @@ namespace search {
 			bool repaint = false;
 			_theme_copy_all_brushes(src.brushes, this->brushes);
 
-			_theme_copy_u32(src.dimensions.border_thickness, this->dimensions.border_thickness);
-			_theme_copy_uinumber(src.dimensions.border_radius, this->dimensions.border_radius);
+			repaint |= _theme_copy_all_dimensions(src.dimensions, this->dimensions);
 
 			_theme_copy_theme(src.btn_theme, this->btn_theme);
 			_theme_copy_theme(src.txt_theme, this->txt_theme);

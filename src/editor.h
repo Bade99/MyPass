@@ -25,10 +25,13 @@ constexpr auto search_reflow_delay_ms = 120;
 
 void stop_card_animation(State& state) {
 	KillTimer(state.wnd, card_animation_timer_id);
+	if (state.controls.page_space && IsWindow(state.controls.page_space))
+		page::cancel_scroll_into_view(state.controls.page_space);
 	state.card_layout.animation.timeline.stop();
 	state.card_layout.animation.moves.clear();
 	state.card_layout.animation.requested = false;
 	state.card_layout.animation.entering_card = nil;
+	state.card_layout.animation.scroll_card = nil;
 	state.card_layout.animation.sort_transition = false;
 }
 
@@ -200,6 +203,7 @@ password_editor::State& mount_card(State& state, CardSlot& card) {
 			.on_delete = [](HWND pwd_ed, void* data) {
 				auto& state = *(State*)data;
 				stop_card_animation(state);
+				if (state.card_layout.scroll_into_view_card == pwd_ed) state.card_layout.scroll_into_view_card = nil;
 				for (size_t index = 0; index < state.cards.size(); ++index)
 					if (state.cards[index].wnd == pwd_ed) {
 						set_passwords_need_save(state, true);
@@ -233,9 +237,14 @@ password_editor::State& mount_card(State& state, CardSlot& card) {
 		password_editor::set_stateful_functions(wnd, {
 			.on_layout_change = { .state = &state, .function = [](void* data, HWND card_wnd) {
 				auto& state = *(State*)data;
+				bool is_open = password_editor::get_state(card_wnd)->is_open;
 				for (CardSlot& card : state.cards)
 					if (card.wnd == card_wnd) {
-						if (password_editor::get_state(card_wnd)->is_open) materialize_card_rows(card);
+						if (is_open) materialize_card_rows(card);
+						if (is_open && !card.data.is_open) state.card_layout.scroll_into_view_card = card_wnd;
+						else if (!is_open && state.card_layout.scroll_into_view_card == card_wnd)
+							state.card_layout.scroll_into_view_card = nil;
+						card.data.is_open = is_open;
 						break;
 					}
 				state.card_layout.animation.requested = true;
@@ -317,13 +326,15 @@ void refresh_card_windows(State& state) {
 	if (mounted_set_changed) update_mounted_card_z_order(state);
 }
 
-void scroll_editor_rect_into_view(State& state, RECT bounds) {
-	auto viewport = page::get_viewport(state.controls.page_space);
-	i32 position = viewport.y;
-	if (bounds.top < viewport.y) position = bounds.top;
-	else if (bounds.bottom > viewport.y + viewport.h)
-		position = RECTH(bounds) > viewport.h ? bounds.top : bounds.bottom - viewport.h;
-	if (position != viewport.y) page::scroll_to(state.controls.page_space, position);
+void scroll_opened_card_into_view(State& state) {
+	HWND card_wnd = state.card_layout.scroll_into_view_card;
+	state.card_layout.scroll_into_view_card = nil;
+	if (!card_wnd) return;
+	for (const CardSlot& card : state.cards)
+		if (card.wnd == card_wnd && card.search_visible && card.data.is_open) {
+			page::scroll_rect_into_view(state.controls.page_space, card.bounds, (i32)state.theme.dimensions.scroll_margin.to_px());
+			break;
+		}
 }
 
 void prepare_card_tab_navigation(State& state, HWND focused, HWND dialog_root, bool backwards, MSG& message) {
@@ -354,7 +365,7 @@ void prepare_card_tab_navigation(State& state, HWND focused, HWND dialog_root, b
 			bool is_editing = card.wnd ? password_editor::get_state(card.wnd)->is_editing : card.data.is_editing;
 			if (!is_open || !is_editing) continue;
 
-			scroll_editor_rect_into_view(state, card.bounds);
+			page::scroll_rect_into_view(state.controls.page_space, card.bounds, (i32)state.theme.dimensions.scroll_margin.to_px());
 			refresh_card_windows(state);
 			return;
 		}
@@ -362,7 +373,7 @@ void prepare_card_tab_navigation(State& state, HWND focused, HWND dialog_root, b
 	if (next && (next == state.controls.btn_add_start ||
 		(next == state.controls.btn_add_end && IsWindowVisible(next)))) {
 		RECT bounds = get_window_rect_at(next, state.controls.page);
-		if (bounds.left >= 0) scroll_editor_rect_into_view(state, bounds);
+		if (bounds.left >= 0) page::scroll_rect_into_view(state.controls.page_space, bounds, (i32)state.theme.dimensions.scroll_margin.to_px());
 	}
 }
 
@@ -390,6 +401,7 @@ void add_preset_password_editor(State& state, size_t at_idx) {
 	auto& password_editor = add_password_editor(state, std::move(card), at_idx);
 	state.card_layout.animation.entering_card = password_editor.wnd;
 	state.card_layout.animation.requested = true;
+	state.card_layout.scroll_into_view_card = password_editor.wnd;
 	ask_window_for_resize(state.wnd);
 	ask_window_for_repaint(state.wnd);
 }
@@ -451,12 +463,13 @@ struct CardLayout {
 CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_padding) {
 	CardLayout layout;
 	auto& controls = state.controls;
+	const auto& dimensions = state.theme.dimensions;
 	layout.moves.reserve(state.cards.size() + 2);
 
 	i32 offset_y = 0;
-	i32 button_dimension = DPI(30);
+	i32 button_dimension = (i32)dimensions.add_button_size.to_px();
 	i32 button_x = (width - button_dimension) / 2;
-	i32 backdrop_extent = DPI(10);
+	i32 backdrop_extent = (i32)dimensions.backdrop_extent.to_px();
 	bool any_visible = false;
 	for (const CardSlot& card : state.cards)
 		if (card.search_visible) { any_visible = true; break; }
@@ -488,7 +501,7 @@ CardLayout measure_card_layout(State& state, i32 width, i32 spacing, i32 width_p
 	else {
 		for (CardSlot& card : state.cards) card.bounds = {};
 		layout.add_move(controls.btn_add_start, { button_x, spacing, button_dimension, button_dimension });
-		i32 width_pad = width * pad_percent;
+		i32 width_pad = (i32)dimensions.empty_backdrop_padding.to_px((u32)width);
 		layout.backdrop_bounds = { width_pad, spacing - backdrop_extent,
 			width - width_pad, spacing + button_dimension + backdrop_extent };
 		offset_y = spacing + button_dimension;
@@ -558,8 +571,15 @@ void tick_card_animation(State& state) {
 	layout.page_height = lerp(transition.from_page_height, eased, transition.to_page_height);
 	layout.backdrop_bounds = lerp(transition.from_backdrop_bounds, eased, transition.to_backdrop_bounds);
 	apply_card_layout(state, layout, true, false);
+	if (transition.scroll_card && state.card_layout.scroll_into_view_card == transition.scroll_card)
+		page::apply_scroll_into_view(state.controls.page_space, eased);
 	if (progress >= 1.f) {
+		if (transition.scroll_card && state.card_layout.scroll_into_view_card == transition.scroll_card) {
+			page::finish_scroll_into_view(state.controls.page_space);
+			state.card_layout.scroll_into_view_card = nil;
+		}
 		stop_card_animation(state);
+		scroll_opened_card_into_view(state);
 		refresh_card_windows(state);
 	}
 }
@@ -572,7 +592,8 @@ void start_card_animation(State& state, CardLayout& target) {
 	auto& transition = state.card_layout.animation;
 	RECT viewport_bounds; GetClientRect(state.controls.page_space, &viewport_bounds);
 	i32 target_page_height = maximum(RECTH(viewport_bounds), target.page_height);
-	if (transition.timeline.active && !transition.entering_card && transition.to_page_height == target_page_height &&
+	if (transition.timeline.active && !transition.entering_card &&
+		transition.scroll_card == state.card_layout.scroll_into_view_card && transition.to_page_height == target_page_height &&
 		EqualRect(&transition.to_backdrop_bounds, &target.backdrop_bounds) &&
 		transition.moves.size() == target.moves.size()) {
 		bool same_target = true;
@@ -587,6 +608,18 @@ void start_card_animation(State& state, CardLayout& target) {
 	transition.to_page_height = target_page_height;
 	transition.from_backdrop_bounds = state.card_layout.backdrop_bounds;
 	transition.to_backdrop_bounds = target.backdrop_bounds;
+	page::cancel_scroll_into_view(state.controls.page_space);
+	transition.scroll_card = nil;
+	bool scroll_changed = false;
+	if (HWND card_wnd = state.card_layout.scroll_into_view_card) {
+		for (const CardSlot& card : state.cards)
+			if (card.wnd == card_wnd && card.search_visible && card.data.is_open) {
+				transition.scroll_card = card_wnd;
+				scroll_changed = page::begin_scroll_rect_into_view(state.controls.page_space, card.bounds,
+					(i32)state.theme.dimensions.scroll_margin.to_px());
+				break;
+			}
+	}
 	transition.moves.clear();
 	transition.moves.reserve(target.moves.size());
 	RECT entering_bounds{};
@@ -594,6 +627,7 @@ void start_card_animation(State& state, CardLayout& target) {
 		if (move.wnd == transition.entering_card) { entering_bounds = move.bounds; break; }
 	bool any_change = transition.from_page_height != transition.to_page_height ||
 		!EqualRect(&transition.from_backdrop_bounds, &transition.to_backdrop_bounds);
+	any_change |= scroll_changed;
 	for (const auto& move : target.moves) {
 		RECT from = get_window_rect_at(move.wnd, state.controls.page);
 		if (move.wnd == transition.entering_card) {
@@ -605,7 +639,7 @@ void start_card_animation(State& state, CardLayout& target) {
 		else if (transition.entering_card && entering_bounds.right > entering_bounds.left &&
 			move.wnd == state.controls.btn_add_end && from.left < 0) {
 			from = move.bounds;
-			from.top = entering_bounds.top + 1 + DPI(15);
+			from.top = entering_bounds.top + 1 + (i32)state.theme.dimensions.card_spacing.to_px();
 			from.bottom = from.top + RECTH(move.bounds);
 		}
 		else if (move.wnd == state.controls.btn_add_end && (from.left < 0 || move.bounds.left < 0))
@@ -630,10 +664,11 @@ void start_card_animation(State& state, CardLayout& target) {
 void resize_controls(State& state, bool animate_cards) {
 	render_diagnostics::Scope diagnostic{ render_diagnostics::Event::editor_resize };
 	state.card_layout.applying_layout = true;
+	const auto& dimensions = state.theme.dimensions;
 	RECT r; GetClientRect(state.wnd, &r);
 	auto w = RECTW(r), h = RECTH(r);
-	i32 spacing = DPI(15); //TODO: add to theme
-	i32 w_pad = DPI(20);
+	i32 spacing = (i32)dimensions.card_spacing.to_px();
+	i32 w_pad = (i32)dimensions.horizontal_padding.to_px();
 
 	i32 offset_y = 0;
 	{
@@ -644,14 +679,16 @@ void resize_controls(State& state, bool animate_cards) {
 			offset_x = edit_showpasswords.right();
 			w -= offset_x;
 
-			auto btn_transition_w = DPI(20);
+			auto btn_transition_w = (i32)dimensions.transition_icon_width.to_px();
 			auto icon_transition = edit_showpasswords.cut_right(spacing / 2 + btn_transition_w).cut_right(btn_transition_w);
 
-			rect_i32 transition_title_section = edit_showpasswords.cut_top(DPI(40));
-			rect_i32 static_transition = transition_title_section.cut_center(transition_title_section.w - DPI(8), DPI(30));
+			rect_i32 transition_title_section = edit_showpasswords.cut_top((i32)dimensions.transition_title_height.to_px());
+			rect_i32 static_transition = transition_title_section.cut_center(
+				transition_title_section.w - (i32)dimensions.transition_label_width_reduction.to_px(),
+				(i32)dimensions.transition_label_height.to_px());
 			rect_i32 btn_static_bk_transition = static_transition;
 			static_transition.xy = {};
-			rect_i32 btn_static_transition = static_transition.cut_left(DPI(6));
+			rect_i32 btn_static_transition = static_transition.cut_left((i32)dimensions.transition_marker_width.to_px());
 			v2_i32 btn_confirm_dim{}; Button_GetIdealSize(controls.btn_confirm_transfer, &btn_confirm_dim);
 			rect_i32 btn_confirm_transfer = static_transition.cut_right(clamp(0, btn_confirm_dim.x, static_transition.w / 2));
 
@@ -666,17 +703,18 @@ void resize_controls(State& state, bool animate_cards) {
 		auto& controls = state.controls;
 		offset_y = spacing;
 
-		auto search_max_w = avg_str_dim(GetWindowFont(controls.search), 35).cx;
-		bool sort_on_next_line = w <= search_max_w * 1.5f;
+		i32 search_max_w = (i32)dimensions.search_max_width.to_px(
+			(HFONT)GetWindowFont(controls.search), (u32)maximum(w, 0));
+		bool sort_on_next_line = w <= dimensions.sort_wrap_threshold.to_px((u32)search_max_w);
 		rect_i32 search{
 			.x = offset_x + w_pad,
 			.y = offset_y,
 			.w = minimum((sort_on_next_line ? w - w_pad : w / 2) - w_pad, search_max_w),
-			.h = (i32)DPI(30)
+			.h = (i32)dimensions.search_height.to_px()
 		};
 		child_layout::move_if_needed(controls.search, search);
 
-		i32 sort_w = search.w * .9f;
+		i32 sort_w = (i32)dimensions.sort_width.to_px((u32)maximum(search.w, 0));
 		rect_i32 sort{
 			.x = sort_on_next_line ? search.x : offset_x + w - w_pad - sort_w,
 			.y = sort_on_next_line ? search.bottom() + spacing : search.y,
@@ -708,8 +746,17 @@ void resize_controls(State& state, bool animate_cards) {
 	RECT client_bounds; GetClientRect(state.wnd, &client_bounds);
 	state.card_layout.animation.client_width = RECTW(client_bounds);
 	state.card_layout.animation.client_height = RECTH(client_bounds);
+	if (!state.card_layout.animation.timeline.active) scroll_opened_card_into_view(state);
 	state.card_layout.applying_layout = false;
 	refresh_card_windows(state);
+}
+
+void set_theme(HWND wnd, const Theme& src) {
+	State& state = *get_state(wnd);
+	if (state.theme.copy_from(src) && state.controls.page_space) {
+		resize_controls(state);
+		ask_window_for_repaint(wnd);
+	}
 }
 
 void finish_search_reflow(State& state) {
@@ -1396,6 +1443,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		State* st = new State{};
 		st->wnd = hwnd;
 		st->nc_parent = GetParent(hwnd);
+		st->theme = themes.base_editor;
 
 		st->settings = ((Data*)creation_nfo->lpCreateParams)->settings;
 		set_window_state(hwnd, st);
@@ -1560,6 +1608,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	} break;
 	case WM_STATE_RESET:
 	{
+		state.card_layout.scroll_into_view_card = nil;
 		state.current_user.clear();
 		set_passwords_need_save(state, false);
 		SetWindowText(state.controls.transition_v0.edit_passwords, nil);//TODO(fran): yet again, we need to zero the mem also
@@ -1615,8 +1664,8 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	{
 		auto dc = (HDC)wparam;
 		RECT r; GetClientRect(state.wnd, &r);
-		FillRect(dc, &r, colors.ControlBk);
-		auto card_extent = DPI(10); //TODO: add to theme
+		FillRect(dc, &r, state.theme.brushes.bk.normal);
+		auto card_extent = state.theme.dimensions.backdrop_radius.to_px();
 		RECT card;
 
 		auto old_rgn = CreateRectRgn(0, 0, 0, 0); GetClipRgn(dc, old_rgn); defer{ DeleteObject(old_rgn); };
@@ -1626,7 +1675,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		card = state.card_layout.backdrop_bounds;
 		RECT page_position = get_window_rect_at(state.controls.page, state.wnd);
 		OffsetRect(&card, page_position.left, page_position.top);
-		urender::draw_round_rectangle(dc, card, card_extent, colors.Card_Bk_Soft);
+		urender::draw_round_rectangle(dc, card, card_extent, state.theme.brushes.card.normal);
 		return 1;
 	} break;
 	case WM_LBUTTONDOWN:

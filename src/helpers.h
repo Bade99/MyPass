@@ -595,26 +595,6 @@ template<bool use_test_override = true>
 static i32 rdpi(f32 val) { return (i32)roundf(DPI<use_test_override>(val)); }
 
 
-struct UINumber {
-	enum class Type {
-		px,     // Specific pixel value
-		dpi,    // DPI aware (scaled) pixel value
-		dyn,    // Fills whatever space is left
-		percent	// Percentage of a reference dimension
-	} type = Type::dpi;
-	f32 value;
-
-	f32 to_px(u32 reference = 0) const {
-		switch (type) {
-		case Type::px:      return value;
-		case Type::dpi:     return DPI(value);
-		case Type::dyn:     return reference; //Not meant to be used like this, it's mostly a marker to start further calculation to assign a size to multiple dyn elements in contention for the same space
-		case Type::percent: return reference * (value / 100.f);
-		default: Assert(0); return 0;
-		}
-	}
-};
-
 static SIZE avg_str_dim(HFONT font, size_t char_cnt) {
 	SIZE res;
 
@@ -625,6 +605,46 @@ static SIZE avg_str_dim(HFONT font, size_t char_cnt) {
 	res.cx = (int)(tm.tmAveCharWidth * char_cnt);
 
 	return res;
+}
+
+struct UINumber {
+	enum class Type {
+		px,      // Specific pixel value
+		dpi,     // DPI aware (scaled) pixel value
+		dyn,     // Fills whatever space is left
+		percent, // Percentage of a reference dimension
+		chars    // Number of characters in specified font
+	} type = Type::dpi;
+	f32 value;
+
+	f32 to_px(u32 reference = 0) const {
+		switch (type) {
+		case Type::px:      return value;
+		case Type::dpi:     return DPI(value);
+		case Type::dyn:     return reference; //Not meant to be used like this, it's mostly a marker to start further calculation to assign a size to multiple dyn elements in contention for the same space
+		case Type::percent: return reference * (value / 100.f);
+		case Type::chars:   Assert(0); return 0;
+		default: Assert(0); return 0;
+		}
+	}
+
+	f32 to_px(HFONT font, u32 reference = 0) const {
+		if (type != Type::chars) return to_px(reference);
+		Assert(font);
+		return font ? avg_str_dim(font, 1).cx * value : 0;
+	}
+};
+
+template<size_t count>
+static bool copy_ui_dimensions(UINumber (&dest)[count], const UINumber (&src)[count]) {
+	bool changed = false;
+	for (size_t index = 0; index < count; ++index)
+		if (src[index].value != F32INFINITY &&
+			(src[index].type != dest[index].type || src[index].value != dest[index].value)) {
+			dest[index] = src[index];
+			changed = true;
+		}
+	return changed;
 }
 
 static i32 wheel_scroll_step(WPARAM wparam, i32 viewport_height, i32 line_height, f32& remainder) {

@@ -178,7 +178,7 @@ void set_theme(HWND wnd, const Theme& src) {
 		auto hollow_brush = GetStockBrush(HOLLOW_BRUSH);
 
 		button::Theme btn{};
-		btn.dimensions.border_thickness = 0;
+		btn.dimensions.border_thickness = { .type = UINumber::Type::px, .value = 0 };
 		for (auto& b : btn.brushes.bk.all) b = hollow_brush;
 		for (auto& b : btn.brushes.border.all) b = hollow_brush;
 		btn.brushes.foreground = state.theme.brushes.bar_bk.normal != hollow_brush ? state.theme.brushes.bar_bk : state.theme.brushes.bar_border;

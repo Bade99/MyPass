@@ -5,8 +5,6 @@ namespace editor {
 
 constexpr auto& wndclass = wndclass_name("editor");
 
-constexpr auto pad_percent = .05f;
-
 #if defined(_DEBUG) && !APP_PRODUCTION_BUILD
 constexpr auto debug_text_view = true;
 #else
@@ -14,6 +12,44 @@ constexpr auto debug_text_view = false;
 #endif
 
 constexpr auto msgbox_placement = MBP::center | MBP::top;
+
+struct Theme {
+	union {
+		struct { BrushGroup bk, card; };
+		BrushGroup all[2];
+	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
+	} brushes;
+	union Dimensions {
+		struct {
+			UINumber card_spacing;
+			UINumber horizontal_padding;
+			UINumber add_button_size;
+			UINumber backdrop_extent;
+			UINumber backdrop_radius;
+			UINumber empty_backdrop_padding;
+			UINumber scroll_margin;
+			UINumber transition_icon_width;
+			UINumber transition_title_height;
+			UINumber transition_label_width_reduction;
+			UINumber transition_label_height;
+			UINumber transition_marker_width;
+			UINumber search_max_width;
+			UINumber search_height;
+			UINumber sort_width;
+			UINumber sort_wrap_threshold;
+		};
+		UINumber all[16];
+		Dimensions() : all{} { for (auto& dimension : all) dimension.value = F32INFINITY; }
+	private: void _() { static_assert(sizeof(all) == sizeof(*this)); }
+	} dimensions;
+
+	bool copy_from(const Theme& src) {
+		bool repaint = false;
+		_theme_copy_all_brushes(src.brushes, this->brushes);
+		repaint |= _theme_copy_all_dimensions(src.dimensions, this->dimensions);
+		return repaint;
+	}
+};
 
 struct Settings {
 
@@ -94,6 +130,7 @@ struct CardLayoutAnimation {
 	i32 from_page_height = 0, to_page_height = 0;
 	i32 client_width = 0, client_height = 0;
 	HWND entering_card = nil;
+	HWND scroll_card = nil;
 	bool requested = false;
 	bool sort_transition = false;
 };
@@ -101,6 +138,7 @@ struct CardLayoutAnimation {
 struct CardLayoutState {
 	CardLayoutAnimation animation;
 	RECT backdrop_bounds{};
+	HWND scroll_into_view_card = nil;
 	std::vector<HWND> search_pending_reveals;
 	bool search_reflow_pending = false;
 	bool applying_layout = false;
@@ -188,6 +226,7 @@ private: void _() { static_assert(sizeof(all_fixed) == sizeof(*this)); }
 struct State {
 	HWND wnd;
 	HWND nc_parent;
+	Theme theme;
 	struct { //menus
 		HMENU menu;
 		HMENU menu_file;

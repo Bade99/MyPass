@@ -1683,8 +1683,6 @@ void render(State& state, HDC dc) {
 	bool show_fixed_mask = state.fixed_mask_length_when_disabled && (style & ES_PASSWORD) && !is_enabled;
 	bool show_placeholder = !show_fixed_mask && is_placeholder_visible(state);
 
-	u32 border_thickness = state.theme.dimensions.border_thickness;
-
 	HBRUSH bk_br, txt_br, border_br, selection_br;
 	HFONT font = state.theme.font;
 
